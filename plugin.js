@@ -1276,6 +1276,49 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
         return { cols: ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'], subCols: 1 };
     },
 
+    // CHAQUE TABLEAU A SA GRANDEUR, ET SON UNITÉ DE RÉFÉRENCE. « Ne pas
+    // accepter une unité qui n'est pas la bonne, ex longueur dans masse. »
+    // Une masse tapée dans un tableau de longueurs était posée quand même, à
+    // l'unité du milieu, avec un message qui passait : l'élève voyait « 3,4 kg »
+    // devenir « 3,4 m » sous ses yeux, et le tableau lui donnait raison.
+    //
+    // L'unité de référence était d'ailleurs prise pour « celle du milieu » : sur
+    // le tableau de numération, dont les six colonnes vont de C à 1/1000, le
+    // milieu tombait sur les DIXIÈMES. Un nombre sans unité s'y posait donc
+    // décalé d'un rang. Elle est nommée, désormais.
+    // « tableau » nomme le meuble, « porte » se lit après « celui-ci porte » :
+    // la numération n'est pas un pluriel comme les autres, et « celui-ci porte
+    // des numération » n'est pas une phrase.
+    FAMILLES: {
+        len: { nom: 'longueurs', tableau: 'tableau des longueurs', porte: 'des longueurs', ref: 'm' },
+        mass: { nom: 'masses', tableau: 'tableau des masses', porte: 'des masses', ref: 'g' },
+        cap: { nom: 'capacités', tableau: 'tableau des capacités', porte: 'des capacités', ref: 'L' },
+        area: { nom: 'aires', tableau: 'tableau des aires', porte: 'des aires', ref: 'm²' },
+        vol: { nom: 'volumes', tableau: 'tableau des volumes', porte: 'des volumes', ref: 'm³' },
+        num: { nom: 'numération', tableau: 'tableau de numération', porte: 'la numération', ref: 'U' }
+    },
+
+    // « M2 », « m^2 », « l »… : ce qu'un clavier donne pour ce qu'un manuel
+    // imprime. La casse compte pour le litre — « L » majuscule — mais on ne va
+    // pas refuser une mesure parce qu'elle a été tapée en minuscules.
+    normaliserUnite: function (u) {
+        return String(u === undefined || u === null ? '' : u).trim()
+            .replace(/\^?2\b|\^2/g, '²').replace(/\^?3\b|\^3/g, '³')
+            .toLowerCase();
+    },
+
+    // À quelle grandeur appartient cette unité ? Sert à DIRE où elle va quand
+    // on la refuse : « kg est une masse », et non un simple « je ne connais pas ».
+    familleDeLUnite: function (unite) {
+        const cherche = this.normaliserUnite(unite);
+        if (!cherche) return null;
+        const types = Object.keys(this.FAMILLES);
+        for (const t of types) {
+            if (this.colonnesDe(t).cols.some(u => this.normaliserUnite(u) === cherche)) return t;
+        }
+        return null;
+    },
+
     generateSVG: function (type, color, lignes, isExport = false, contenu) {
         const nLignes = this.nombreDeLignes(lignes);
         const plan = this.colonnesDe(type);
@@ -1379,14 +1422,23 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
     // qu'il vaut un, et les sous-colonnes de gauche valent dix, cent.
     caseDeLUnite: function (args, unite) {
         const m = this.mesuresDuTampon(args);
-        const cherche = String(unite || '').trim().toLowerCase();
+        const cherche = this.normaliserUnite(unite);
         let i = -1;
-        if (cherche) i = m.plan.cols.findIndex(u => u.toLowerCase() === cherche);
+        if (cherche) i = m.plan.cols.findIndex(u => this.normaliserUnite(u) === cherche);
+        const reconnue = (i >= 0) || !cherche;
         // Sans unité — ou avec une unité que ce tableau ne connaît pas — on
-        // vise l'unité de référence : celle du milieu, « m », « g », « L ».
-        if (i < 0) i = Math.floor(m.plan.cols.length / 2);
+        // vise l'unité de référence de la grandeur. Ce repli sert à mesurer la
+        // case ; c'est l'appelant qui décide de POSER ou non, et « reconnue »
+        // lui dit s'il a affaire à une unité d'une autre grandeur.
+        if (i < 0) {
+            const famille = this.FAMILLES[args && args[0]] || this.FAMILLES.len;
+            i = m.plan.cols.findIndex(u => this.normaliserUnite(u) === this.normaliserUnite(famille.ref));
+            if (i < 0) i = Math.floor(m.plan.cols.length / 2);
+        }
         return { case: i * m.plan.subCols + (m.plan.subCols - 1),
-                 reconnue: cherche ? m.plan.cols.some(u => u.toLowerCase() === cherche) : true,
+                 reconnue,
+                 // À quelle grandeur l'unité refusée appartient-elle vraiment ?
+                 autreFamille: reconnue ? null : this.familleDeLUnite(cherche),
                  unite: m.plan.cols[i] };
     },
 
@@ -1485,6 +1537,21 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
                     return;
                 }
                 const cible = this.caseDeLUnite(args, nombre.unite);
+                // UNE MASSE NE SE POSE PAS DANS UN TABLEAU DE LONGUEURS. On
+                // refuse, et l'on DIT où elle va : « kg est une masse, ce
+                // tableau porte des longueurs ». Poser quand même, c'était
+                // donner raison à l'erreur qu'on veut faire voir.
+                if (!cible.reconnue) {
+                    if (typeof showToast === 'function') {
+                        const ici = (this.FAMILLES[args[0]] || this.FAMILLES.len).porte;
+                        const la = cible.autreFamille && this.FAMILLES[cible.autreFamille]
+                            ? this.FAMILLES[cible.autreFamille].tableau : null;
+                        showToast('« ' + nombre.unite + ' » '
+                            + (la ? 'appartient au ' + la : "n'est pas une unité de ce tableau")
+                            + ' : celui-ci porte ' + ici + '.', '#e17055', '📏');
+                    }
+                    return;
+                }
                 const mis = GrilleDeChiffres.poser(nombre, cible.case, m.nbCases);
                 const suite = Object.assign({}, contenu);
                 Object.keys(suite).forEach(k => {
@@ -1492,14 +1559,18 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
                 });
                 Object.keys(mis.cases).forEach(c => { suite[rang + ',' + c] = mis.cases[c]; });
                 this.refaireLeTampon(imgObj, { contenu: suite });
-                if (nombre.unite && !cible.reconnue && typeof showToast === 'function') {
-                    showToast('« ' + nombre.unite + " » n'est pas dans ce tableau : posé en "
-                        + cible.unite + '.', '#e17055', '📏');
-                } else if (!mis.complet && typeof showToast === 'function') {
-                    showToast(mis.perdus.gauche
-                        ? 'Le tableau ne va pas assez loin à gauche : ' + mis.perdus.gauche + ' chiffre(s) de côté.'
-                        : 'Le tableau ne va pas assez loin à droite : ' + mis.perdus.droite + ' chiffre(s) de côté.',
-                        '#e17055', '📏');
+                // LE DÉBORDEMENT SE DIT EN COLONNES, PAS EN CHIFFRES. Un
+                // tableau de conversion range les chiffres par MAGNITUDE :
+                // récrire la mesure dans une autre unité ne les déplace pas
+                // d'une case — c'est tout l'objet du tableau. Ce qui manque,
+                // ce sont des colonnes, et l'on dit donc combien.
+                if (!mis.complet && typeof showToast === 'function') {
+                    const cote = mis.perdus.gauche ? 'gauche' : 'droite';
+                    const chiffres = mis.perdus.gauche || mis.perdus.droite;
+                    const colonnes = Math.ceil(chiffres / m.plan.subCols);
+                    showToast('Le tableau ne va pas assez loin à ' + cote + ' : '
+                        + chiffres + ' chiffre(s) de côté, soit ' + colonnes
+                        + ' colonne(s) qui manquent.', '#e17055', '📏');
                 }
             }
         });

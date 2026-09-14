@@ -258,11 +258,18 @@ module.exports = async function (browser) {
             cm: p.caseDeLUnite(longueurs, 'cm'),
             m: p.caseDeLUnite(longueurs, 'm'),
             km: p.caseDeLUnite(longueurs, 'km'),
-            // Sans unité : on vise l'unité de référence, celle du milieu.
+            // Sans unité : on vise l'unité de référence de la grandeur.
             rien: p.caseDeLUnite(longueurs, ''),
-            // Une unité étrangère au tableau : on le DIT, et l'on retombe sur
-            // l'unité de référence plutôt que de ne rien faire.
+            // Une unité d'une AUTRE grandeur : elle est refusée, et l'on sait
+            // dire à quel tableau elle appartient.
             etrangere: p.caseDeLUnite(longueurs, 'kg'),
+            // Le tableau de numération n'a pas d'unité de MILIEU : ses six
+            // colonnes vont de C à 1/1000, et le milieu tombait sur les
+            // dixièmes. Un nombre sans unité s'y posait décalé d'un rang.
+            numeration: p.caseDeLUnite(['num', '#0984e3', '3', {}], ''),
+            // Ce qu'un clavier donne pour ce qu'un manuel imprime.
+            m2Tape: p.caseDeLUnite(aires, 'm2'),
+            litreMinuscule: p.caseDeLUnite(['cap', '#0984e3', '3', {}], 'l'),
             // Les aires ont deux sous-colonnes par unité : le chiffre des
             // unités de « m² » va dans la seconde.
             m2: p.caseDeLUnite(aires, 'm²'),
@@ -272,9 +279,15 @@ module.exports = async function (browser) {
     r.egal('chaque unité a sa case : km, m, cm',
         [unites.km.case, unites.m.case, unites.cm.case], [0, 3, 5]);
     r.egal('sans unité, on vise celle de référence', unites.rien.unite, 'm');
-    r.egal('une unité étrangère au tableau est signalée, pas ignorée',
-        { reconnue: unites.etrangere.reconnue, repli: unites.etrangere.unite },
-        { reconnue: false, repli: 'm' });
+    r.egal('et sur le tableau de numération, ce sont les UNITÉS, pas les dixièmes',
+        { case: unites.numeration.case, unite: unites.numeration.unite },
+        { case: 2, unite: 'U' });
+    r.egal('une unité d\'une autre grandeur est refusée, et l\'on sait laquelle',
+        { reconnue: unites.etrangere.reconnue, autre: unites.etrangere.autreFamille },
+        { reconnue: false, autre: 'mass' });
+    r.egal('« m2 » au clavier vaut « m² », et « l » vaut « L »',
+        { m2: unites.m2Tape.reconnue, litre: unites.litreMinuscule.unite },
+        { m2: true, litre: 'L' });
     r.egal('et sur les aires, deux sous-colonnes par unité',
         { case: unites.m2.case, total: unites.casesAires }, { case: 7, total: 14 });
 
@@ -313,6 +326,80 @@ module.exports = async function (browser) {
     });
     r.egal('« 12,5 m » : 1 en dam, 2 en m, 5 en dm',
         conv125m, { '0,2': '1', '0,3': '2', '0,4': '5' });
+
+    // UNE MASSE NE SE POSE PAS DANS UN TABLEAU DE LONGUEURS.
+    // « Ne pas accepter une unité qui n'est pas la bonne, ex longueur dans
+    //   masse. » Elle était posée quand même, à l'unité du milieu : l'élève
+    //   voyait « 3,4 kg » devenir « 3,4 m » sous ses yeux, et le tableau lui
+    //   donnait raison. Rien ne s'écrit, et l'on DIT où cette unité va.
+    const refus = await page.evaluate(async () => {
+        const p = PluginManager.plugins['conversionTool'];
+        p.refaireLeTampon(images[0], { contenu: { '0,3': '7' } });
+        await new Promise(ok => setTimeout(ok, 400));
+        document.querySelectorAll('.toast, #toast-container > *').forEach(t => t.remove());
+        p.demanderUnNombre(images[0]);
+        await new Promise(ok => setTimeout(ok, 150));
+        const champ = document.querySelector('.gr-champ-case');
+        champ.value = '3,4 kg';
+        champ.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        await new Promise(ok => setTimeout(ok, 450));
+        const dits = [...document.querySelectorAll('#toast-container *')]
+            .map(t => t.textContent).join(' ');
+        return { cases: images[0].pluginData.args[3], message: dits };
+    });
+    r.egal('une masse tapée dans un tableau de longueurs n\'y écrit RIEN',
+        refus.cases, { '0,3': '7' });
+    r.verifie('et le message dit à quel tableau elle appartient',
+        /kg/.test(refus.message) && /masses/.test(refus.message)
+        && /longueurs/.test(refus.message), refus.message);
+
+    // ET LA PHRASE SE TIENT POUR TOUTES LES GRANDEURS : la numération n'est
+    // pas un pluriel comme les autres, « celui-ci porte des numération » n'est
+    // pas une phrase.
+    const phrases = await page.evaluate(() => {
+        const p = PluginManager.plugins['conversionTool'];
+        return Object.keys(p.FAMILLES).map(t => {
+            const f = p.FAMILLES[t];
+            return 'appartient au ' + f.tableau + ' : celui-ci porte ' + f.porte + '.';
+        });
+    });
+    r.verifie('chaque grandeur se dit dans une phrase qui se tient',
+        phrases.length === 6 && phrases.every(s => !/ des numération|tableau des numération/.test(s)),
+        phrases.join(' | '));
+
+    // ET QUAND LA MESURE DÉBORDE, ON DIT COMBIEN DE COLONNES MANQUENT.
+    // Un tableau de conversion range les chiffres par MAGNITUDE : récrire la
+    // mesure dans une autre unité ne les déplace pas d'une case — c'est tout
+    // l'objet du tableau. Ce qui manque, ce sont des colonnes.
+    const debordement = await page.evaluate(async () => {
+        const p = PluginManager.plugins['conversionTool'];
+        const essayer = async (texte) => {
+            p.refaireLeTampon(images[0], { contenu: {} });
+            await new Promise(ok => setTimeout(ok, 400));
+            document.querySelectorAll('#toast-container > *').forEach(t => t.remove());
+            p.demanderUnNombre(images[0]);
+            await new Promise(ok => setTimeout(ok, 150));
+            const champ = document.querySelector('.gr-champ-case');
+            champ.value = texte;
+            champ.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            await new Promise(ok => setTimeout(ok, 450));
+            return { message: [...document.querySelectorAll('#toast-container *')]
+                        .map(t => t.textContent).join(' '),
+                     cases: Object.keys(images[0].pluginData.args[3]).length };
+        };
+        const tropGrand = await essayer('1234567 m');
+        const quiTient = await essayer('12,5 m');
+        return { tropGrand, quiTient };
+    });
+    r.verifie('« 1 234 567 m » déborde : on dit combien de colonnes manquent à gauche',
+        /gauche/.test(debordement.tropGrand.message)
+        && /3 chiffre/.test(debordement.tropGrand.message)
+        && /3 colonne/.test(debordement.tropGrand.message),
+        debordement.tropGrand.message);
+    r.verifie('mais ce qui tient est quand même posé : on ne perd pas le nombre',
+        debordement.tropGrand.cases === 4, String(debordement.tropGrand.cases));
+    r.egal('et une mesure qui tient n\'alerte sur rien',
+        debordement.quiTient.message, '');
 
     // ET L'ÉDITION D'UNE CASE, AVEC LA TABULATION.
     const viseeConv = await page.evaluate(async () => {
