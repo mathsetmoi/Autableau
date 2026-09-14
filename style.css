@@ -1742,12 +1742,71 @@ body.focus-mode #bottom-drawer { transform: translate(-50%, 100%) !important; }
 body.focus-mode #bar-plugins.drawer-top { transform: translate(-50%, -100%) !important; }
 body.focus-mode #right-drawer { transform: translateX(100%) !important; }
 
-#exit-focus-cross {
+/* ===========================================================
+   CE QU'ON VOIT DE L'ÉCRAN
+   Trois temps : tout, les barres seules, le tableau nu. Les deux
+   derniers rangent le tiroir du bas — où vit justement la commande
+   qui les règle. Sans ces boutons-là, l'affichage réduit était un
+   cul-de-sac dont on ne sortait qu'à la touche Échap, pour qui la
+   connaissait.
+   =========================================================== */
+#barre-ecran {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    width: 44px;
-    height: 44px;
+    /* AU-DESSUS DE L'HORLOGE, pas par-dessus. Le cartouche de la date et
+       l'horloge de classe commencent à cinquante pixels du haut, sur le même
+       bord : la croix d'avant leur passait déjà dessus, et trois boutons
+       l'auraient fait trois fois plus. */
+    top: 8px;
+    right: 14px;
+    z-index: 1000;
+    display: flex;
+    gap: 5px;
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8);
+    transition: opacity 0.3s, transform 0.3s;
+}
+
+body.focus-mode #barre-ecran,
+body.sans-tiroirs #barre-ecran {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+}
+
+#barre-ecran button {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--arrondi);
+    background: var(--surface);
+    border: 1px solid var(--contour);
+    box-shadow: var(--contour-ombre);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+}
+
+#barre-ecran button:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* LES BARRES SEULES : les tiroirs se rangent, les outils restent. C'est
+   l'écran du cours — on écrit, on trace, et rien ne mange le tableau. */
+body.sans-tiroirs #bottom-drawer { transform: translate(-50%, 100%) !important; }
+body.sans-tiroirs #bar-plugins.drawer-top { transform: translate(-50%, -100%) !important; }
+body.sans-tiroirs #right-drawer { transform: translateX(100%) !important; }
+
+body.sans-tiroirs .drawer,
+body.sans-tiroirs .drawer-toggle-v {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+#exit-focus-cross {
+    position: static;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -1757,24 +1816,15 @@ body.focus-mode #right-drawer { transform: translateX(100%) !important; }
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    z-index: 1000;
-    opacity: 0;
-    pointer-events: none;
-    transform: scale(0.8);
     transition: all 0.3s;
 }
 
 /* Le cœur « Soutenir le projet » n'a rien à faire devant une classe : le mode
    Focus efface tout le reste, il partait seul avec sa pastille rouge. */
-body.focus-mode #donate-float-btn {
+body.focus-mode #donate-float-btn,
+body.sans-tiroirs #donate-float-btn {
     opacity: 0 !important;
     pointer-events: none !important;
-}
-
-body.focus-mode #exit-focus-cross {
-    opacity: 1;
-    pointer-events: auto;
-    transform: scale(1);
 }
 
 #exit-focus-cross:hover {

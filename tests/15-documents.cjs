@@ -1767,15 +1767,16 @@ module.exports = async function (browser) {
         await new Promise(r => setTimeout(r, 200));
         const vu = () => document.getElementById('quick-edit-menu').classList.contains('visible');
         const avant = vu();
-        const premier = cyclerLePleinEcran();
+        basculerLePleinEcranDuDocument();
         await new Promise(r => setTimeout(r, 300));
-        const enPlein = { etat: premier, menu: vu(),
+        const enPlein = { etat: etatDuPleinEcran(), menu: vu(),
                           barre: document.getElementById('bar-document').classList.contains('visible') };
-        // Deuxième temps : les barres reviennent, le menu de l'objet non.
-        cyclerLePleinEcran();
+        // Les outils par-dessus la page : les barres reviennent, le menu de
+        // l'objet non — c'est toujours une seule barre au bas de l'écran.
+        basculerLesBarresDeLaPresentation();
         await new Promise(r => setTimeout(r, 300));
         const avecBarres = vu();
-        cyclerLePleinEcran();
+        basculerLePleinEcranDuDocument();
         await new Promise(r => setTimeout(r, 300));
         const rendu = vu();
         // On rend le tableau au bloc suivant, tel qu'il l'attend.
@@ -1791,7 +1792,7 @@ module.exports = async function (browser) {
         { etat: enProjection.enPlein.etat, menu: enProjection.enPlein.menu,
           barre: enProjection.enPlein.barre },
         { etat: 1, menu: false, barre: true });
-    r.egal('y compris au deuxième temps, quand les barres reviennent',
+    r.egal('y compris quand on rend les outils par-dessus la page',
         enProjection.avecBarres, false);
     r.egal('et il revient dès qu\'on sort du plein écran', enProjection.rendu, true);
 

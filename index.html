@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=132">
+    <link rel="stylesheet" href="style.css?v=133">
 </head>
 
 <body>
@@ -618,13 +618,35 @@
     <div id="drop-overlay">Relâchez l'image ou le PDF ici</div>
     <div id="custom-bars-container"></div>
     <div id="drag-ghost"><svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24"></svg></div>
-    <button id="exit-focus-cross" onclick="toggleFocusMode()" data-title="Quitter Focus (Echap)">
-        <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-    </button>
+    <!-- CE QU'ON VOIT DE L'ÉCRAN, quand les barres sont rangées. Sans ces
+         boutons-là, l'affichage réduit était un cul-de-sac : la seule
+         commande qui le règle vit dans le tiroir du bas, lequel est
+         justement caché. Trois temps — tout, les barres seules, le tableau
+         nu — et le plein écran du navigateur à côté. -->
+    <div id="barre-ecran">
+        <button id="btn-ecran-suite" data-title="Affichage : tout / les barres seules / le tableau nu">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                id="icone-ecran-suite">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="3" y1="9" x2="21" y2="9" />
+            </svg>
+        </button>
+        <button id="btn-ecran-plein" data-title="Plein écran du navigateur">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                id="icone-ecran-plein">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
+        </button>
+        <button id="exit-focus-cross" onclick="poserLAffichage(0)" data-title="Tout remettre (Échap)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+        </button>
+    </div>
 
     <div id="help-modal" class="modal-backdrop" style="display: none;">
         <div class="modal-box help-content" style="max-height: 80vh; overflow-y: auto; max-width: 600px;">
@@ -2365,7 +2387,7 @@
             <div class="tool-categories" id="categories-bottom" style="justify-content: center;">
                 <!-- Ne restent ici que les interrupteurs : leur témoin dit s'ils sont allumés -->
                 <button class="category-pill interrupteur" onclick="handleWorkspaceFocus()" id="btn-focus"
-                    title="Ne garder que le tableau : les barres s'effacent"><i class="temoin"></i>Focus</button>
+                    title="Affichage : tout, puis les barres seules, puis le tableau nu"><i class="temoin"></i><span id="btn-focus-mot">Focus</span></button>
                 <button class="category-pill interrupteur" onclick="basculerLibelles()" id="btn-libelles"
                     title="Afficher le nom des outils sous leur icône"><i class="temoin"></i>Libellés</button>
                 <button class="category-pill interrupteur" onclick="handleWorkspaceDarkMode()" id="btn-nuit"
@@ -2675,17 +2697,27 @@
              ne pouvait l'appeler qu'à la touche « D ». Invisible pour qui n'a
              pas lu l'aide, c'est-à-dire pour presque tout le monde. Il ouvre
              la séance de lecture ; c'est pourquoi il vient en premier. -->
-        <!-- LE PLEIN ÉCRAN EST UN CYCLE À TROIS TEMPS. Il y avait deux boutons
-             pour en sortir — « quitter » et « sortir du plein écran du
-             navigateur » — et rien pour ce qu'on veut vraiment : garder la
-             page en grand ET récupérer ses outils pour écrire dessus. Un seul
-             bouton désormais : page seule → page avec les barres → sortie ;
-             son icône dit à chaque fois où il mène. -->
+        <!-- LE PLEIN ÉCRAN, ET RIEN D'AUTRE. Il y avait deux boutons pour en
+             sortir — « quitter » et « sortir du plein écran du navigateur » —
+             qui menaient au même endroit ; puis un cycle à trois temps, qui
+             mêlait le plein écran et les outils. Ce bouton-ci ne répond plus
+             qu'à une question : la page est-elle en grand ? -->
         <button class="doc-btn" id="doc-plein-ecran"
             data-tooltip="Présenter en plein écran (D) — molette et Page↓ pour descendre dans la page">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round" id="doc-plein-ecran-icone">
                 <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+            </svg></button>
+        <!-- LES BARRES, PENDANT QU'ON PRÉSENTE. C'était le deuxième temps d'un
+             cycle à trois : pour retrouver ses outils sur la page projetée il
+             fallait appuyer deux fois, et un appui de trop refermait tout.
+             Deux boutons qui disent chacun une chose valent mieux qu'un qui en
+             dit trois. -->
+        <button class="doc-btn" id="doc-barres" data-tooltip="Montrer les outils par-dessus la page">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" id="doc-barres-icone">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="3" y1="9" x2="21" y2="9" />
             </svg></button>
         <i class="doc-sep" id="doc-plein-ecran-sep"></i>
         <span id="doc-pages">
@@ -3060,7 +3092,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=241"></script>
+    <script src="script.js?v=242"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=99"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

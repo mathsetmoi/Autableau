@@ -370,21 +370,36 @@ module.exports = async function (browser) {
     await pageP.evaluate(() => { zoom = 1; panX = 0; panY = 0; majCurseurZoom(); draw(); });
     r.egal('celle du quadrillage aussi, à la française', vivant.grille, '2,5');
 
+    // LE TÉMOIN DE L'AFFICHAGE FAIT LE TOUR. Ce n'est plus un interrupteur à
+    // deux positions : « un bouton pour juste remettre les toolbar puis
+    // toolbar + tiroir + rien ». Il reste allumé tant qu'on a rangé quelque
+    // chose, et ne s'éteint qu'en revenant à « Tout ».
     const interrupteurs = await pageP.evaluate(() => {
         const lu = (id) => document.getElementById(id).classList.contains('allume');
-        const avant = { focus: lu('btn-focus'), nuit: lu('btn-nuit') };
+        const mot = () => document.getElementById('btn-focus-mot').textContent;
+        const avant = { focus: lu('btn-focus'), nuit: lu('btn-nuit'), mot: mot() };
         document.getElementById('btn-focus').click();
         document.getElementById('btn-nuit').click();
-        const apres = { focus: lu('btn-focus'), nuit: lu('btn-nuit') };
+        const apres = { focus: lu('btn-focus'), nuit: lu('btn-nuit'), mot: mot() };
+        document.getElementById('btn-focus').click();
+        const auBout = { focus: lu('btn-focus'), mot: mot() };
         document.getElementById('btn-focus').click();
         document.getElementById('btn-nuit').click();
-        return { avant, apres, eteints: !lu('btn-focus') && !lu('btn-nuit') };
+        return { avant, apres, auBout, mot: mot(),
+                 eteints: !lu('btn-focus') && !lu('btn-nuit') };
     });
-    r.verifie('au départ les témoins sont éteints',
-        !interrupteurs.avant.focus && !interrupteurs.avant.nuit, JSON.stringify(interrupteurs));
-    r.verifie('Focus et Mode Nuit s\'allument quand on les enclenche',
-        interrupteurs.apres.focus && interrupteurs.apres.nuit, JSON.stringify(interrupteurs));
-    r.verifie('et s\'éteignent quand on les relâche', interrupteurs.eteints, JSON.stringify(interrupteurs));
+    r.egal('au départ les témoins sont éteints, et tout est montré',
+        { focus: interrupteurs.avant.focus, nuit: interrupteurs.avant.nuit,
+          mot: interrupteurs.avant.mot },
+        { focus: false, nuit: false, mot: 'Tout' });
+    r.egal('un appui range les tiroirs, et le témoin s\'allume',
+        { focus: interrupteurs.apres.focus, nuit: interrupteurs.apres.nuit,
+          mot: interrupteurs.apres.mot },
+        { focus: true, nuit: true, mot: 'Barres' });
+    r.egal('le suivant efface tout, et le témoin reste allumé',
+        interrupteurs.auBout, { focus: true, mot: 'Focus' });
+    r.verifie('et le troisième remet tout : les deux témoins s\'éteignent',
+        interrupteurs.eteints && interrupteurs.mot === 'Tout', JSON.stringify(interrupteurs));
 
     await ctxP.close();
 

@@ -106,7 +106,8 @@ function allumerInterrupteur(id, actif) {
     if (b) b.classList.toggle('allume', !!actif);
 }
 function majInterrupteursBarre() {
-    allumerInterrupteur('btn-focus', document.body.classList.contains('focus-mode'));
+    allumerInterrupteur('btn-focus', typeof etatDeLAffichage === 'function'
+        ? etatDeLAffichage() > 0 : document.body.classList.contains('focus-mode'));
     allumerInterrupteur('btn-nuit', isDarkMode);
     // « Libellés » a trois états : c'est choisirFormatIcones qui l'allume.
 }
@@ -1265,8 +1266,78 @@ function handleWorkspaceDarkMode() {
     toggleDarkMode();
 }
 
+// ---------------------------------------------------------------------------
+// CE QU'ON VOIT DE L'ÉCRAN : TROIS TEMPS
+//
+// « Je pense qu'il faudrait un bouton pour juste remettre les toolbar, puis
+// toolbar + tiroir + rien, et un bouton pour le plein écran / sortie plein
+// écran. »
+//
+// Il n'y avait que deux états : tout, ou rien. Or l'écran du cours, c'est
+// LES BARRES SANS LES TIROIRS — on écrit, on trace, et rien ne mange le
+// tableau ; les tiroirs, eux, ne servent qu'à préparer. Ce temps du milieu
+// manquait, et il fallait choisir entre un écran encombré et un écran nu où
+// l'on n'a plus un outil sous la main.
+//
+//   0 — tout : les barres et les tiroirs
+//   1 — les barres seules : les tiroirs se rangent
+//   2 — le tableau nu : il ne reste que ce qui est écrit
+// ---------------------------------------------------------------------------
+const MOTS_DE_LAFFICHAGE = ['Tout', 'Barres', 'Focus'];
+
+function etatDeLAffichage() {
+    if (document.body.classList.contains('focus-mode')) return 2;
+    if (document.body.classList.contains('sans-tiroirs')) return 1;
+    return 0;
+}
+window.etatDeLAffichage = etatDeLAffichage;
+
+function poserLAffichage(etat) {
+    const voulu = Math.max(0, Math.min(2, Number(etat) || 0));
+    if (voulu === etatDeLAffichage()) { majLePointDAffichage(); return voulu; }
+    // Le tableau nu passe par « toggleFocusMode » : il emporte tout un
+    // cortège — la présentation, la barre du document, celle de la visite —
+    // qu'on ne rejouerait pas à la main sans en oublier.
+    const enFocus = document.body.classList.contains('focus-mode');
+    if (voulu === 2) {
+        document.body.classList.remove('sans-tiroirs');
+        if (!enFocus) toggleFocusMode();
+    } else {
+        if (enFocus) toggleFocusMode();
+        document.body.classList.toggle('sans-tiroirs', voulu === 1);
+    }
+    majLePointDAffichage();
+    return voulu;
+}
+window.poserLAffichage = poserLAffichage;
+
+function cyclerLAffichage() {
+    return poserLAffichage((etatDeLAffichage() + 1) % 3);
+}
+window.cyclerLAffichage = cyclerLAffichage;
+
+// Le bouton dit où l'on est, pas où l'on va : c'est ce qu'on lit d'un coup
+// d'œil sans avoir à se souvenir de l'ordre du cycle.
+function majLePointDAffichage() {
+    const etat = etatDeLAffichage();
+    const mot = document.getElementById('btn-focus-mot');
+    if (mot) mot.textContent = MOTS_DE_LAFFICHAGE[etat];
+    // L'allumage est posé par « majInterrupteursBarre », appelé plus bas :
+    // l'écrire ici aussi ne faisait que le doubler.
+    const pastille = document.getElementById('btn-focus');
+    if (pastille) {
+        pastille.setAttribute('title', [
+            'Tout est là — un appui range les tiroirs',
+            'Les tiroirs sont rangés — un appui efface tout',
+            'Le tableau nu — un appui remet tout'
+        ][etat]);
+    }
+    if (typeof majInterrupteursBarre === 'function') majInterrupteursBarre();
+}
+window.majLePointDAffichage = majLePointDAffichage;
+
 function handleWorkspaceFocus() {
-    toggleFocusMode();
+    cyclerLAffichage();
 }
 
 function arrangeToolbars() {
@@ -1424,6 +1495,17 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('auTableau_welcome_v2', 'true');
         }
     });
+    document.getElementById('btn-ecran-suite')?.addEventListener('click', () => {
+        const etat = cyclerLAffichage();
+        if (typeof showToast === 'function') {
+            showToast(['Tout est revenu', 'Les tiroirs sont rangés — les outils restent',
+                       'Le tableau nu'][etat]);
+        }
+    });
+    document.getElementById('btn-ecran-plein')?.addEventListener('click', () => {
+        if (typeof basculerPleinEcran === 'function') basculerPleinEcran();
+    });
+
     document.getElementById('btn-voir-tout')?.addEventListener('click', () => {
         const boite = (typeof boiteDuTravail === 'function') ? boiteDuTravail() : null;
         voirToutLeTableau();
@@ -6086,6 +6168,37 @@ function estUneCouleurDeLaGrille(hex) {
         .some(d => String(d.dataset.color).toLowerCase() === String(hex).toLowerCase());
 }
 
+// ------------------------------------------------------------------
+// UNE ENCRE QU'ON VOIT SUR LE FOND QU'ON A
+// Du blanc sur une page blanche ne trace rien — et rien, à l'écran, ne
+// distingue « le crayon ne marche pas » de « le trait est là, invisible ».
+// On ne change la couleur QUE si elle se confond avec le fond : celui qui a
+// choisi son bleu le garde.
+// ------------------------------------------------------------------
+function clarteDUneCouleur(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').replace('#', '#'));
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    const r = (n >> 16) & 255, v = (n >> 8) & 255, b = n & 255;
+    return (0.2126 * r + 0.7152 * v + 0.0722 * b) / 255;
+}
+window.clarteDUneCouleur = clarteDUneCouleur;
+
+function encreLisibleSurLeFond() {
+    if (typeof activeStyle === 'undefined') return false;
+    const sombre = (typeof isDarkMode !== 'undefined') && isDarkMode;
+    const clarte = clarteDUneCouleur(activeStyle.strokeColor);
+    if (clarte === null) return false;
+    // Le fond est clair : une encre claire s'y perd. Et l'inverse.
+    const perdue = sombre ? (clarte < 0.25) : (clarte > 0.75);
+    if (!perdue) return false;
+    const secours = sombre ? '#ffffff' : '#2d3436';
+    if (typeof choisirLaCouleur === 'function') choisirLaCouleur(secours);
+    else activeStyle.strokeColor = secours;
+    return true;
+}
+window.encreLisibleSurLeFond = encreLisibleSurLeFond;
+
 function retenirUneCouleur(hex) {
     if (!/^#[0-9a-f]{6}$/i.test(hex || '')) return false;
     const c = hex.toLowerCase();
@@ -6231,6 +6344,7 @@ document.addEventListener('DOMContentLoaded', () => {
     majLesCouleursRecentes();
     majCoherenceDeLaPastille();
     updateColorIndicator();
+    if (typeof majLePointDAffichage === 'function') majLePointDAffichage();
 });
 // ==================================================================
 // « NE PAS RÉÉCRIRE SOUS LES DOIGTS » — MAIS SEULEMENT SOUS LES DOIGTS
@@ -8953,6 +9067,9 @@ canvas.addEventListener('pointerdown', (e) => {
     }
 
     if (mode === 'laser') {
+        // ON PREND LA PHOTO AVANT DE POINTER, et sans le moindre faisceau : un
+        // reste de trait figé dedans ne s'effacerait jamais.
+        figerLeCalqueSansLaser();
         currentLaserStroke = [];
         laserStrokes.push(currentLaserStroke);
         currentLaserStroke.push({ x: rawPos.x, y: rawPos.y, time: Date.now() });
@@ -10172,7 +10289,7 @@ canvas.addEventListener('wheel', (e) => {
         if (e.deltaMode === 1) { dy *= 16; dx *= 16; }
         else if (e.deltaMode === 2) { dy *= H; dx *= H; }
         if (dx) { panX -= dx; bornerLaPresentation(); }
-        defilerLaPresentation(dy);
+        tournerSiOnForce(defilerLaPresentation(dy));
         return;
     }
 
@@ -10367,17 +10484,113 @@ function figerLeCalque() {
 
 function libererLeCalque() { calqueFigeEtat = null; }
 
+// Le tableau tel qu'il est, MOINS les faisceaux : c'est la seule photo qui
+// reste juste pendant qu'ils s'effacent par-dessus.
+function figerLeCalqueSansLaser() {
+    const gardes = laserStrokes;
+    laserStrokes = [];
+    try { draw(); figerLeCalque(); }
+    finally { laserStrokes = gardes; }
+}
+
+// LE LASER AUSSI EST UN TRAIT QU'ON POSE SUR UN TABLEAU QUI NE BOUGE PAS.
+// « Pointeur laser qui rame sur PDF » : chaque frisson du faisceau repeignait
+// TOUT — la page du document comprise, une image de plusieurs millions de
+// pixels, soixante fois par seconde. Le chemin court existait déjà pour le
+// crayon ; le laser en avait plus besoin encore, puisqu'il se redessine même
+// quand la main ne bouge plus, le temps qu'il s'efface.
+function enTrainDePointer() {
+    return typeof mode !== 'undefined' && mode === 'laser'
+        && typeof laserStrokes !== 'undefined' && laserStrokes && laserStrokes.length > 0;
+}
+
 function calqueUtilisable() {
     if (!calqueFige || !calqueFigeEtat) return false;
-    if (!isDrawingFreehand || !currentFreehand) return false;
+    const auLaser = enTrainDePointer();
+    if (!auLaser && (!isDrawingFreehand || !currentFreehand)) return false;
     // Rien d'autre ne doit être en mouvement, ni rien d'animé à l'écran.
     if (typeof draggedWidget !== 'undefined' && draggedWidget) return false;
-    if (typeof laserStrokes !== 'undefined' && laserStrokes && laserStrokes.length) return false;
+    // Un faisceau qui s'efface change l'image SOUS le trait qu'on écrit : le
+    // calque serait périmé. Sauf quand c'est le faisceau lui-même qu'on
+    // repeint par-dessus — le calque, lui, a été pris sans aucun laser.
+    if (!auLaser && typeof laserStrokes !== 'undefined' && laserStrokes && laserStrokes.length) return false;
     if (typeof isExportingTransparent !== 'undefined' && isExportingTransparent) return false;
     const e = calqueFigeEtat;
     return e.panX === panX && e.panY === panY && e.zoom === zoom
         && e.l === canvas.width && e.h === canvas.height;
 }
+
+// ===================================================
+// LE FAISCEAU DU LASER, DESSINÉ À PART
+// Il se peignait au milieu du grand dessin, et ne pouvait donc servir qu'à
+// celui-là. Sorti, il sert aussi au CHEMIN COURT — celui qui recopie une
+// image figée du tableau au lieu de tout repeindre.
+// ===================================================
+function dessinerLesLasers(ctx, lw) {
+    let needsRedraw = false;
+    const now = Date.now();
+
+        ctx.save();
+        // 'butt' : les quadratiques se raccordent tangentiellement, des bouts
+        // ronds créeraient des perles plus opaques à chaque jonction.
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'round';
+        laserStrokes.forEach(stroke => {
+            const pts = stroke.filter(p => now - p.time < LASER_LIFETIME);
+            if (pts.length > 0) needsRedraw = true;
+            if (pts.length < 2) {
+                if (pts.length === 1) {
+                    const op = Math.max(0, 1 - ((now - pts[0].time) / LASER_LIFETIME));
+                    ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 3.2 * lw, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(231, 76, 60, ${op})`; ctx.fill();
+                }
+                return;
+            }
+
+            // Tracé adouci : chaque point devient le point de contrôle d'une
+            // quadratique reliant les milieux de segments (Catmull-Rom simplifié).
+            // Passe 0 = halo diffus, passe 1 = cœur du faisceau.
+            for (let pass = 0; pass < 2; pass++) {
+                for (let i = 1; i < pts.length; i++) {
+                    const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1];
+                    const op = Math.max(0, 1 - ((now - p0.time) / LASER_LIFETIME));
+                    if (op <= 0.01) continue;
+
+                    const fromX = (i === 1) ? p0.x : (p0.x + p1.x) / 2;
+                    const fromY = (i === 1) ? p0.y : (p0.y + p1.y) / 2;
+                    const toX = p2 ? (p1.x + p2.x) / 2 : p1.x;
+                    const toY = p2 ? (p1.y + p2.y) / 2 : p1.y;
+
+                    ctx.beginPath();
+                    ctx.moveTo(fromX, fromY);
+                    ctx.quadraticCurveTo(p1.x, p1.y, toX, toY);
+                    if (pass === 0) {
+                        ctx.strokeStyle = `rgba(231, 76, 60, ${op * 0.16})`;
+                        ctx.lineWidth = 13 * lw;
+                    } else {
+                        ctx.strokeStyle = `rgba(231, 76, 60, ${op})`;
+                        ctx.lineWidth = 6 * lw * (0.55 + 0.45 * op); // s'affine en s'estompant
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            // Pointe lumineuse
+            const lastP = pts[pts.length - 1];
+            const opTip = Math.max(0, 1 - ((now - lastP.time) / LASER_LIFETIME));
+            const glow = ctx.createRadialGradient(lastP.x, lastP.y, 0, lastP.x, lastP.y, 11 * lw);
+            glow.addColorStop(0, `rgba(255, 230, 225, ${opTip})`);
+            glow.addColorStop(0.35, `rgba(231, 76, 60, ${opTip * 0.85})`);
+            glow.addColorStop(1, 'rgba(231, 76, 60, 0)');
+            ctx.beginPath(); ctx.arc(lastP.x, lastP.y, 11 * lw, 0, Math.PI * 2);
+            ctx.fillStyle = glow; ctx.fill();
+        });
+    ctx.restore();
+    laserStrokes = laserStrokes.filter(stroke => stroke.length > 0 && now - stroke[stroke.length - 1].time < LASER_LIFETIME);
+    if (needsRedraw) requestAnimationFrame(draw);
+    return needsRedraw;
+}
+window.dessinerLesLasers = dessinerLesLasers;
 
 function draw() {
     // LE CHEMIN COURT : on écrit, et le reste du tableau n'a pas bougé.
@@ -10388,6 +10601,11 @@ function draw() {
         ctx.save();
         ctx.translate(panX, panY); ctx.scale(zoom, zoom);
         try {
+            if (enTrainDePointer()) {
+                dessinerLesLasers(ctx, 1 / zoom);
+                ctx.restore();
+                return;
+            }
             const o = currentFreehand;
             ctx.strokeStyle = o.color;
             setContextDash(ctx, o.dash, EPAISSEUR_AU_TABLEAU);
@@ -11494,68 +11712,7 @@ function draw() {
             ctx.setLineDash([]);
         }
 
-        if (!isExportingTransparent && laserStrokes.length > 0) {
-            let needsRedraw = false;
-            const now = Date.now();
-            ctx.save();
-            // 'butt' : les quadratiques se raccordent tangentiellement, des bouts
-            // ronds créeraient des perles plus opaques à chaque jonction.
-            ctx.lineCap = 'butt';
-            ctx.lineJoin = 'round';
-            laserStrokes.forEach(stroke => {
-                const pts = stroke.filter(p => now - p.time < LASER_LIFETIME);
-                if (pts.length > 0) needsRedraw = true;
-                if (pts.length < 2) {
-                    if (pts.length === 1) {
-                        const op = Math.max(0, 1 - ((now - pts[0].time) / LASER_LIFETIME));
-                        ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 3.2 * lw, 0, Math.PI * 2);
-                        ctx.fillStyle = `rgba(231, 76, 60, ${op})`; ctx.fill();
-                    }
-                    return;
-                }
-
-                // Tracé adouci : chaque point devient le point de contrôle d'une
-                // quadratique reliant les milieux de segments (Catmull-Rom simplifié).
-                // Passe 0 = halo diffus, passe 1 = cœur du faisceau.
-                for (let pass = 0; pass < 2; pass++) {
-                    for (let i = 1; i < pts.length; i++) {
-                        const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1];
-                        const op = Math.max(0, 1 - ((now - p0.time) / LASER_LIFETIME));
-                        if (op <= 0.01) continue;
-
-                        const fromX = (i === 1) ? p0.x : (p0.x + p1.x) / 2;
-                        const fromY = (i === 1) ? p0.y : (p0.y + p1.y) / 2;
-                        const toX = p2 ? (p1.x + p2.x) / 2 : p1.x;
-                        const toY = p2 ? (p1.y + p2.y) / 2 : p1.y;
-
-                        ctx.beginPath();
-                        ctx.moveTo(fromX, fromY);
-                        ctx.quadraticCurveTo(p1.x, p1.y, toX, toY);
-                        if (pass === 0) {
-                            ctx.strokeStyle = `rgba(231, 76, 60, ${op * 0.16})`;
-                            ctx.lineWidth = 13 * lw;
-                        } else {
-                            ctx.strokeStyle = `rgba(231, 76, 60, ${op})`;
-                            ctx.lineWidth = 6 * lw * (0.55 + 0.45 * op); // s'affine en s'estompant
-                        }
-                        ctx.stroke();
-                    }
-                }
-
-                // Pointe lumineuse
-                const lastP = pts[pts.length - 1];
-                const opTip = Math.max(0, 1 - ((now - lastP.time) / LASER_LIFETIME));
-                const glow = ctx.createRadialGradient(lastP.x, lastP.y, 0, lastP.x, lastP.y, 11 * lw);
-                glow.addColorStop(0, `rgba(255, 230, 225, ${opTip})`);
-                glow.addColorStop(0.35, `rgba(231, 76, 60, ${opTip * 0.85})`);
-                glow.addColorStop(1, 'rgba(231, 76, 60, 0)');
-                ctx.beginPath(); ctx.arc(lastP.x, lastP.y, 11 * lw, 0, Math.PI * 2);
-                ctx.fillStyle = glow; ctx.fill();
-            });
-            ctx.restore();
-            laserStrokes = laserStrokes.filter(stroke => stroke.length > 0 && now - stroke[stroke.length - 1].time < LASER_LIFETIME);
-            if (needsRedraw) requestAnimationFrame(draw);
-        }
+        if (!isExportingTransparent && laserStrokes.length > 0) dessinerLesLasers(ctx, lw);
 
         widgetZOrder.forEach(type => {
             if (activeWidgets[type] && widgets[type]) {
@@ -14760,23 +14917,32 @@ function majBarreDocument() {
     const bReperer = document.getElementById('doc-reperer');
     if (bReperer) bReperer.style.display = (obj && obj.src && !enPresentation) ? 'inline-flex' : 'none';
 
-    // LE PLEIN ÉCRAN EST UN CYCLE À TROIS TEMPS, et le bouton dit à chaque
-    // fois où il mène : la page seule, puis la page avec les outils, puis la
-    // sortie. Les deux boutons d'avant — « quitter » et « sortir du plein
-    // écran du navigateur » — ne menaient qu'au même endroit.
+    // LE PLEIN ÉCRAN NE DIT QU'UNE CHOSE : on y entre, on en sort. Les outils
+    // par-dessus la page sont la question du bouton voisin — mêler les deux
+    // dans un cycle obligeait à appuyer deux fois pour récupérer ses outils,
+    // et un appui de trop refermait tout.
     const bPlein = document.getElementById('doc-plein-ecran');
     const etatPlein = (typeof etatDuPleinEcran === 'function') ? etatDuPleinEcran() : 0;
     if (bPlein) {
         bPlein.style.display = unDocument ? 'inline-flex' : 'none';
         bPlein.classList.toggle('actif', etatPlein > 0);
         bPlein.classList.toggle('avec-barres', etatPlein === 2);
-        bPlein.setAttribute('data-tooltip', [
-            'Présenter en plein écran (D) — molette et Page↓ pour descendre dans la page',
-            'Garder le plein écran ET retrouver les barres, pour écrire sur la page',
-            'Quitter le plein écran (Échap)'
-        ][etatPlein]);
+        bPlein.setAttribute('data-tooltip', etatPlein > 0
+            ? 'Quitter le plein écran (Échap)'
+            : 'Présenter en plein écran (D) — molette et Page↓ pour descendre dans la page');
         const icone = document.getElementById('doc-plein-ecran-icone');
-        if (icone) icone.innerHTML = ICONES_PLEIN_ECRAN[etatPlein];
+        if (icone) icone.innerHTML = ICONES_PLEIN_ECRAN[etatPlein > 0 ? 2 : 0];
+    }
+    // LES OUTILS PAR-DESSUS LA PAGE : un bouton à part, qui ne paraît que
+    // lorsqu'on présente — hors présentation, il n'y a rien à montrer ni à
+    // ranger, les barres sont là.
+    const bBarres = document.getElementById('doc-barres');
+    if (bBarres) {
+        bBarres.style.display = (unDocument && etatPlein > 0) ? 'inline-flex' : 'none';
+        bBarres.classList.toggle('actif', etatPlein === 2);
+        bBarres.setAttribute('data-tooltip', etatPlein === 2
+            ? 'Ranger les outils : la page seule'
+            : 'Montrer les outils par-dessus la page');
     }
     const sepPlein = document.getElementById('doc-plein-ecran-sep');
     if (sepPlein) sepPlein.style.display = unDocument ? 'inline-block' : 'none';
@@ -14986,13 +15152,15 @@ function brancherBarreDocument() {
         bouton.addEventListener('click', () => { repererLesExercices(); });
     })();
 
-    // Sortir du plein écran du navigateur, sans quitter ce qu'on regarde.
-    // LE PLEIN ÉCRAN, EN TROIS TEMPS : la page seule, la page avec les barres
-    // pour écrire dessus, puis la sortie. Un seul bouton pour les trois.
+    // DEUX GESTES, DEUX BOUTONS : la page en grand ou non, et les outils
+    // par-dessus ou non. Le cycle à trois temps mêlait deux questions sans
+    // rapport, et un appui de trop refermait tout.
     (function () {
         const bouton = b('doc-plein-ecran');
         if (!bouton) return;
-        bouton.addEventListener('click', () => { cyclerLePleinEcran(); });
+        bouton.addEventListener('click', () => { basculerLePleinEcranDuDocument(); });
+        const barres = b('doc-barres');
+        if (barres) barres.addEventListener('click', () => { basculerLesBarresDeLaPresentation(); });
     })();
 
     // Clic bref : allumer ou éteindre le repérage. APPUI LONG : ouvrir la
@@ -19756,13 +19924,21 @@ function defilerOuTourner(sens) {
     const reste = defilerLaPresentation(pas);
     if (Math.abs(pas - reste) > 1) return true;
 
-    if (typeof estUnPdfFeuilletable !== 'function' || !estUnPdfFeuilletable(doc)) return true;
+    tournerLaPageDuDocument(doc, sens);
+    return true;
+}
+window.defilerOuTourner = defilerOuTourner;
+
+// Tourner la page, et poser la vue sur le bord par lequel on arrive.
+function tournerLaPageDuDocument(doc, sens) {
+    if (!doc) return false;
+    if (typeof estUnPdfFeuilletable !== 'function' || !estUnPdfFeuilletable(doc)) return false;
     const page = doc.pluginData.page, total = doc.pluginData.pages;
     if ((sens > 0 && page >= total) || (sens < 0 && page <= 1)) {
         if (typeof showToast === 'function') {
             showToast(sens > 0 ? 'Fin du document' : 'Début du document');
         }
-        return true;
+        return false;
     }
     // La page suivante est rendue en différé ; la géométrie du cadre, elle, ne
     // change pas — on peut poser la vue tout de suite.
@@ -19772,7 +19948,46 @@ function defilerOuTourner(sens) {
     cadrerLeBordDeLaPage(doc, sens > 0);
     return true;
 }
-window.defilerOuTourner = defilerOuTourner;
+window.tournerLaPageDuDocument = tournerLaPageDuDocument;
+
+// ---------------------------------------------------------------------------
+// LA MOLETTE TOURNE LA PAGE — QUAND ON INSISTE
+//
+// « Quand on est tout en bas et que l'on force avec la molette, on passe à la
+// page suivante (idem pour la précédente). »
+//
+// La molette défilait jusqu'au bas de la page, et là plus rien : il fallait
+// lâcher la souris pour aller chercher la flèche de la barre, ou connaître
+// Page↓. Tous les lecteurs de PDF tournent à la molette ; encore faut-il ne
+// pas tourner DÈS qu'on touche le bord — on saute alors trois pages d'un
+// geste, surtout au pavé tactile, où le défilement continue sur son erre.
+//
+// On compte donc ce qu'on POUSSE DANS LE VIDE. Tant que la page a du mou, le
+// compteur repart de zéro ; il faut insister d'un bon cran pour tourner, et
+// l'on marque un temps d'arrêt après — sans quoi l'inertie du pavé tactile
+// enchaînerait les pages toute seule.
+// ---------------------------------------------------------------------------
+const POUSSEE_POUR_TOURNER = 140;      // en pixels d'écran poussés dans le vide
+const REPOS_APRES_UNE_PAGE = 500;      // ms : le temps que l'inertie retombe
+let pousseeDansLeVide = 0;
+let derniereTournee = 0;
+
+function tournerSiOnForce(reste) {
+    const doc = documentPresente();
+    // La page a encore du mou : on n'est pas au bord, le compteur repart.
+    if (!doc || !reste) { pousseeDansLeVide = 0; return false; }
+    const maintenant = Date.now();
+    if (maintenant - derniereTournee < REPOS_APRES_UNE_PAGE) { pousseeDansLeVide = 0; return false; }
+    // On change de sens : ce qu'on avait poussé dans l'autre ne compte plus.
+    if (pousseeDansLeVide && Math.sign(pousseeDansLeVide) !== Math.sign(reste)) pousseeDansLeVide = 0;
+    pousseeDansLeVide += reste;
+    if (Math.abs(pousseeDansLeVide) < POUSSEE_POUR_TOURNER) return false;
+    const sens = pousseeDansLeVide > 0 ? 1 : -1;
+    pousseeDansLeVide = 0;
+    derniereTournee = maintenant;
+    return tournerLaPageDuDocument(doc, sens);
+}
+window.tournerSiOnForce = tournerSiOnForce;
 
 // Les touches d'un lecteur de PDF. Rend vrai si la touche a servi ici.
 function cleDePresentation(e) {
@@ -19874,20 +20089,21 @@ function presenterLeDocument() {
 let pleinEcranDeLaPresentation = false;
 
 // ==============================================================================
-// LE PLEIN ÉCRAN EST UN CYCLE À TROIS TEMPS
+// LE PLEIN ÉCRAN, ET LES OUTILS PAR-DESSUS : DEUX QUESTIONS, DEUX BOUTONS
 //
 // Il y avait deux boutons pour en sortir — « quitter le plein écran » et
 // « sortir du plein écran du navigateur » — et rien pour ce qu'on veut
 // vraiment : garder la page en grand ET récupérer ses outils. On projetait un
 // exercice, on voulait l'annoter, il fallait tout quitter, écrire, et tout
-// remettre en grand.
+// remettre en grand. Un cycle à trois temps a d'abord réuni les deux dans un
+// seul bouton ; il fallait alors deux appuis pour retrouver ses outils, et
+// l'appui suivant refermait tout. Ce sont deux questions sans rapport :
 //
-//   1. PLEIN ÉCRAN : la page seule, les barres effacées. C'est ce qu'on montre.
-//   2. PLEIN ÉCRAN AVEC LES BARRES : la page reste en grand, les outils
-//      reviennent par-dessus. C'est là qu'on écrit sur ce qu'on montre.
-//   3. SORTIE : on retrouve son tableau.
+//   « basculerLePleinEcranDuDocument » — la page est-elle en grand ?
+//   « basculerLesBarresDeLaPresentation » — voit-on les outils par-dessus ?
 //
-// Un seul bouton, et il dit à chaque fois où il mène.
+// « etatDuPleinEcran » lit le couple : 0 hors présentation, 1 la page seule,
+// 2 la page en grand avec les barres.
 // ==============================================================================
 let presentationAvecBarres = false;
 
@@ -19896,35 +20112,46 @@ function etatDuPleinEcran() {
     return presentationAvecBarres ? 2 : 1;
 }
 
-function cyclerLePleinEcran() {
-    const etat = etatDuPleinEcran();
-    if (etat === 0) {
-        presentationAvecBarres = false;
-        const ouvert = presenterLeDocument();
+// DEUX GESTES, DEUX BOUTONS. « Rajoute pour la barre du pdf la sortie ou non
+// du plein écran (enlève le cycle) et une icône pour l'affichage ou non des
+// toolbar. » Le cycle à trois temps mêlait deux questions sans rapport : la
+// page est-elle en grand, et voit-on ses outils ? Pour retrouver ses outils
+// sur la page projetée il fallait appuyer DEUX fois, et un appui de trop
+// refermait tout. Chaque bouton ne dit plus qu'une chose.
+function basculerLePleinEcranDuDocument() {
+    if (etatDuPleinEcran() > 0) {
+        quitterLaPresentation();
+        // « majBarreDocument » rafraîchit aussi le menu de l'objet : il revient
+        // avec le tableau, sans qu'on ait à le lui dire deux fois.
         if (typeof majBarreDocument === 'function') majBarreDocument();
-        return ouvert ? 1 : 0;
+        return false;
     }
-    if (etat === 1) {
-        // La page reste en grand ; ce sont les barres qu'on rappelle. Le
-        // drapeau se lève AVANT, sinon quitter le mode Focus ferme la
-        // présentation avec lui — c'est sa règle par ailleurs.
-        presentationAvecBarres = true;
-        if (document.body.classList.contains('focus-mode')
-            && typeof toggleFocusMode === 'function') toggleFocusMode();
-        if (typeof majBarreDocument === 'function') majBarreDocument();
-        if (typeof draw === 'function') draw();
-        if (typeof showToast === 'function') {
-            showToast('Plein écran avec les outils — écrivez sur la page, elle reste en grand');
-        }
-        return 2;
-    }
-    quitterLaPresentation();
-    // « majBarreDocument » rafraîchit aussi le menu de l'objet : il revient
-    // avec le tableau, sans qu'on ait à le lui dire deux fois.
+    presentationAvecBarres = false;
+    const ouvert = presenterLeDocument();
     if (typeof majBarreDocument === 'function') majBarreDocument();
-    return 0;
+    return !!ouvert;
 }
-window.cyclerLePleinEcran = cyclerLePleinEcran;
+window.basculerLePleinEcranDuDocument = basculerLePleinEcranDuDocument;
+
+// La page reste en grand ; ce sont les barres qu'on montre ou qu'on range. Le
+// drapeau se lève AVANT de quitter le mode Focus, sinon la présentation part
+// avec lui — c'est sa règle par ailleurs.
+function basculerLesBarresDeLaPresentation() {
+    if (typeof presentationEnCours === 'undefined' || !presentationEnCours) return false;
+    const avec = !presentationAvecBarres;
+    presentationAvecBarres = avec;
+    const enFocus = document.body.classList.contains('focus-mode');
+    if (avec && enFocus && typeof toggleFocusMode === 'function') toggleFocusMode();
+    if (!avec && !enFocus && typeof toggleFocusMode === 'function') toggleFocusMode();
+    if (typeof majBarreDocument === 'function') majBarreDocument();
+    if (typeof draw === 'function') draw();
+    if (typeof showToast === 'function') {
+        showToast(avec ? 'Les outils par-dessus la page — elle reste en grand'
+                       : 'La page seule');
+    }
+    return avec;
+}
+window.basculerLesBarresDeLaPresentation = basculerLesBarresDeLaPresentation;
 window.etatDuPleinEcran = etatDuPleinEcran;
 
 function quitterLaPresentation() {
@@ -32815,12 +33042,12 @@ function chapitresDeLaDemonstration() {
               await g.tempo(2600);
               g.dire('Sa barre l\'a suivi en bas de l\'écran : les pages, le crayon, tout reste sous la main.');
               await g.montrer('#bar-document', 'Elle est toujours là', 3000);
-              g.dire('Le même bouton mène au temps suivant : la page reste en grand, TOUTES les barres reviennent.');
-              await g.viser('#doc-plein-ecran', 'Et les outils');
+              g.dire('Le bouton d\'à côté rappelle TOUTES les barres, sans que la page quitte le plein écran.');
+              await g.viser('#doc-barres', 'Et les outils');
               await g.tempo(3000);
               g.dire('C\'est là qu\'on écrit sur ce qu\'on projette, sans rien quitter ni rien remettre en place.');
               await g.tempo(2600);
-              g.dire('Un troisième appui en sort, et l\'on retrouve son tableau.');
+              g.dire('Chaque bouton ne dit qu\'une chose : celui-ci les range, l\'autre sort du plein écran.');
               await g.viser('#doc-plein-ecran', 'On en sort');
               if (typeof presentationEnCours !== 'undefined' && presentationEnCours) quitterLaPresentation();
               if (typeof majBarreDocument === 'function') majBarreDocument();
@@ -33457,6 +33684,7 @@ function demarrerLaDemonstration() {
             && !document.getElementById('bottom-drawer').classList.contains('closed'),
         focus: document.body.classList.contains('focus-mode'),
         fond: currentBgIndex,
+        encre: (typeof activeStyle !== 'undefined') ? activeStyle.strokeColor : null,
         instruments: (typeof instrumentsPourEnregistrement === 'function')
             ? instrumentsPourEnregistrement() : null,
         lecteurs: ouverts
@@ -33467,6 +33695,15 @@ function demarrerLaDemonstration() {
     // traits par-dessus une réglure, et l'on ne voyait plus ce qu'elle
     // dessinait. Le fond d'avant est rendu en sortant, comme le reste.
     currentBgIndex = 0;
+
+    // ET AVEC UNE ENCRE QU'ON VOIT. « Pour la démonstration, le crayon ne
+    // trace plus rien si c'est blanc : il faut veiller à la couleur. » La
+    // visite écrit avec la couleur du moment ; sur une page blanche, un
+    // enseignant qui venait d'écrire en blanc sur fond sombre la regardait
+    // tracer dans le vide, et concluait que le crayon ne marchait pas. Elle
+    // pose donc une encre lisible sur le fond qu'elle se donne — et rend la
+    // sienne en partant.
+    if (typeof encreLisibleSurLeFond === 'function') encreLisibleSurLeFond();
 
     // LA DÉMONSTRATION A SA PAGE. Elle est ajoutée EN DERNIER et retirée en
     // sortant : les pages du professeur ne changent pas de rang, et rien de
@@ -33695,6 +33932,8 @@ function arreterLaDemonstration() {
     if (typeof majPastilleDeClasse === 'function') majPastilleDeClasse();
 
     if (typeof setMode === 'function') setMode(d.avant.outil || 'pointer');
+    // L'encre du professeur lui revient, telle qu'il l'avait laissée.
+    if (d.avant.encre && typeof choisirLaCouleur === 'function') choisirLaCouleur(d.avant.encre);
     // Le fond du tableau était à elle le temps de la visite : il est rendu.
     if (typeof d.avant.fond === 'number') currentBgIndex = d.avant.fond;
     // Les instruments qu'on avait posés reviennent où ils étaient.

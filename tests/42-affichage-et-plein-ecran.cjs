@@ -1,0 +1,213 @@
+// CE QU'ON VOIT DE L'ÉCRAN : TROIS TEMPS, ET DEUX GESTES DISTINCTS.
+//
+// « Je pense qu'il faudrait un bouton pour juste remettre les toolbar, puis
+// toolbar + tiroir + rien, et un bouton pour le plein écran / sortie plein
+// écran. »
+// « Rajoute pour la barre du pdf la sortie ou non du plein écran (enlève le
+// cycle) et une icône pour l'affichage ou non des toolbar. »
+//
+// DEUX DÉFAUTS DE MÊME NATURE : un réglage qui n'avait que deux positions là
+// où il en fallait trois, et un bouton qui en disait trois là où il fallait
+// deux boutons.
+//
+//   — L'affichage n'allait que de « tout » à « rien ». Or l'écran du cours,
+//     c'est LES BARRES SANS LES TIROIRS : on écrit, on trace, et rien ne
+//     mange le tableau ; les tiroirs ne servent qu'à préparer. Il fallait
+//     choisir entre un écran encombré et un écran nu où l'on n'a plus un
+//     outil sous la main.
+//   — Le plein écran d'un document était un cycle à trois temps qui mêlait
+//     deux questions sans rapport : la page est-elle en grand, et voit-on
+//     ses outils ? Pour retrouver ses outils sur la page projetée il fallait
+//     appuyer DEUX fois, et un appui de trop refermait tout.
+//
+// ET L'AFFICHAGE RÉDUIT ÉTAIT UN CUL-DE-SAC : la commande qui le règle vit
+// dans le tiroir du bas, lequel est justement caché. On n'en sortait qu'à la
+// touche Échap, pour qui la connaissait.
+const { creerRapport, ouvrirApp, petitPdf } = require('./harness.cjs');
+
+module.exports = async function (browser) {
+    const r = creerRapport('Affichage et plein écran');
+    const { page, context, erreurs } = await ouvrirApp(browser, { viewport: { width: 1400, height: 900 } });
+
+    const vu = (sel) => page.evaluate((s) => {
+        const e = document.querySelector(s);
+        if (!e) return null;
+        const c = getComputedStyle(e);
+        return c.display !== 'none' && c.visibility !== 'hidden' && c.opacity !== '0';
+    }, sel);
+
+    const ecran = async () => ({
+        etat: await page.evaluate(() => etatDeLAffichage()),
+        mot: await page.evaluate(() => document.getElementById('btn-focus-mot').textContent),
+        outils: await vu('.custom-toolbar'),
+        tiroirBas: await vu('#bottom-drawer'),
+        tiroirHaut: await vu('#bar-plugins'),
+        sortie: await vu('#barre-ecran')
+    });
+
+    // =================================================================
+    // 1. TROIS TEMPS, ET LE TEMPS DU MILIEU EXISTE
+    // =================================================================
+    r.egal('au départ, tout est là et rien ne flotte dans le coin',
+        await ecran(),
+        { etat: 0, mot: 'Tout', outils: true, tiroirBas: true, tiroirHaut: true, sortie: false });
+
+    await page.evaluate(() => cyclerLAffichage());
+    await page.waitForTimeout(450);
+    r.egal('un appui range les tiroirs et GARDE les outils',
+        await ecran(),
+        { etat: 1, mot: 'Barres', outils: true, tiroirBas: false, tiroirHaut: false, sortie: true });
+
+    await page.evaluate(() => cyclerLAffichage());
+    await page.waitForTimeout(450);
+    r.egal('le suivant ne laisse que le tableau',
+        await ecran(),
+        { etat: 2, mot: 'Focus', outils: false, tiroirBas: false, tiroirHaut: false, sortie: true });
+
+    await page.evaluate(() => cyclerLAffichage());
+    await page.waitForTimeout(450);
+    r.egal('et le troisième remet tout',
+        await ecran(),
+        { etat: 0, mot: 'Tout', outils: true, tiroirBas: true, tiroirHaut: true, sortie: false });
+
+    // La pastille du tiroir du bas mène le cycle, et s'allume dès qu'on a
+    // quitté « tout ».
+    const pastille = await page.evaluate(() => {
+        const b = document.getElementById('btn-focus');
+        const lu = () => ({ mot: document.getElementById('btn-focus-mot').textContent,
+                            allume: b.classList.contains('allume') });
+        const suite = [lu()];
+        for (let i = 0; i < 3; i++) { b.click(); suite.push(lu()); }
+        return suite;
+    });
+    r.egal('la pastille dit où l\'on est, et s\'allume hors de « tout »',
+        pastille, [
+            { mot: 'Tout', allume: false },
+            { mot: 'Barres', allume: true },
+            { mot: 'Focus', allume: true },
+            { mot: 'Tout', allume: false }
+        ]);
+
+    // =================================================================
+    // 2. L'AFFICHAGE RÉDUIT N'EST PLUS UN CUL-DE-SAC
+    // =================================================================
+    await page.evaluate(() => poserLAffichage(1));
+    await page.waitForTimeout(450);
+    const boutonsDeSortie = await page.evaluate(() => {
+        const b = document.getElementById('barre-ecran');
+        return [...b.querySelectorAll('button')].map(x => ({
+            id: x.id, atteignable: x.getBoundingClientRect().width > 10
+        }));
+    });
+    r.egal('trois boutons flottent alors dans le coin, atteignables',
+        boutonsDeSortie, [
+            { id: 'btn-ecran-suite', atteignable: true },
+            { id: 'btn-ecran-plein', atteignable: true },
+            { id: 'exit-focus-cross', atteignable: true }
+        ]);
+
+    // ILS NE DOIVENT PAS COUVRIR L'HORLOGE : le cartouche de la date et
+    // l'horloge de classe vivent sur le même bord.
+    const chevauchement = await page.evaluate(() => {
+        const boite = (s) => {
+            const e = document.querySelector(s);
+            if (!e) return null;
+            const b = e.getBoundingClientRect();
+            return { t: b.top, b: b.bottom, l: b.left, r: b.right };
+        };
+        const a = boite('#barre-ecran'), h = boite('.project-name-wrapper');
+        if (!a || !h) return null;
+        return !(a.b <= h.t || h.b <= a.t || a.r <= h.l || h.r <= a.l);
+    });
+    r.egal('et ils ne passent pas par-dessus l\'horloge', chevauchement, false);
+
+    await page.evaluate(() => poserLAffichage(2));
+    await page.waitForTimeout(450);
+    await page.evaluate(() => document.getElementById('btn-ecran-suite').click());
+    await page.waitForTimeout(450);
+    r.egal('le bouton du coin fait avancer le cycle',
+        await page.evaluate(() => etatDeLAffichage()), 0);
+
+    await page.evaluate(() => poserLAffichage(2));
+    await page.waitForTimeout(450);
+    await page.evaluate(() => document.getElementById('exit-focus-cross').click());
+    await page.waitForTimeout(450);
+    r.egal('et la croix remet tout d\'un coup',
+        await page.evaluate(() => etatDeLAffichage()), 0);
+
+    // Poser deux fois le même état ne fait rien de travers.
+    const deuxFois = await page.evaluate(() => {
+        poserLAffichage(1); poserLAffichage(1);
+        const a = etatDeLAffichage();
+        poserLAffichage(0);
+        return { a, b: etatDeLAffichage() };
+    });
+    r.egal('poser deux fois le même état ne dérange rien', deuxFois, { a: 1, b: 0 });
+
+    // =================================================================
+    // 3. LE DOCUMENT : DEUX BOUTONS, DEUX QUESTIONS
+    // =================================================================
+    const octets = Array.from(petitPdf());
+    await page.evaluate(async ({ octets }) => {
+        poserLAffichage(0);
+        panX = 0; panY = 0; zoom = 1; images.length = 0;
+        await poserPdfFeuilletable(new File([new Uint8Array(octets)], 'cours.pdf', { type: 'application/pdf' }));
+        await new Promise(res => setTimeout(res, 1500));
+        setMode('pointer'); selectObject({ type: 'image', id: images[0].id });
+        majBarreDocument(); draw();
+    }, { octets });
+    await page.waitForTimeout(400);
+
+    const doc = async () => ({
+        plein: await page.evaluate(() => etatDuPleinEcran()),
+        barres: await page.evaluate(() => !!presentationAvecBarres),
+        boutonDesBarres: await vu('#doc-barres')
+    });
+
+    r.egal('hors présentation, le bouton des outils n\'a rien à dire : il ne paraît pas',
+        await doc(), { plein: 0, barres: false, boutonDesBarres: false });
+
+    await page.evaluate(() => document.getElementById('doc-plein-ecran').click());
+    await page.waitForTimeout(450);
+    r.egal('un appui met la page en grand, sans les outils',
+        await doc(), { plein: 1, barres: false, boutonDesBarres: true });
+
+    await page.evaluate(() => document.getElementById('doc-barres').click());
+    await page.waitForTimeout(450);
+    r.egal('l\'AUTRE bouton rappelle les outils, et la page reste en grand',
+        await doc(), { plein: 2, barres: true, boutonDesBarres: true });
+
+    await page.evaluate(() => document.getElementById('doc-barres').click());
+    await page.waitForTimeout(450);
+    r.egal('le même les range, toujours sans quitter le plein écran',
+        await doc(), { plein: 1, barres: false, boutonDesBarres: true });
+
+    // LE POINT DU RETOUR : d'OÙ QU'ON PARTE, le bouton du plein écran sort.
+    // C'était le piège du cycle — depuis la page seule, un appui menait au
+    // temps suivant, et il en fallait un troisième pour en sortir.
+    r.egal('depuis la page seule, le bouton du plein écran sort tout de suite',
+        await page.evaluate(async () => {
+            document.getElementById('doc-plein-ecran').click();
+            await new Promise(ok => setTimeout(ok, 400));
+            return etatDuPleinEcran();
+        }), 0);
+
+    await page.evaluate(async () => {
+        document.getElementById('doc-plein-ecran').click();
+        await new Promise(ok => setTimeout(ok, 400));
+        document.getElementById('doc-barres').click();
+    });
+    await page.waitForTimeout(450);
+    await page.evaluate(() => document.getElementById('doc-plein-ecran').click());
+    await page.waitForTimeout(450);
+    r.egal('et depuis la page AVEC les outils, il sort aussi',
+        await doc(), { plein: 0, barres: false, boutonDesBarres: false });
+
+    // Le second bouton ne fait rien quand il n'y a pas de présentation.
+    r.egal('hors présentation, montrer les outils n\'a pas de sens',
+        await page.evaluate(() => basculerLesBarresDeLaPresentation()), false);
+
+    r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
+    await context.close();
+    return r.bilan();
+};
