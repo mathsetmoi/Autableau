@@ -10428,3 +10428,228 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
    et le bouton se montrait sur tous les post-its. */
 .html-postit .btn-onglet-postit { display: none; }
 .html-postit.en-web .btn-onglet-postit { display: flex; }
+
+/* ===========================================================
+   COMPOSER UNE BARRE D'OUTILS
+   « Un menu de création de barres d'outils qui affiche une liste
+   d'outils cochables et propose une localisation pour la
+   disposition par défaut. » Le glisser-déposer reste le geste
+   juste pour déplacer UN outil ; il est mauvais pour en choisir
+   vingt — vingt allers-retours dans un tiroir de deux cents
+   icônes, sans jamais voir ce qu'on a déjà pris.
+   =========================================================== */
+.compo-fond {
+    position: fixed;
+    inset: 0;
+    z-index: 200000;
+    background: rgba(45, 52, 54, 0.45);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.compo-boite {
+    width: min(760px, 100%);
+    max-height: min(84vh, 760px);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface, #fff);
+    color: var(--ink, #2d3436);
+    border: 1px solid var(--contour);
+    border-radius: var(--arrondi);
+    box-shadow: var(--contour-ombre), 0 24px 60px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+}
+
+.compo-titre {
+    font-size: 16px;
+    font-weight: 700;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--contour);
+}
+
+.compo-reglages {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 16px;
+    padding: 14px 20px;
+}
+
+.compo-champ { display: flex; flex-direction: column; gap: 5px; }
+.compo-champ-large { grid-column: 1 / -1; max-width: 320px; }
+
+.compo-champ > span {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted, #636e72);
+}
+
+.compo-champ input,
+.compo-champ select,
+.compo-recherche input {
+    font: inherit;
+    font-size: 14px;
+    padding: 7px 10px;
+    border-radius: 9px;
+    border: 1px solid var(--contour);
+    background: var(--bg, #fff);
+    color: inherit;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Une case à cocher est une LIGNE : le libellé entre dedans, et la ligne
+   entière devient la cible. Un carré de dix-sept pixels ne se vise pas au
+   doigt sur un tableau blanc. */
+.compo-case {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 13.5px;
+    padding: 6px 8px;
+    border-radius: 9px;
+    cursor: pointer;
+}
+.compo-case:hover { background: var(--accent-soft, rgba(108, 92, 231, 0.1)); }
+.compo-case input { width: 17px; height: 17px; margin: 0; flex-shrink: 0; cursor: pointer; }
+
+.compo-recherche {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 20px 12px;
+}
+.compo-recherche input { flex: 1; }
+
+.compo-compte {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent, #6c5ce7);
+    white-space: nowrap;
+}
+
+.compo-liste {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 20px 12px;
+    border-top: 1px solid var(--contour);
+}
+
+.compo-groupe-titre {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted, #636e72);
+    padding: 14px 0 6px;
+    position: sticky;
+    top: 0;
+    background: var(--surface, #fff);
+}
+
+.compo-grille {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 2px 10px;
+}
+
+.compo-outil {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 13.5px;
+    line-height: 1.25;
+}
+.compo-outil:hover { background: var(--accent-soft, rgba(108, 92, 231, 0.1)); }
+.compo-outil.coche { background: var(--accent-soft, rgba(108, 92, 231, 0.14)); font-weight: 600; }
+.compo-outil input { width: 16px; height: 16px; margin: 0; flex-shrink: 0; cursor: pointer; }
+
+.compo-icone {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+}
+.compo-icone svg { width: 18px; height: 18px; }
+
+/* Le nom d'un outil peut être long — « Tableau de conversion » — et il ne doit
+   ni pousser la case hors de la ligne, ni se faire couper sans prévenir. */
+.compo-nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.compo-pied {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--contour);
+}
+
+.compo-btn {
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 18px;
+    border-radius: 10px;
+    border: 1px solid var(--contour);
+    background: var(--bg, #fff);
+    color: inherit;
+    cursor: pointer;
+}
+.compo-btn:hover { background: var(--accent-soft, rgba(108, 92, 231, 0.12)); }
+.compo-valider { background: var(--accent, #6c5ce7); border-color: var(--accent, #6c5ce7); color: #fff; }
+.compo-valider:hover { filter: brightness(1.08); background: var(--accent, #6c5ce7); }
+
+/* L'entrée du panneau de réglages d'une barre */
+.compo-ouvrir {
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--contour);
+    background: var(--bg, #fff);
+    color: inherit;
+    cursor: pointer;
+}
+.compo-ouvrir:hover { background: var(--accent-soft, rgba(108, 92, 231, 0.12)); }
+
+@media (max-width: 640px) {
+    .compo-reglages { grid-template-columns: 1fr; }
+    .compo-grille { grid-template-columns: 1fr; }
+}
+
+/* ===========================================================
+   « PRÉSENTER » A UNE PLACE FIXE
+   « Ce qui me sert le plus, c'est quand même le bouton plein
+   écran. » Il vivait dans la barre du document, qui paraît et
+   disparaît avec la sélection : on prenait le crayon, la barre
+   s'en allait, et il fallait recliquer la page pour retrouver le
+   bouton le plus utilisé de l'application.
+   =========================================================== */
+#barre-ecran.avec-presenter {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+}
+
+/* Mais elle ne gagne QUE ce bouton-là hors des modes où elle paraît en
+   entier : l'écran ordinaire n'a pas à recevoir trois boutons de plus. */
+body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #btn-ecran-suite,
+body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #btn-ecran-plein,
+body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #exit-focus-cross {
+    display: none;
+}
+
+#barre-ecran button.actif { color: var(--accent); border-color: var(--accent); }

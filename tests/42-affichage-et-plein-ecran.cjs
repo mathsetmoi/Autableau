@@ -95,9 +95,11 @@ module.exports = async function (browser) {
     await page.waitForTimeout(450);
     const boutonsDeSortie = await page.evaluate(() => {
         const b = document.getElementById('barre-ecran');
-        return [...b.querySelectorAll('button')].map(x => ({
-            id: x.id, atteignable: x.getBoundingClientRect().width > 10
-        }));
+        // « Présenter » ne compte pas ici : il a sa propre condition — il
+        // n'existe que s'il y a une page à projeter, et ce tableau est nu.
+        return [...b.querySelectorAll('button')]
+            .filter(x => x.id !== 'btn-ecran-presenter')
+            .map(x => ({ id: x.id, atteignable: x.getBoundingClientRect().width > 10 }));
     });
     r.egal('trois boutons flottent alors dans le coin, atteignables',
         boutonsDeSortie, [
@@ -206,6 +208,97 @@ module.exports = async function (browser) {
     // Le second bouton ne fait rien quand il n'y a pas de présentation.
     r.egal('hors présentation, montrer les outils n\'a pas de sens',
         await page.evaluate(() => basculerLesBarresDeLaPresentation()), false);
+
+    // ==================================================================
+    // « PRÉSENTER » A UNE PLACE FIXE, AU COIN DE L'ÉCRAN
+    // « Ce qui me sert le plus, c'est quand même le bouton plein écran. » Il
+    // ne vivait que dans la barre du DOCUMENT — celle qui paraît et disparaît
+    // avec la sélection : on prenait le crayon, la sélection se vidait, la
+    // barre s'en allait, et il fallait recliquer la page pour retrouver le
+    // bouton le plus utilisé de l'application.
+    // ==================================================================
+    const fixe = await page.evaluate(async () => {
+        // On repart d'un tableau nu, sans document : rien à présenter.
+        if (presentationEnCours) quitterLaPresentation();
+        poserLAffichage(0);
+        images.length = 0; selectedItems = []; panX = 0; panY = 0; zoom = 1;
+        if (typeof docEnAnnotation !== 'undefined') docEnAnnotation = null;
+        majBarreDocument();
+        await new Promise(ok => setTimeout(ok, 120));
+        const b = document.getElementById('btn-ecran-presenter');
+        const lire = () => ({ vu: getComputedStyle(b).display,
+                              barre: getComputedStyle(document.getElementById('barre-ecran')).opacity,
+                              titre: b.getAttribute('data-title'),
+                              actif: b.classList.contains('actif') });
+        const sansDocument = lire();
+
+        // Une page arrive, mais personne ne la tient : c'est l'état où l'on a
+        // le crayon en main.
+        images.push({ id: nextId++, x: 40, y: 40, w: 500, h: 620, z: globalZ++,
+                      nomFichier: 'doc.pdf', src: 'x' });
+        setMode('freehand');
+        selectedItems = [];
+        majBarreDocument();
+        // La barre glisse en 0,3 s : on la mesure une fois posée.
+        await new Promise(ok => setTimeout(ok, 450));
+        const tenuParPersonne = { ...lire(),
+            barreDuDocument: getComputedStyle(document.getElementById('bar-document')).opacity };
+        return { sansDocument, tenuParPersonne };
+    });
+    r.egal('sans document, le bouton fixe ne s\'affiche pas : il n\'y a rien à présenter',
+        fixe.sansDocument.vu, 'none');
+    r.verifie('mais dès qu\'une page est à l\'écran, il est là — même sans la tenir',
+        fixe.tenuParPersonne.vu === 'flex' && Number(fixe.tenuParPersonne.barre) > 0.9,
+        JSON.stringify(fixe.tenuParPersonne));
+
+    // Et il présente, puis il en sort — sans qu'on ait rien sélectionné.
+    const presente = await page.evaluate(async () => {
+        const b = document.getElementById('btn-ecran-presenter');
+        b.click();
+        await new Promise(ok => setTimeout(ok, 500));
+        const dedans = { etat: etatDuPleinEcran(), titre: b.getAttribute('data-title'),
+                         actif: b.classList.contains('actif'),
+                         focus: document.body.classList.contains('focus-mode') };
+        b.click();
+        await new Promise(ok => setTimeout(ok, 500));
+        const dehors = { etat: etatDuPleinEcran(), titre: b.getAttribute('data-title'),
+                         actif: b.classList.contains('actif') };
+        return { dedans, dehors };
+    });
+    r.egal('un appui présente la page qu\'on regarde, sans l\'avoir choisie',
+        { etat: presente.dedans.etat, focus: presente.dedans.focus,
+          actif: presente.dedans.actif },
+        { etat: 1, focus: true, actif: true });
+    r.verifie('et le bouton dit alors qu\'il en sort',
+        /[Qq]uitter/.test(presente.dedans.titre), presente.dedans.titre);
+    r.egal('le même appui en sort, et le bouton reprend sa promesse',
+        { etat: presente.dehors.etat, actif: presente.dehors.actif },
+        { etat: 0, actif: false });
+    r.verifie('« Présenter » de nouveau', /[Pp]résenter/.test(presente.dehors.titre),
+        presente.dehors.titre);
+
+    // DEUX PAGES À L'ÉCRAN : on ne devine pas laquelle projeter.
+    const deuxPages = await page.evaluate(async () => {
+        images.push({ id: nextId++, x: 600, y: 40, w: 400, h: 500, z: globalZ++,
+                      nomFichier: 'autre.pdf', src: 'y' });
+        selectedItems = []; docEnAnnotation = null;
+        majBarreDocument();
+        await new Promise(ok => setTimeout(ok, 120));
+        const b = document.getElementById('btn-ecran-presenter');
+        const vu = getComputedStyle(b).display;
+        document.querySelectorAll('#toast-container > *').forEach(t => t.remove());
+        const fait = presenterCeQuOnRegarde();
+        await new Promise(ok => setTimeout(ok, 200));
+        const message = [...document.querySelectorAll('#toast-container *')]
+            .map(t => t.textContent).join(' ');
+        // On laisse le tableau comme on l'a trouvé.
+        images.length = 0; selectedItems = []; majBarreDocument();
+        return { vu, fait, etat: etatDuPleinEcran(), message };
+    });
+    r.egal('à deux pages visibles, on ne devine pas : rien n\'est projeté',
+        { fait: deuxPages.fait, etat: deuxPages.etat }, { fait: false, etat: 0 });
+    r.verifie('et l\'on demande laquelle',
+        /[Cc]hoisissez/.test(deuxPages.message), deuxPages.message);
 
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();

@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=136">
+    <link rel="stylesheet" href="style.css?v=138">
 </head>
 
 <body>
@@ -384,6 +384,20 @@
             </svg>
         </button>
 
+        <!-- UN LIEN SUR UNE FORME. « L'outil Texte ne permet pas de créer des
+             liens cliquables. Pouvoir insérer un lien sur un texte ou sur une
+             forme, ça pourrait être sympa. » Une adresse ÉCRITE se cliquait
+             déjà ; un rectangle, une image, un tampon, non — et c'est
+             pourtant ce qu'on entoure au tableau pour dire « allez voir là ».
+             L'objet porte alors une petite chaîne à son coin. -->
+        <button class="btn-quick" id="btn-quick-lien" title="Poser un lien sur cet objet">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+                <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+            </svg>
+        </button>
+
         <div style="width: 1px; height: 16px; background: #dfe6e9; margin: 0 2px;"></div>
 
         <button class="btn-quick danger" id="btn-quick-delete" title="Supprimer">
@@ -656,6 +670,20 @@
                 id="icone-ecran-suite">
                 <rect x="3" y="4" width="18" height="16" rx="2" />
                 <line x1="3" y1="9" x2="21" y2="9" />
+            </svg>
+        </button>
+        <!-- PRÉSENTER, TOUJOURS AU MÊME PIXEL. « Ce qui me sert le plus, c'est
+             quand même le bouton plein écran. » Il vivait dans la barre du
+             document, qui paraît et disparaît avec la sélection : on prenait
+             le crayon, la barre s'en allait, et il fallait recliquer la page
+             pour retrouver le bouton le plus utilisé de l'application. Ici, il
+             ne bouge plus — et il agit sur la page qu'on a sous les yeux,
+             qu'on la tienne ou non. -->
+        <button id="btn-ecran-presenter" data-title="Présenter la page en plein écran (D)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                id="icone-ecran-presenter">
+                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
             </svg>
         </button>
         <button id="btn-ecran-plein" data-title="Plein écran du navigateur">
@@ -2012,6 +2040,23 @@
                 <div id="plugin-search-results" class="plugin-search-results"></div>
             </div>
 
+            <!-- COMPOSER UNE BARRE SANS LA GLISSER OUTIL PAR OUTIL. « Ce qui
+                 serait au top, pour compléter le glisser-déposer, c'est
+                 d'avoir un menu de création de barres d'outils qui affiche une
+                 liste d'outils cochables et propose une localisation pour la
+                 disposition par défaut. » On n'utilise le plus souvent qu'une
+                 fraction des outils : vingt glissers pour une panoplie, c'est
+                 dix-neuf de trop. -->
+            <button class="btn" id="btn-composer-barre" type="button"
+                data-tooltip="Composer une barre d'outils" onclick="ouvrirLeCompositeurDeBarre()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="5" rx="1.5" />
+                    <path d="M7 14h10M12 12v4" />
+                    <path d="M3 20h18" opacity="0.35" />
+                </svg>
+            </button>
+
             <!-- Réglages d'affichage de la barre : format des icônes, date -->
             <div id="reglages-barre-wrap">
                 <button class="btn" id="btn-reglages-barre" type="button" data-tooltip="Réglages d'affichage"
@@ -3130,7 +3175,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=244"></script>
+    <script src="script.js?v=248"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=101"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

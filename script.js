@@ -86,8 +86,9 @@ function glisserLeZoom() {
         animationDuZoom = requestAnimationFrame(glisserLeZoom);
     } else {
         zoomVise = null; ancreDuZoom = null;
-        const docNet = (typeof documentDeLaBarre === 'function') ? documentDeLaBarre() : null;
-        if (docNet && typeof demanderAffinage === 'function') demanderAffinage(docNet);
+        // TOUT CE QU'ON REGARDE SE REFAIT NET, et non le seul document tenu en
+        // main : au rechargement d'un tableau, plus rien n'est tenu.
+        if (typeof demanderAffinageDeLaVue === 'function') demanderAffinageDeLaVue();
     }
 }
 
@@ -1505,6 +1506,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-ecran-plein')?.addEventListener('click', () => {
         if (typeof basculerPleinEcran === 'function') basculerPleinEcran();
     });
+    document.getElementById('btn-ecran-presenter')?.addEventListener('click', () => {
+        if (typeof presenterCeQuOnRegarde === 'function') presenterCeQuOnRegarde();
+    });
 
     document.getElementById('btn-voir-tout')?.addEventListener('click', () => {
         const boite = (typeof boiteDuTravail === 'function') ? boiteDuTravail() : null;
@@ -2643,6 +2647,11 @@ function appliquerEtatDuTableau(brut, sauver) {
     if (sauver) saveAppLocal();
     draw();
     if (typeof renderHtmlPostits === 'function') renderHtmlPostits();
+    // ANNULER NE DOIT PAS RENDRE LA PAGE FLOUE. Un état de l'historique porte
+    // le « src » qu'avait l'image AU MOMENT où il a été pris : si la page a
+    // été affinée depuis, revenir en arrière la ramène à sa version grossière,
+    // et rien ne la redemandait. On la refait nette, comme après un zoom.
+    if (typeof demanderAffinageDeLaVue === 'function') demanderAffinageDeLaVue();
 }
 window.appliquerEtatDuTableau = appliquerEtatDuTableau;
 
@@ -7372,8 +7381,8 @@ function updateCursor() {
     if (isCropMode) { canvas.classList.add('cursor-crosshair'); return; }
     // Une adresse sous le pointeur : la main qui montre, comme partout.
     if (mode === 'pointer' && !isPanningView && !isSpacePressed
-        && typeof lienSousLePoint === 'function' && typeof mouseLogicalPos !== 'undefined'
-        && mouseLogicalPos && lienSousLePoint(mouseLogicalPos)) {
+        && typeof nImporteQuelLienSousLePoint === 'function' && typeof mouseLogicalPos !== 'undefined'
+        && mouseLogicalPos && nImporteQuelLienSousLePoint(mouseLogicalPos)) {
         canvas.style.cursor = 'pointer'; return;
     }
     // LES CISEAUX SONT ARMÉS : le curseur doit le dire. Il gardait la main du
@@ -7533,6 +7542,114 @@ function lienSousLePoint(pos) {
     return null;
 }
 window.lienSousLePoint = lienSousLePoint;
+
+// ------------------------------------------------------------------
+// UN LIEN SUR UNE FORME, ET PAS SEULEMENT SUR UNE ADRESSE ÉCRITE
+//
+// « Pouvoir insérer un lien sur un texte ou sur une forme, ça pourrait être
+// sympa. » Une adresse tapée dans un bloc de texte se cliquait déjà — c'est le
+// mécanisme ci-dessus. Mais au tableau, ce qu'on désigne pour dire « allez
+// voir là », c'est une VIGNETTE : la capture d'écran du site, le tampon de
+// l'exercice, le rectangle qu'on a tracé autour d'un mot. Ceux-là ne menaient
+// nulle part.
+//
+// N'importe quel objet porte donc une adresse, sur la propriété « lien ». La
+// règle du web reste la même que pour le texte : rien d'autre que http(s).
+// ------------------------------------------------------------------
+const TYPES_QUI_PORTENT_UN_LIEN = ['image', 'text', 'rectangle', 'circle', 'freehand',
+    'polygon', 'curve', 'segment', 'arc'];
+
+function collectionDuType(type) {
+    const tables = {
+        image: typeof images !== 'undefined' ? images : null,
+        text: typeof texts !== 'undefined' ? texts : null,
+        rectangle: typeof rectangles !== 'undefined' ? rectangles : null,
+        circle: typeof circles !== 'undefined' ? circles : null,
+        freehand: typeof freehands !== 'undefined' ? freehands : null,
+        polygon: typeof polygons !== 'undefined' ? polygons : null,
+        curve: typeof curves !== 'undefined' ? curves : null,
+        segment: typeof segments !== 'undefined' ? segments : null,
+        arc: typeof arcs !== 'undefined' ? arcs : null
+    };
+    return tables[type] || null;
+}
+
+// Tous les objets qui portent une adresse, du dessus vers le dessous : c'est
+// l'ordre où l'on cherche sous le doigt.
+function objetsAvecUnLien() {
+    const out = [];
+    TYPES_QUI_PORTENT_UN_LIEN.forEach(type => {
+        const table = collectionDuType(type);
+        if (!table) return;
+        table.forEach(o => { if (o && o.lien) out.push({ type, obj: o }); });
+    });
+    return out.sort((a, b) => (b.obj.z || 0) - (a.obj.z || 0));
+}
+
+// Le lien d'un OBJET sous un point. On se sert de la boîte que le tableau
+// connaît déjà pour chaque type — celle qui sert à la sélection —, faute de
+// quoi le clic tomberait à côté sur tout ce qui n'est pas rectangulaire.
+function lienDObjetSousLePoint(pos) {
+    if (!pos) return null;
+    for (const { type, obj } of objetsAvecUnLien()) {
+        if (typeof surUneAutrePage === 'function' && surUneAutrePage(obj)) continue;
+        const b = (typeof getItemLogicalBounds === 'function') ? getItemLogicalBounds(type, obj) : null;
+        if (!b) continue;
+        // Un trait n'a pas d'épaisseur dans sa boîte : on lui donne de quoi
+        // être touché au doigt, comme partout ailleurs sur le tableau.
+        const marge = (b.bw < 6 || b.bh < 6) ? 6 : 0;
+        if (pos.x >= b.bx - marge && pos.x <= b.bx + b.bw + marge
+            && pos.y >= b.by - marge && pos.y <= b.by + b.bh + marge) {
+            return { objet: obj, type, url: obj.lien,
+                     rect: { x: b.bx, y: b.by, w: b.bw, h: b.bh } };
+        }
+    }
+    return null;
+}
+window.lienDObjetSousLePoint = lienDObjetSousLePoint;
+
+// CE QUI EST ÉCRIT PASSE AVANT CE QUI EST POSÉ. Une adresse tapée dans un bloc
+// est plus précise qu'une forme entière : si les deux se recouvrent, c'est le
+// mot qu'on visait.
+function nImporteQuelLienSousLePoint(pos) {
+    return lienSousLePoint(pos) || lienDObjetSousLePoint(pos);
+}
+window.nImporteQuelLienSousLePoint = nImporteQuelLienSousLePoint;
+
+// POSER, CHANGER OU RETIRER L'ADRESSE D'UN OBJET. Un champ vide la retire :
+// c'est le geste qu'on fait sans y penser, et il ne doit pas laisser un lien
+// mort sur une forme.
+function poserUnLienSurLObjet(item) {
+    if (!item) return false;
+    const o = getObjectById(item.type, item.id);
+    if (!o) return false;
+    const brut = window.prompt(
+        'Adresse à ouvrir quand on clique sur cet objet\n(laissez vide pour retirer le lien)',
+        o.lien || 'https://');
+    if (brut === null) return false;                 // annulé : on ne touche à rien
+    const propre = brut.trim();
+    if (!propre) {
+        if (!o.lien) return false;
+        delete o.lien;
+        saveState(); draw();
+        if (typeof updateQuickMenu === 'function') updateQuickMenu();
+        if (typeof showToast === 'function') showToast('Lien retiré');
+        return true;
+    }
+    const sur = lienOuvrable(propre);
+    if (!sur) {
+        if (typeof showToast === 'function') {
+            showToast('Un lien ne mène qu\'au web : commencez par « https:// ».', '#e17055', '🔗');
+        }
+        return false;
+    }
+    o.lien = sur;
+    saveState(); draw();
+    if (typeof updateQuickMenu === 'function') updateQuickMenu();
+    if (typeof showToast === 'function') showToast('🔗 Lien posé — un clic dessus l\'ouvre');
+    return true;
+}
+window.poserUnLienSurLObjet = poserUnLienSurLObjet;
 
 function layoutTextObject(obj, measureCtx) {
     const baseSize = obj.fontSize || 24;
@@ -9216,8 +9333,8 @@ canvas.addEventListener('pointerdown', (e) => {
     // relâcher si le doigt n'a pas bougé. Prendre le clic ici volerait le
     // glisser — on veut pouvoir déplacer un bloc qui contient une adresse.
     lienPresse = null;
-    if (mode === 'pointer' && typeof lienSousLePoint === 'function') {
-        const touche = lienSousLePoint(rawPos);
+    if (mode === 'pointer' && typeof nImporteQuelLienSousLePoint === 'function') {
+        const touche = nImporteQuelLienSousLePoint(rawPos);
         if (touche) lienPresse = { url: touche.url, depart: { x: e.clientX, y: e.clientY } };
     }
 
@@ -10141,8 +10258,8 @@ function handlePointerUp(e) {
         const l = lienPresse;
         lienPresse = null;
         const bouge = Math.hypot(e.clientX - l.depart.x, e.clientY - l.depart.y);
-        if (bouge < 6 && typeof lienSousLePoint === 'function') {
-            const encore = lienSousLePoint(getRawLogicalPos(e));
+        if (bouge < 6 && typeof nImporteQuelLienSousLePoint === 'function') {
+            const encore = nImporteQuelLienSousLePoint(getRawLogicalPos(e));
             if (encore && encore.url === l.url) ouvrirLeLien(l.url);
         }
     } else if (e.type !== 'pointermove') {
@@ -10622,6 +10739,46 @@ function calqueUtilisable() {
 // celui-là. Sorti, il sert aussi au CHEMIN COURT — celui qui recopie une
 // image figée du tableau au lieu de tout repeindre.
 // ===================================================
+// La petite chaîne au coin d'une forme qui porte une adresse. Elle est dessinée
+// à la taille de l'ÉCRAN — « lw » vaut 1/zoom — pour rester lisible de près
+// comme de loin : une marque qui grandit avec le zoom devient un panneau.
+function dessinerLesMarquesDeLien(ctx, lw) {
+    if (typeof objetsAvecUnLien !== 'function') return 0;
+    const porteurs = objetsAvecUnLien();
+    if (!porteurs.length) return 0;
+    let posees = 0;
+    ctx.save();
+    porteurs.forEach(({ type, obj }) => {
+        if (typeof surUneAutrePage === 'function' && surUneAutrePage(obj)) return;
+        const b = getItemLogicalBounds(type, obj);
+        if (!b) return;
+        const r = 9 * lw;
+        const x = b.bx + b.bw - r, y = b.by + r;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = COULEUR_LIEN;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5 * lw;
+        ctx.stroke();
+        // Deux maillons : le signe le plus court qui se lise à neuf pixels.
+        ctx.beginPath();
+        ctx.lineWidth = 1.6 * lw;
+        ctx.lineCap = 'round';
+        ctx.moveTo(x - 3.6 * lw, y + 1.4 * lw);
+        ctx.lineTo(x - 0.4 * lw, y - 1.8 * lw);
+        ctx.moveTo(x + 0.4 * lw, y + 1.8 * lw);
+        ctx.lineTo(x + 3.6 * lw, y - 1.4 * lw);
+        ctx.moveTo(x - 1.6 * lw, y + 0.2 * lw);
+        ctx.lineTo(x + 1.6 * lw, y - 0.2 * lw);
+        ctx.stroke();
+        posees++;
+    });
+    ctx.restore();
+    return posees;
+}
+window.dessinerLesMarquesDeLien = dessinerLesMarquesDeLien;
+
 function dessinerLesLasers(ctx, lw) {
     let needsRedraw = false;
     const now = Date.now();
@@ -11812,6 +11969,13 @@ function draw() {
 
         if (!isExportingTransparent && laserStrokes.length > 0) dessinerLesLasers(ctx, lw);
 
+        // UNE FORME QUI PORTE UN LIEN LE DIT. Sans marque, on ne saurait pas
+        // qu'il y a quelque chose à cliquer : une adresse ÉCRITE se reconnaît
+        // à sa couleur, une vignette non. Une petite chaîne à son coin haut
+        // droit, discrète, et qui ne part pas à l'export — ce qui s'exporte
+        // est une image, où rien ne se clique.
+        if (!isExportingTransparent) dessinerLesMarquesDeLien(ctx, lw);
+
         widgetZOrder.forEach(type => {
             if (activeWidgets[type] && widgets[type]) {
                 widgets[type].draw(ctx);
@@ -12400,6 +12564,63 @@ function demanderAffinage(obj) {
 }
 window.demanderAffinage = demanderAffinage;
 
+// ---------------------------------------------------------------
+// CE QU'ON REGARDE DOIT ÊTRE NET, QU'ON LE TIENNE EN MAIN OU NON
+//
+// « Quand un tableau se remet après rechargement, on a plus le pdf
+// visiblement car le zoom se pixelise assez vite. » Le PDF était bien là —
+// « reprendreLesPdfDuTableau » l'avait rouvert, pages, recherche et tout. Ce
+// qui manquait, c'était le REDESSIN : l'affinage ne visait que le document
+// « de la barre », c'est-à-dire celui qu'on tient, qu'on projette ou qu'on
+// annote. Au rechargement, rien n'est tenu : on rouvrait sa séance, on
+// zoomait sur l'exercice, et la page restait à la finesse où elle avait été
+// enregistrée. Le même silence valait pendant qu'on écrivait au crayon à côté
+// d'un document qu'on n'avait pas choisi.
+//
+// On affine donc ce qui est À L'ÉCRAN. Une page hors-champ n'a pas besoin
+// d'être nette ; une page qu'on regarde, si — qu'on la tienne ou non.
+// ---------------------------------------------------------------
+const PAGES_AFFINEES_A_LA_FOIS = 4;   // au-delà, on ferait ramer pour rien
+let affinageDeLaVue = null;
+
+// Les pages visibles, une par rendu partagé, représentées par l'objet qui
+// réclame le plus de finesse : c'est lui qui tire les autres avec lui.
+function pagesSousLesYeux() {
+    if (typeof images === 'undefined' || !Array.isArray(images)) return [];
+    if (typeof documentsPdf === 'undefined') return [];
+    const L = window.innerWidth, H = window.innerHeight;
+    const parRendu = new Map();
+    images.forEach(o => {
+        const pd = o && o.pluginData;
+        if (!pd || !pd.cle || !pd.page || !documentsPdf.has(pd.cle)) return;
+        const x = o.x * zoom + panX, y = o.y * zoom + panY;
+        const l = (o.w || 0) * zoom, h = (o.h || 0) * zoom;
+        if (x + l <= 0 || y + h <= 0 || x >= L || y >= H) return;   // hors de l'écran
+        const cle = pd.cle + '#' + pd.page;
+        const tenant = parRendu.get(cle);
+        if (!tenant || finesseDemandee(o) > finesseDemandee(tenant)) parRendu.set(cle, o);
+    });
+    return [...parRendu.values()]
+        .sort((a, b) => finesseDemandee(b) - finesseDemandee(a))
+        .slice(0, PAGES_AFFINEES_A_LA_FOIS);
+}
+window.pagesSousLesYeux = pagesSousLesYeux;
+
+function affinerCeQuOnRegarde() {
+    const vues = pagesSousLesYeux();
+    vues.forEach(o => {
+        affinerLaPage(o).catch(() => { /* on gardera la page telle quelle */ });
+    });
+    return vues.length;
+}
+window.affinerCeQuOnRegarde = affinerCeQuOnRegarde;
+
+function demanderAffinageDeLaVue() {
+    clearTimeout(affinageDeLaVue);
+    affinageDeLaVue = setTimeout(affinerCeQuOnRegarde, 260);
+}
+window.demanderAffinageDeLaVue = demanderAffinageDeLaVue;
+
 // La suivante et la précédente, sans bloquer : on les aura sous la main.
 function preparerLesVoisines(d, numero, total) {
     [numero + 1, numero - 1].forEach(n => {
@@ -12568,13 +12789,22 @@ async function reprendreLesPdfDuTableau(pagesArr) {
         if (!octets) continue;
         try {
             const doc = await pdfjsLib.getDocument(octets.slice(0)).promise;
-            documentsPdf.set(f.cle, { doc, nom: f.nom });
+            // Le registre des pages rendues naît avec le document, comme à
+            // l'ouverture du fichier. Sans lui, un tableau rouvert redessinait
+            // chaque page à chaque fois qu'on la revoyait — et l'affinage
+            // lui-même n'avait nulle part où ranger son travail.
+            documentsPdf.set(f.cle, { doc, nom: f.nom, rendus: new Map() });
             repris++;
         } catch (e) { /* fichier abîmé : le tableau garde son image */ }
     }
     if (repris) {
         if (typeof majBarreDocument === 'function') majBarreDocument();
         draw();
+        // ET LA PAGE REDEVIENT NETTE SANS QU'ON AIT À TOUCHER LE ZOOM. Un
+        // tableau enregistré à une finesse rouvrait à cette finesse-là : posé
+        // en grand sur l'écran d'à côté, il paraissait pixelisé jusqu'à ce
+        // qu'on lui donne un coup de molette.
+        if (typeof demanderAffinageDeLaVue === 'function') demanderAffinageDeLaVue();
     }
     return repris;
 }
@@ -14905,6 +15135,9 @@ function majBarreDocument() {
     const barre = document.getElementById('bar-document');
     if (!barre) return;
     placerLaBarreDuDocument();
+    // « Présenter » a une place fixe au coin de l'écran : elle se rafraîchit
+    // ici, où passent tous les changements de sélection et de présentation.
+    if (typeof majBoutonPresenterDeLEcran === 'function') majBoutonPresenterDeLEcran();
 
     // PENDANT LA RETOUCHE DES ZONES, LA BARRE DE STYLE S'EFFACE. On numérote
     // des cases à remplir : la couleur du trait, l'épaisseur et la pile n'y
@@ -18259,6 +18492,27 @@ function updateQuickMenu() {
             brancherLeMiroir('btn-quick-flip-h', 'h');
             brancherLeMiroir('btn-quick-flip-v', 'v');
 
+            // UN LIEN SUR CE QU'ON MONTRE. Il ne paraît que sur UN objet :
+            // poser la même adresse sur six formes d'un coup n'est pas un
+            // geste qu'on fait, et le bouton dirait alors n'importe quoi de
+            // celle qui la porte déjà.
+            const btnLien = document.getElementById('btn-quick-lien');
+            if (btnLien) {
+                const seul = (selectedItems.length === 1
+                    && TYPES_QUI_PORTENT_UN_LIEN.includes(selectedItems[0].type))
+                    ? selectedItems[0] : null;
+                const porteur = seul ? getObjectById(seul.type, seul.id) : null;
+                btnLien.style.display = seul ? 'flex' : 'none';
+                btnLien.classList.toggle('active', !!(porteur && porteur.lien));
+                btnLien.title = (porteur && porteur.lien)
+                    ? 'Lien : ' + porteur.lien + ' — cliquer pour le changer ou le retirer'
+                    : 'Poser un lien sur cet objet';
+                btnLien.onpointerdown = (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (seul) poserUnLienSurLObjet(seul);
+                };
+            }
+
             const btnDelete = document.getElementById('btn-quick-delete');
             if (btnDelete) {
                 btnDelete.onpointerdown = (e) => {
@@ -18997,6 +19251,23 @@ function renderFloatingToolbar(toolbar) {
         menu.classList.remove('active');
     });
 
+    // CHOISIR LES OUTILS D'UN COUP. Le glisser-déposer reste le geste juste
+    // pour déplacer UN outil d'une barre à l'autre ; il est mauvais pour en
+    // choisir vingt. La liste cochable montre tout, dit ce qui est déjà là, et
+    // se cherche au clavier.
+    const composerBtn = document.createElement('button');
+    composerBtn.type = 'button';
+    composerBtn.className = 'compo-ouvrir';
+    composerBtn.title = 'Choisir les outils de cette barre';
+    composerBtn.textContent = 'Choisir les outils…';
+    composerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.classList.remove('active');
+        bar.classList.remove('reglages-ouverts');
+        ouvrirLeCompositeurDeBarre(toolbar.id);
+    });
+    footerSection.appendChild(composerBtn);
+
     const rightContainer = document.createElement('div');
     rightContainer.style.display = 'flex';
     rightContainer.style.gap = '4px';
@@ -19431,6 +19702,285 @@ function barrePrincipaleParDefaut(items) {
     };
 }
 window.barrePrincipaleParDefaut = barrePrincipaleParDefaut;
+
+// ==============================================================================
+// COMPOSER UNE BARRE D'OUTILS, SANS LA GLISSER OUTIL PAR OUTIL
+//
+// « Ce qui serait au top, pour compléter le glisser-déposer, c'est d'avoir un
+// menu de création de barres d'outils qui affiche une liste d'outils cochables
+// et propose une localisation pour la disposition par défaut. De même, avoir
+// la possibilité via ce menu de setup de pouvoir contrôler la position par
+// défaut et l'affichage par défaut des barres d'outils. En effet, on n'utilise
+// le plus souvent qu'une fraction des outils disponibles. »
+//
+// Le glisser-déposer reste : c'est le geste juste pour DÉPLACER un outil d'une
+// barre à l'autre. Il est mauvais pour en choisir vingt — vingt allers-retours
+// dans un tiroir de deux cents icônes, sans jamais voir ce qu'on a déjà pris.
+// La liste cochable montre tout d'un coup, dit ce qui est déjà là, et se
+// cherche au clavier.
+// ==============================================================================
+
+// LES SIX PLACES. Une barre se pose à une poignée de coins ; donner des pixels
+// à saisir, ce serait rendre le réglage plus difficile que le glisser qu'il
+// remplace. Les valeurs sont calculées à l'ouverture, sur la taille de
+// l'écran : un vidéoprojecteur et un portable n'ont pas les mêmes bords.
+const PLACES_DE_BARRE = {
+    'haut-gauche': { nom: 'En haut à gauche', ou: () => ({ x: 20, y: 80 }) },
+    'haut-droite': { nom: 'En haut à droite', ou: (l) => ({ x: Math.max(20, window.innerWidth - l - 20), y: 80 }) },
+    'gauche': { nom: 'À gauche, au milieu', ou: (l, h) => ({ x: 20, y: Math.max(60, Math.round((window.innerHeight - h) / 2)) }) },
+    'droite': { nom: 'À droite, au milieu', ou: (l, h) => ({ x: Math.max(20, window.innerWidth - l - 20), y: Math.max(60, Math.round((window.innerHeight - h) / 2)) }) },
+    'bas-gauche': { nom: 'En bas à gauche', ou: (l, h) => ({ x: 20, y: Math.max(60, window.innerHeight - h - 90) }) },
+    'bas-droite': { nom: 'En bas à droite', ou: (l, h) => ({ x: Math.max(20, window.innerWidth - l - 20), y: Math.max(60, window.innerHeight - h - 90) }) }
+};
+
+// Taille approximative d'une barre, pour la poser sans déborder : on ne peut
+// pas la mesurer avant de l'avoir dessinée, et l'attendre pour la placer
+// ferait sauter la barre sous les yeux.
+function tailleSupposeeDeLaBarre(nbOutils, colonnes) {
+    const cols = Math.max(1, colonnes || 2);
+    const lignes = Math.ceil(Math.max(1, nbOutils) / cols);
+    return { l: 26 + cols * 46, h: 40 + lignes * 46 };
+}
+
+// TOUT CE QU'ON PEUT METTRE DANS UNE BARRE, tel que la page le porte : les
+// outils d'écriture de la barre de gauche, et les deux cents du tiroir. On le
+// lit dans le document plutôt que d'en tenir une liste à côté — une liste à
+// côté, c'est une liste qui diverge au premier outil ajouté.
+function catalogueDesOutils() {
+    const vus = new Set();
+    const sortie = [];
+    const ajouter = (btn, categorie) => {
+        const brut = btn.dataset.pluginKey || btn.dataset.pluginId || btn.dataset.mode
+            || btn.dataset.widget || btn.id || btn.getAttribute('data-tooltip') || btn.title;
+        const id = normalizePluginId(brut || '');
+        if (!id || vus.has(id)) return;
+        vus.add(id);
+        sortie.push({
+            id, categorie,
+            nom: (btn.getAttribute('data-tooltip') || btn.title || id).trim(),
+            icone: (btn.querySelector('svg') || {}).outerHTML || btn.textContent.trim().slice(0, 2)
+        });
+    };
+    document.querySelectorAll('#bar-tools .btn').forEach(b => ajouter(b, 'Écrire et tracer'));
+    document.querySelectorAll('#plugins-grid .btn').forEach(b => {
+        ajouter(b, b.dataset.category || 'Autres outils');
+    });
+    return sortie;
+}
+window.catalogueDesOutils = catalogueDesOutils;
+
+// Où la barre se trouve-t-elle aujourd'hui ? Sert à rouvrir le compositeur sur
+// la place qu'on lui a donnée, et non sur la première de la liste.
+function placeLaPlusProche(tb) {
+    const t = tailleSupposeeDeLaBarre((tb.items || []).length, tb.cols);
+    let meilleure = 'haut-gauche', ecart = Infinity;
+    Object.keys(PLACES_DE_BARRE).forEach(cle => {
+        const p = PLACES_DE_BARRE[cle].ou(t.l, t.h);
+        const d = Math.hypot(p.x - (tb.x || 0), p.y - (tb.y || 0));
+        if (d < ecart) { ecart = d; meilleure = cle; }
+    });
+    return meilleure;
+}
+
+function ouvrirLeCompositeurDeBarre(barreId) {
+    const barres = getStoredFloatingToolbars();
+    const existante = barreId ? barres.find(t => t.id === barreId) : null;
+    const dejaLa = new Set((existante && existante.items) || []);
+    const catalogue = catalogueDesOutils();
+
+    const fond = document.createElement('div');
+    fond.className = 'compo-fond';
+    fond.id = 'compositeur-de-barre';
+
+    const boite = document.createElement('div');
+    boite.className = 'compo-boite';
+    fond.appendChild(boite);
+
+    boite.innerHTML = `
+        <div class="compo-titre">${existante ? 'Modifier la barre' : 'Composer une barre d\'outils'}</div>
+        <div class="compo-reglages">
+            <label class="compo-champ">
+                <span>Nom de la barre</span>
+                <input type="text" id="compo-nom" maxlength="30" placeholder="Géométrie, Français…">
+            </label>
+            <label class="compo-champ">
+                <span>Où elle se pose</span>
+                <select id="compo-place"></select>
+            </label>
+            <label class="compo-champ compo-champ-large">
+                <span>Colonnes</span>
+                <select id="compo-cols">
+                    <option value="1">1 — une colonne, debout</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="6">6 — une rangée large</option>
+                </select>
+            </label>
+            <label class="compo-case">
+                <input type="checkbox" id="compo-repliee">
+                <span>Repliée au démarrage — elle ne montre que son en-tête</span>
+            </label>
+        </div>
+        <div class="compo-recherche">
+            <input type="text" id="compo-chercher" placeholder="Chercher un outil…">
+            <span class="compo-compte" id="compo-compte"></span>
+        </div>
+        <div class="compo-liste" id="compo-liste"></div>
+        <div class="compo-pied">
+            <button type="button" class="compo-btn" id="compo-annuler">Annuler</button>
+            <button type="button" class="compo-btn compo-valider" id="compo-valider">
+                ${existante ? 'Enregistrer' : 'Créer la barre'}</button>
+        </div>`;
+
+    document.body.appendChild(fond);
+
+    const liste = boite.querySelector('#compo-liste');
+    const compte = boite.querySelector('#compo-compte');
+    const nom = boite.querySelector('#compo-nom');
+    const place = boite.querySelector('#compo-place');
+    const cols = boite.querySelector('#compo-cols');
+    const repliee = boite.querySelector('#compo-repliee');
+
+    // LES PLACES SE POSENT EN ÉLÉMENTS, ET NON EN TEXTE COLLÉ DANS DU HTML.
+    // Leurs libellés sont écrits ici même, mais une chaîne interpolée dans
+    // « innerHTML » est une porte : on la garde fermée partout, sinon on ne
+    // sait plus lesquelles le sont.
+    Object.keys(PLACES_DE_BARRE).forEach(cle => {
+        const opt = document.createElement('option');
+        opt.value = cle;
+        opt.textContent = PLACES_DE_BARRE[cle].nom;
+        place.appendChild(opt);
+    });
+
+    nom.value = (existante && existante.name) || '';
+    place.value = existante ? placeLaPlusProche(existante) : 'haut-gauche';
+    cols.value = String((existante && existante.cols) || 2);
+    repliee.checked = !!(existante && existante.minimized);
+
+    // L'ORDRE DE LA BARRE EST CELUI DES COCHES. Celui qui compose sa panoplie
+    // la range en la cochant : reprendre l'ordre du catalogue mettrait la
+    // gomme avant le crayon parce que le tiroir en a décidé ainsi.
+    const choisis = [...dejaLa];
+
+    const majCompte = () => {
+        compte.textContent = choisis.length
+            ? choisis.length + ' outil' + (choisis.length > 1 ? 's' : '') + ' choisi' + (choisis.length > 1 ? 's' : '')
+            : 'aucun outil choisi';
+    };
+
+    const parCategorie = new Map();
+    catalogue.forEach(o => {
+        if (!parCategorie.has(o.categorie)) parCategorie.set(o.categorie, []);
+        parCategorie.get(o.categorie).push(o);
+    });
+
+    parCategorie.forEach((outils, categorie) => {
+        const groupe = document.createElement('div');
+        groupe.className = 'compo-groupe';
+        // Le nom d'une rubrique vient d'un plugin : il se pose en TEXTE.
+        const titre = document.createElement('div');
+        titre.className = 'compo-groupe-titre';
+        titre.textContent = categorie;
+        groupe.appendChild(titre);
+        const grille = document.createElement('div');
+        grille.className = 'compo-grille';
+        outils.forEach(o => {
+            const ligne = document.createElement('label');
+            ligne.className = 'compo-outil';
+            ligne.dataset.cherche = normalizePluginSearchText(o.nom + ' ' + o.categorie + ' ' + o.id);
+            const case_ = document.createElement('input');
+            case_.type = 'checkbox';
+            case_.checked = dejaLa.has(o.id);
+            case_.addEventListener('change', () => {
+                const i = choisis.indexOf(o.id);
+                if (case_.checked && i < 0) choisis.push(o.id);
+                if (!case_.checked && i >= 0) choisis.splice(i, 1);
+                ligne.classList.toggle('coche', case_.checked);
+                majCompte();
+            });
+            ligne.classList.toggle('coche', case_.checked);
+            const icone = document.createElement('span');
+            icone.className = 'compo-icone';
+            icone.innerHTML = o.icone;
+            const texte = document.createElement('span');
+            texte.className = 'compo-nom';
+            texte.textContent = o.nom;
+            ligne.append(case_, icone, texte);
+            grille.appendChild(ligne);
+        });
+        groupe.appendChild(grille);
+        liste.appendChild(groupe);
+    });
+    majCompte();
+
+    boite.querySelector('#compo-chercher').addEventListener('input', (e) => {
+        const q = normalizePluginSearchText(e.target.value.trim());
+        liste.querySelectorAll('.compo-outil').forEach(l => {
+            l.style.display = (!q || l.dataset.cherche.includes(q)) ? '' : 'none';
+        });
+        // Une rubrique dont plus rien ne reste n'a plus de titre à montrer.
+        liste.querySelectorAll('.compo-groupe').forEach(g => {
+            const reste = [...g.querySelectorAll('.compo-outil')].some(l => l.style.display !== 'none');
+            g.style.display = reste ? '' : 'none';
+        });
+    });
+
+    const fermer = () => fond.remove();
+    fond.addEventListener('click', (e) => { if (e.target === fond) fermer(); });
+    boite.querySelector('#compo-annuler').addEventListener('click', fermer);
+    document.addEventListener('keydown', function surEchap(e) {
+        if (e.key !== 'Escape' || !document.body.contains(fond)) {
+            if (!document.body.contains(fond)) document.removeEventListener('keydown', surEchap);
+            return;
+        }
+        e.preventDefault(); fermer(); document.removeEventListener('keydown', surEchap);
+    });
+
+    boite.querySelector('#compo-valider').addEventListener('click', () => {
+        if (!choisis.length) {
+            if (typeof showToast === 'function') {
+                showToast('Cochez au moins un outil : une barre vide ne se pose pas.', '#e17055', '🧰');
+            }
+            return;
+        }
+        const nbCols = parseInt(cols.value, 10) || 2;
+        const t = tailleSupposeeDeLaBarre(choisis.length, nbCols);
+        const ou = PLACES_DE_BARRE[place.value] || PLACES_DE_BARRE['haut-gauche'];
+        const pos = ou.ou(t.l, t.h);
+        const toutes = getStoredFloatingToolbars();
+        const cible = barreId ? toutes.find(x => x.id === barreId) : null;
+        if (cible) {
+            cible.name = nom.value.trim();
+            cible.items = [...choisis];
+            cible.cols = nbCols;
+            cible.minimized = repliee.checked;
+            cible.x = pos.x; cible.y = pos.y;
+        } else {
+            toutes.push({
+                id: 'floating-' + Date.now(),
+                name: nom.value.trim(),
+                x: pos.x, y: pos.y,
+                titlePalette: 'default', palette: 'default', borderPalette: 'default',
+                iconSize: '1', cols: nbCols,
+                minimized: repliee.checked,
+                items: [...choisis]
+            });
+        }
+        saveStoredFloatingToolbars(toutes);
+        renderFloatingToolbars();
+        fermer();
+        if (typeof showToast === 'function') {
+            showToast('🧰 ' + (nom.value.trim() || 'La barre') + ' — '
+                + choisis.length + ' outil' + (choisis.length > 1 ? 's' : '')
+                + ', ' + ou.nom.toLowerCase());
+        }
+    });
+
+    setTimeout(() => { const c = boite.querySelector('#compo-chercher'); if (c) c.focus(); }, 60);
+    return fond;
+}
+window.ouvrirLeCompositeurDeBarre = ouvrirLeCompositeurDeBarre;
 
 function renderFloatingToolbars() {
     const container = document.getElementById('custom-bars-container');
@@ -20331,6 +20881,90 @@ window.basculerLePleinEcranDuDocument = basculerLePleinEcranDuDocument;
 // La page reste en grand ; ce sont les barres qu'on montre ou qu'on range. Le
 // drapeau se lève AVANT de quitter le mode Focus, sinon la présentation part
 // avec lui — c'est sa règle par ailleurs.
+// ==============================================================================
+// PRÉSENTER, TOUJOURS AU MÊME PIXEL
+//
+// « Ce qui me sert le plus, c'est quand même le bouton plein écran. »
+//
+// Il vivait dans la barre du DOCUMENT — celle qui paraît et disparaît avec la
+// sélection. On prenait le crayon, la sélection se vidait, la barre s'en
+// allait avec elle : pour retrouver le bouton le plus utilisé de
+// l'application, il fallait recliquer la page. Un bouton qu'on cherche vingt
+// fois par heure n'est plus un bouton, c'est une corvée.
+//
+// Il a donc AUSSI une place fixe, au coin haut droit, à côté de l'affichage :
+// elle ne dépend de rien, et le même appui en sort. Il agit sur la page qu'on
+// a sous les yeux — celle qu'on tient s'il y en a une, sinon la seule qui soit
+// à l'écran. Celui de la barre du document reste : on n'enlève pas une porte
+// pour en ouvrir une autre.
+// ==============================================================================
+
+// LA PAGE QU'ON A SOUS LES YEUX. Celle qu'on tient d'abord ; à défaut, s'il
+// n'y a qu'un document visible, c'est de celui-là qu'on parle. À deux, on ne
+// devine pas : ce serait projeter le mauvais devant la classe.
+function documentSousLesYeux() {
+    const tenu = (typeof documentDeLaBarre === 'function') ? documentDeLaBarre() : null;
+    if (tenu) return tenu;
+    if (typeof images === 'undefined' || !Array.isArray(images)) return null;
+    const L = window.innerWidth, H = window.innerHeight;
+    const vus = images.filter(o => {
+        if (!o || !o.src) return false;
+        if (typeof surUneAutrePage === 'function' && surUneAutrePage(o)) return false;
+        const x = o.x * zoom + panX, y = o.y * zoom + panY;
+        const l = (o.w || 0) * zoom, h = (o.h || 0) * zoom;
+        return !(x + l <= 0 || y + h <= 0 || x >= L || y >= H);
+    });
+    return vus.length === 1 ? vus[0] : null;
+}
+window.documentSousLesYeux = documentSousLesYeux;
+
+function presenterCeQuOnRegarde() {
+    if (etatDuPleinEcran() > 0) {
+        quitterLaPresentation();
+        if (typeof majBarreDocument === 'function') majBarreDocument();
+        if (typeof majBoutonPresenterDeLEcran === 'function') majBoutonPresenterDeLEcran();
+        return false;
+    }
+    const doc = documentSousLesYeux();
+    if (!doc) {
+        if (typeof showToast === 'function') {
+            showToast('Choisissez d\'abord la page à présenter.', '#e17055', '🖥️');
+        }
+        return false;
+    }
+    // On la prend en main : « presenterLeDocument » parle de celui de la barre.
+    selectedItems = [{ type: 'image', id: doc.id }];
+    if (typeof majBarreDocument === 'function') majBarreDocument();
+    presentationAvecBarres = false;
+    const ouvert = presenterLeDocument();
+    if (typeof majBarreDocument === 'function') majBarreDocument();
+    if (typeof majBoutonPresenterDeLEcran === 'function') majBoutonPresenterDeLEcran();
+    return !!ouvert;
+}
+window.presenterCeQuOnRegarde = presenterCeQuOnRegarde;
+
+// Le bouton dit où il mène, et s'efface quand il n'y a rien à présenter : un
+// tableau de géométrie n'a pas de page à projeter, et un bouton qui ne fait
+// rien apprend à ne plus regarder la barre.
+function majBoutonPresenterDeLEcran() {
+    const b = document.getElementById('btn-ecran-presenter');
+    if (!b) return;
+    const enCours = etatDuPleinEcran() > 0;
+    const possible = enCours || !!documentSousLesYeux();
+    b.style.display = possible ? 'flex' : 'none';
+    // La barre d'écran ne paraissait qu'une fois les tiroirs rangés. Elle se
+    // montre aussi pour ce bouton-là — et pour lui SEUL : la feuille de style
+    // garde les trois autres à leur propre condition, sans quoi l'écran
+    // ordinaire gagnerait trois boutons que personne n'a demandés.
+    const barre = document.getElementById('barre-ecran');
+    if (barre) barre.classList.toggle('avec-presenter', possible);
+    b.classList.toggle('actif', enCours);
+    b.setAttribute('data-title', enCours
+        ? 'Quitter le plein écran (Échap)'
+        : 'Présenter la page en plein écran (D)');
+}
+window.majBoutonPresenterDeLEcran = majBoutonPresenterDeLEcran;
+
 function basculerLesBarresDeLaPresentation() {
     if (typeof presentationEnCours === 'undefined' || !presentationEnCours) return false;
     const avec = !presentationAvecBarres;
