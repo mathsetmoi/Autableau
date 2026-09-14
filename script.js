@@ -25282,10 +25282,26 @@ function cliquerDansLeLot(id, e) {
 function majBarreDuLot() {
     const barre = document.getElementById('exp-lot');
     if (!barre) return;
+    // ON NE COMPTE QUE CE QUI EXISTE ENCORE. « Parfois l'appli affiche
+    // "2 interfaces sélectionnées", ce qui pose problème étant donné qu'une
+    // seule est active. » Le lot gardait les identifiants des fichiers partis
+    // à la corbeille : la barre annonçait deux fichiers là où il n'en restait
+    // qu'un — et quand ils étaient tous partis, elle parlait d'une sélection
+    // dont plus rien n'était surligné à l'écran. La croix la vidait bien,
+    // mais comme il n'y avait rien à voir, elle avait l'air de ne rien faire.
+    const reels = elementsDuLot();
+    if (reels.length !== lotExplorateur.size) {
+        lotExplorateur = new Set(reels);
+        if (dernierClique !== null && !lotExplorateur.has(dernierClique)) dernierClique = null;
+    }
     const n = lotExplorateur.size;
     barre.hidden = n < 2;
-    if (n >= 2) {
-        document.getElementById('exp-lot-compte').textContent =
+    // Le compte s'écrit MÊME quand la barre se cache : caché, l'ancien texte
+    // restait en place, et il reparaissait tel quel le temps d'une image à la
+    // sélection suivante — « 2 sélectionnées » sur une seule.
+    const compte = document.getElementById('exp-lot-compte');
+    if (compte) {
+        compte.textContent =
             n + (currentExplorerTab === 'tableaux' ? ' tableaux sélectionnés' : ' interfaces sélectionnées');
     }
 }
@@ -25862,7 +25878,7 @@ function finishRename(itemId, tab) {
 
     if (newName && item) {
         item.name = newName;
-        saveExplorerList();
+        saveExplorerList(tab);
     }
 
     renamingItemId = null;
@@ -25874,12 +25890,37 @@ function cancelRename() {
     renderExplorerLists();
 }
 
-function saveExplorerList() {
-    if (currentExplorerTab === 'tableaux') {
-        localforage.setItem('auTableau_tableaux_list', savedTableaux);
-    } else {
+// LES INTERFACES TIENNENT DANS L'ESPACE DU NAVIGATEUR, ET IL SE REMPLIT.
+// « La sauvegarde d'une interface ne se fait parfois pas correctement. »
+// Chaque interface emporte sa vignette ; au bout d'un certain nombre, l'écriture
+// est REFUSÉE. L'exception sortait alors de l'enregistrement : pas de
+// rafraîchissement de la liste, pas de message — rien. L'interface existait en
+// mémoire, donc elle s'affichait, et disparaissait au redémarrage suivant.
+// On ne peut pas garder ce qui ne tient pas ; on peut le DIRE.
+function ecrireLesInterfaces() {
+    try {
         localStorage.setItem('auTableau_interfaces_list', JSON.stringify(savedInterfaces));
+        return true;
+    } catch (e) {
+        if (typeof showToast === 'function') {
+            showToast("L'espace de rangement est plein : cette interface ne sera pas retrouvée au prochain démarrage. Supprimez-en une ou deux.");
+        }
+        return false;
     }
+}
+window.ecrireLesInterfaces = ecrireLesInterfaces;
+
+// L'ONGLET QUI COMPTE EST CELUI DE CE QU'ON MODIFIE, pas celui qu'on regarde.
+// Renommer une interface pendant que l'onglet « Tableaux » est ouvert écrivait
+// la liste des TABLEAUX : le nouveau nom vivait en mémoire jusqu'au
+// rechargement, où il redevenait l'ancien. Sans un mot, là encore.
+function saveExplorerList(tab) {
+    const quel = tab || currentExplorerTab;
+    if (quel === 'tableaux') {
+        localforage.setItem('auTableau_tableaux_list', savedTableaux);
+        return true;
+    }
+    return ecrireLesInterfaces();
 }
 
 function toggleFolder(folderId) {
@@ -26257,17 +26298,34 @@ function _doSaveInterface(name, id) {
     else savedInterfaces.push(metadata);
 
     savedInterfaces.sort((a, b) => b.timestamp - a.timestamp);
-    localStorage.setItem('auTableau_interfaces_list', JSON.stringify(savedInterfaces));
+    // La liste se rafraîchit et l'interface devient la courante MÊME SI
+    // l'écriture a échoué : elle est là, on vient de la faire, et le message
+    // d'espace saturé aura dit ce qu'il en est.
+    const gardee = ecrireLesInterfaces();
 
     selectedInterfaceId = id;
     renderExplorerLists();
-    showToast("Interface sauvegardée !");
+    if (gardee) showToast("Interface sauvegardée !");
+    return gardee;
 }
 
+// CHARGER NE DOIT JAMAIS ÊTRE UN SILENCE. « Il est parfois impossible de
+// charger la nouvelle interface créée » : on cliquait, et rien. L'entrée
+// manquait — écriture refusée puis rechargement — ou n'avait pas de contenu,
+// et la fonction sortait sans un mot. On ne peut pas toujours charger ; on
+// peut toujours dire pourquoi.
 function loadInterface(id) {
     hideTooltip();
     const intf = savedInterfaces.find(i => i.id === id);
-    if (intf && intf.data) {
+    if (!intf) {
+        showToast("Cette interface est introuvable : elle n'a pas pu être gardée au dernier enregistrement.");
+        return false;
+    }
+    if (!intf.data) {
+        showToast("Cette interface ne contient aucune disposition : enregistrez-la de nouveau depuis le tableau.");
+        return false;
+    }
+    {
         interfaceEnChargement = true;      // plus rien n'écrit les barres d'ici au redémarrage
         if (intf.data.favorites) localStorage.setItem('board_favorites', JSON.stringify(intf.data.favorites));
         if (intf.data.toolbars) localStorage.setItem('board_floating_toolbars', JSON.stringify(intf.data.toolbars));
@@ -26279,6 +26337,7 @@ function loadInterface(id) {
         showToast("Interface chargée ! L'application redémarre.");
         requestAnimationFrame(() => window.location.reload());
     }
+    return true;
 }
 
 // --- CALENDRIER ---
