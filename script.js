@@ -92,7 +92,11 @@ function glisserLeZoom() {
 }
 
 function majPastilleZoom(valeur) {
-    ecrirePastille('zoom-valeur', Math.round((valeur === undefined ? zoom : valeur) * 100) + '%');
+    const pc = Math.round((valeur === undefined ? zoom : valeur) * 100);
+    ecrirePastille('zoom-valeur', pc + '%');
+    // Le champ du tiroir dit la même chose — sauf pendant qu'on y tape.
+    const num = document.getElementById('zoom-num');
+    if (num && document.activeElement !== num) num.value = pc;
 }
 function majPastilleGrille(valeur) {
     ecrirePastille('grille-valeur', (valeur === undefined ? gridWeight : valeur).toFixed(1).replace('.', ','));
@@ -988,7 +992,47 @@ function createNewPage() {
 function syncPage() {
     if (currentPageIndex === -1 || !pages[currentPageIndex]) return;
     pages[currentPageIndex] = { ...pages[currentPageIndex], points, segments, circles, rectangles, texts, freehands, curves, polygons, images, arcs, htmlPostits, history, historyIndex, film: filmPas, panX, panY, zoom, origineFeuille, origineAxes };
+    partagerLaVueDuDocument(currentPageIndex);
 }
+
+// ---------------------------------------------------------------------------
+// UN DOCUMENT SE RÈGLE D'UN SEUL COUP, PAS PAGE PAR PAGE
+//
+// « Quand on importe un pdf et qu'on modifie le zoom, ça ne modifie que pour
+// la page courante. Ce serait impeccable si le paramétrage était global pour
+// tout le pdf. »
+//
+// Découpé en autant de pages de tableau qu'il a de pages, un PDF de douze
+// feuilles donnait douze vues indépendantes : on réglait le grossissement pour
+// lire le texte, on tournait la page, et tout était à refaire. Douze fois.
+//
+// Ces pages-là sont pourtant LA MÊME CHOSE : elles viennent d'un seul import,
+// leurs images ont la même taille et sont posées aux mêmes coordonnées. Le
+// grossissement et le cadrage valent donc pour tout le lot — c'est ce que fait
+// n'importe quel lecteur de PDF. Les pages que l'enseignant a créées lui-même,
+// elles, gardent chacune la sienne : rien ne dit qu'elles se ressemblent.
+// ---------------------------------------------------------------------------
+function lotDuDocument(p) {
+    if (!p) return null;
+    // Les tableaux enregistrés avant que le lot porte un nom n'en ont pas : on
+    // se rabat sur l'empreinte du fichier, qui vaut pour le même import.
+    return p.lotPdf || (p.pdfMetadata && p.pdfMetadata.fileHash) || null;
+}
+
+function partagerLaVueDuDocument(index) {
+    const source = pages[index];
+    const lot = lotDuDocument(source);
+    if (!lot) return 0;
+    let touchees = 0;
+    pages.forEach((p, i) => {
+        if (i === index || lotDuDocument(p) !== lot) return;
+        if (p.zoom === source.zoom && p.panX === source.panX && p.panY === source.panY) return;
+        p.zoom = source.zoom; p.panX = source.panX; p.panY = source.panY;
+        touchees++;
+    });
+    return touchees;
+}
+window.partagerLaVueDuDocument = partagerLaVueDuDocument;
 
 function initPages() {
     currentPageIndex = -1;
@@ -6824,9 +6868,14 @@ document.getElementById('btn-dash').addEventListener('click', () => { const dash
 // L'EPAISSEUR SE LIT ET SE TAPE, comme la taille du texte. Le curseur seul ne
 // disait pas la valeur, et il s'arrete a dix : on peut aller au-dela en la
 // tapant.
+// « La taille 2 est trop petite pour moi et la taille 3 est trop grande !
+// Bref, il me faudrait une taille 2,5 ! » Les crans entiers étaient trop
+// grossiers : d'un cran à l'autre, le trait passait du filet au feutre. On
+// arrondit au dixième — le curseur avance par demis, la frappe va plus fin —
+// et l'épaisseur cesse d'être un choix entre deux mauvais.
 function reglerEpaisseurTrait(v, source) {
-    const t = Math.max(1, Math.min(60, Math.round(v)));
-    if (!isFinite(t)) return;
+    if (!isFinite(v)) return;
+    const t = Math.max(0.5, Math.min(60, Math.round(v * 10) / 10));
     activeStyle.lineWidth = t;
     const curseur = document.getElementById('line-width');
     const nombre = document.getElementById('line-width-num');
@@ -6838,20 +6887,20 @@ function reglerEpaisseurTrait(v, source) {
 window.reglerEpaisseurTrait = reglerEpaisseurTrait;
 
 document.getElementById('line-width').addEventListener('input', (e) => {
-    reglerEpaisseurTrait(parseInt(e.target.value, 10), 'curseur');
+    reglerEpaisseurTrait(parseFloat(e.target.value), 'curseur');
 });
 (function () {
     const nombre = document.getElementById('line-width-num');
     if (!nombre) return;
     nombre.addEventListener('input', () => {
-        const v = parseInt(nombre.value, 10);
-        if (isFinite(v) && v >= 1 && v <= 60) reglerEpaisseurTrait(v, 'nombre');
+        const v = parseFloat(nombre.value);
+        if (isFinite(v) && v >= 0.5 && v <= 60) reglerEpaisseurTrait(v, 'nombre');
     });
     nombre.addEventListener('blur', () => { nombre.value = activeStyle.lineWidth; });
 })();
 document.getElementById('line-width').addEventListener('change', (e) => {
     // Relâchement du curseur : on fige la valeur dans l'historique
-    if (selectionIsOnlyImages()) commitPluginStampWidth(parseInt(e.target.value) / 3);
+    if (selectionIsOnlyImages()) commitPluginStampWidth(parseFloat(e.target.value) / 3);
 });
 // ===================================================
 // L'INTERLIGNE SUIT LA POLICE
@@ -10167,6 +10216,22 @@ canvas.addEventListener('wheel', (e) => {
 document.getElementById('zoom-slider').addEventListener('input', (e) => {
     // Le curseur donne un cran, pas un zoom : la course est logarithmique.
     viserLeZoom(zoomDuCurseur(e.target.value), canvas.width / 2, canvas.height / 2);
+});
+
+// LE GROSSISSEMENT SE TAPE. « Les zooms sont trop brutaux en général ; laisser
+// tel quel plus permettre de saisir le niveau de zoom en texte serait le
+// mieux. » Sur une course logarithmique qui va de 20 % à 4000 %, un pixel de
+// curseur vaut plusieurs pour cent au milieu : viser 150 pile relevait de la
+// chance, et l'on passait son temps entre 140 et 165. Le chiffre, lui, ne
+// rate pas.
+document.getElementById('zoom-num')?.addEventListener('input', (e) => {
+    const pc = parseFloat(e.target.value);
+    if (!Number.isFinite(pc)) return;      // un champ vidé n'est pas un zoom
+    // On borne ici : ce champ-là n'est pas un curseur, il ne se refuse rien
+    // tout seul, et « 4 » tapé au milieu de « 400 » mettrait le tableau à
+    // quatre pour cent sous les doigts.
+    viserLeZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pc / 100)),
+        canvas.width / 2, canvas.height / 2);
 });
 
 document.getElementById('grid-weight-slider').addEventListener('input', (e) => { gridWeight = parseFloat(e.target.value); majPastilleGrille(); draw(); });
@@ -15219,6 +15284,9 @@ async function loadPdf(file) {
             if (!isEmpty) startPageIdx = pages.length;
 
             let firstPageW = 0, firstPageH = 0;
+            // Deux imports du même fichier restent deux documents : le lot est
+            // celui de CET import, et non celui du fichier.
+            const lotDeCetImport = 'lot_' + Date.now() + '_' + Math.round(Math.random() * 1e6);
             
             // 🌟 INJECTION DE LA BARRE DE CHARGEMENT 🌟
             let loadingOverlay = document.getElementById('pdf-loading-overlay');
@@ -15284,6 +15352,10 @@ async function loadPdf(file) {
                         pages[targetIdx].thumbnail = thumbDataUrl;
                         // Stocker les métadonnées du PDF (pas les données binaires)
                         pages[targetIdx].pdfMetadata = createPdfMetadata(file, i - 1);
+                        // TOUTES CES PAGES SONT LE MÊME DOCUMENT. Le lot les
+                        // réunit : le grossissement et le cadrage réglés sur
+                        // l'une valent pour toutes (voir « partagerLaVueDuDocument »).
+                        pages[targetIdx].lotPdf = lotDeCetImport;
                         imageCache[dataUrl] = img;
 
                         if (i === 1) {
@@ -27194,7 +27266,7 @@ function showExportOptionsModal(board) {
             curves: p.curves || [], polygons: p.polygons || [], arcs: p.arcs || [],
             htmlPostits: p.htmlPostits || [],
             panX: p.panX || 0, panY: p.panY || 0, zoom: p.zoom || 1,
-            pdfMetadata: p.pdfMetadata,
+            pdfMetadata: p.pdfMetadata, lotPdf: p.lotPdf,
             images: avecMedias ? (p.images || []) : []
         }));
         const charge = {
@@ -27432,7 +27504,8 @@ function promptExportCurrentBoard() {
                 panX: p.panX || 0,
                 panY: p.panY || 0,
                 zoom: p.zoom || 1,
-                pdfMetadata: p.pdfMetadata
+                pdfMetadata: p.pdfMetadata,
+                lotPdf: p.lotPdf
             })), nextId, globalZ, currentBgIndex }
         };
     }
@@ -27644,6 +27717,7 @@ async function doExportCurrentBoard(includeMedias, board, fileName) {
                         panY: p.panY || 0,
                         zoom: p.zoom || 1,
                         pdfMetadata: pdfMetadataToExport,
+                        lotPdf: p.lotPdf,
                         images: imagesToExport
                     };
                 }),

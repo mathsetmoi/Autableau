@@ -2213,6 +2213,15 @@
                     <!-- La course est LOGARITHMIQUE : le curseur donne un cran sur 1000, que
                          zoomDuCurseur() traduit en grossissement (de 20 % à 4000 %). -->
                     <input type="range" id="zoom-slider" min="0" max="1000" step="1" value="304">
+                    <!-- ET LE CHIFFRE SE TAPE. « Les zooms sont trop brutaux ;
+                         laisser tel quel plus permettre de saisir le niveau de
+                         zoom en texte serait le mieux. » Sur une course
+                         logarithmique de 20 % à 4000 %, un pixel de curseur
+                         vaut plusieurs pour cent au milieu : viser 150 pile
+                         relevait de la chance. On le tape. -->
+                    <input type="number" id="zoom-num" class="slider-num" min="20" max="4000" step="5" value="100"
+                        title="Grossissement, en pour cent" aria-label="Grossissement en pour cent"><span
+                        class="opacity-pc">%</span>
                 </div>
             </div>
                 <div class="divider-small"></div>
@@ -2540,9 +2549,10 @@
                 <div class="slider-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14"
                         height="14" fill="currentColor">
                         <path d="M3 12h18v2H3zM3 6.5h18v1.2H3zM3 18h18v2.6H3z" />
-                    </svg></div><input type="range" id="line-width" min="1" max="10" step="1" value="3"
-                    aria-label="Épaisseur du trait"><input type="number" id="line-width-num" class="slider-num" min="1"
-                    max="60" step="1" value="3" title="Épaisseur, en points" aria-label="Épaisseur du trait">
+                    </svg></div><input type="range" id="line-width" min="0.5" max="10" step="0.5" value="3"
+                    aria-label="Épaisseur du trait"><input type="number" id="line-width-num" class="slider-num" min="0.5"
+                    max="60" step="0.5" value="3" title="Épaisseur, en points — on peut taper 2,5"
+                    aria-label="Épaisseur du trait">
             </div>
             <button class="btn" id="btn-dash" title="Style de trait"><svg xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24" class="stroke-icon" id="icon-dash">
@@ -3050,7 +3060,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=238"></script>
+    <script src="script.js?v=239"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=99"></script>
     <script src="./lib/documents/documents.js?v=2"></script>
