@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=133">
+    <link rel="stylesheet" href="style.css?v=134">
 </head>
 
 <body>
@@ -100,6 +100,19 @@
 
         <button class="btn tt-tab tt-tab-color" data-panel="color" title="Couleur"><span id="tt-color-dot"></span></button>
 
+        <!-- OÙ VIT CETTE BARRE. « C'est super pénible d'avoir la barre de style
+             qui suit le texte, et ça manque de cohérence avec le reste. » Elle
+             se pose donc dans la barre du haut, avec tous les autres réglages,
+             et ce bouton la rend au texte pour qui préférait l'avoir sous la
+             main. Le choix est retenu d'une séance à l'autre. -->
+        <button class="btn" id="tt-ancrer" title="Rendre la barre au texte : elle le suivra"><svg
+                xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="17" height="17" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                id="tt-ancrer-icone">
+                <rect x="3" y="3" width="18" height="5" rx="1.5" />
+                <path d="M12 12v8M9 17l3 3 3-3" />
+            </svg></button>
+
         <!-- Tiroirs -->
         <div class="tt-panel" data-panel="para">
             <button class="btn tt-wide" data-block="p">Corps</button>
@@ -136,6 +149,19 @@
                     <line x1="21" y1="6" x2="3" y2="6"></line>
                     <line x1="21" y1="14" x2="3" y2="14"></line>
                     <line x1="21" y1="18" x2="7" y2="18"></line>
+                </svg></button>
+            <!-- JUSTIFIER. « Il faut utiliser celle du haut, en rajoutant la
+                 justification. » Les trois alignements existaient ; le
+                 quatrième, celui qui donne un bloc à bords droits, manquait.
+                 Il ne tire que les lignes qui se replient : la dernière ligne
+                 d'un paragraphe reste ferrée à gauche, comme dans un livre. -->
+            <button class="btn btn-align" data-align="justify" title="Justifier"><svg
+                    xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor"
+                    stroke-width="2" fill="none">
+                    <line x1="21" y1="6" x2="3" y2="6"></line>
+                    <line x1="21" y1="10" x2="3" y2="10"></line>
+                    <line x1="21" y1="14" x2="3" y2="14"></line>
+                    <line x1="15" y1="18" x2="3" y2="18"></line>
                 </svg></button>
             <button class="btn" id="btn-text-snap" title="Aimant : aligner sur la grille">🧲</button>
         </div>
@@ -2528,6 +2554,18 @@
             <button class="btn-minimize" title="Réduire"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                     <line x1="5" y1="12" x2="19" y2="12" />
                 </svg></button>
+            <!-- DEBOUT AU BORD DROIT. « Il faut aussi pouvoir la verticaliser. »
+                 La barre du document savait le faire depuis longtemps ; celle
+                 du style, non — et c'est elle qui porte désormais tout ce qui
+                 concerne le texte. Sur une page projetée, une barre à plat
+                 mange la HAUTEUR, la dimension qui fixe la taille de la page. -->
+            <button class="btn-minimize btn-orienter" id="bar-style-debout"
+                title="Mettre la barre de style debout, au bord droit"><svg xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="9" width="18" height="6" rx="2" />
+                    <path d="M12 3v3M12 18v3" />
+                </svg></button>
         </div>
         <div class="drag-handle cbar-head"
             style="cursor: move; opacity: 0.5; padding: 4px; margin-right: 8px; display: flex; align-items: center;"
@@ -3092,7 +3130,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=242"></script>
+    <script src="script.js?v=243"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=99"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

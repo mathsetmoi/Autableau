@@ -131,7 +131,10 @@ module.exports = async function (browser) {
         return { largeur: Math.round(rc.width), boutons: t.querySelectorAll(':scope > .btn').length, tiroirs: t.querySelectorAll('.tt-panel').length };
     });
     r.verifie('barre d\'édition compacte', barre.largeur < 420, `${barre.largeur} px`);
-    r.verifie('barre d\'édition : contrôles regroupés', barre.boutons <= 9, `${barre.boutons} boutons`);
+    // Dix, et non plus neuf : le dixième est celui qui décide où la barre vit
+    // — rangée dans celle du haut, ou suivant le texte. Il compte parmi les
+    // contrôles, et le reste doit donc tenir en neuf.
+    r.verifie('barre d\'édition : contrôles regroupés', barre.boutons <= 10, `${barre.boutons} boutons`);
     r.verifie('barre d\'édition : tiroirs présents', barre.tiroirs === 6, `${barre.tiroirs} tiroirs`);
 
     // Le style de paragraphe s'applique (l'ancienne liste déroulante ne s'ouvrait pas)

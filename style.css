@@ -10266,3 +10266,116 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
     line-height: 1.7;
     color: var(--muted);
 }
+
+/* ===========================================================
+   LA BARRE DU TEXTE, RANGÉE DANS CELLE DU HAUT
+   « C'est super pénible d'avoir la barre de style qui suit le
+   texte, et ça manque de cohérence avec le reste. » Rangée, elle
+   n'est plus un meuble : c'est un groupe de la barre de style,
+   qui perd donc son fond, son bord, son ombre et sa place propre.
+   =========================================================== */
+#text-toolbar.tt-ancree {
+    position: static;
+    background: none !important;
+    border: none;
+    box-shadow: none !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding: 0 !important;
+    max-width: none;
+    z-index: auto;
+}
+
+/* La barre de style porte une quinzaine de boutons de plus pendant la saisie :
+   sur une tablette tenue debout, elle passerait sous le bord de l'écran si
+   elle ne pouvait pas se replier. Elle ne se replie QUE là — une barre qui
+   change de hauteur sans raison se cherche. */
+#bar-style.ctx-saisie:not(.vertical) {
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 24px);
+    row-gap: 4px;
+}
+
+/* Ses boutons prennent la taille de leurs voisins : trente-huit pixels au
+   milieu de boutons de trente-quatre se voyaient comme une pièce rapportée. */
+#text-toolbar.tt-ancree > .btn {
+    width: 34px;
+    height: 34px;
+}
+
+/* ET LA TAILLE NE SE RÈGLE PAS DEUX FOIS DANS LA MÊME BARRE. La réglette « A »
+   de la barre de style et l'onglet « A 24 » de la barre du texte disaient la
+   même chose à dix centimètres l'un de l'autre. Pendant la saisie, c'est
+   l'onglet qui reste : il porte aussi la police et l'interligne, que la
+   réglette ne sait pas dire. Le bloc une fois posé, la réglette revient. */
+#bar-style.ctx-saisie .group-text { display: none; }
+
+/* Les tiroirs pendent toujours de leur propre bouton — c'est le script qui
+   les y pose —, mais ils se mesurent désormais à la barre de STYLE, seule
+   ancêtre positionnée une fois la barre du texte rangée dedans : ils s'ouvrent
+   donc sous le meuble entier, et non sous un groupe au milieu de lui. */
+
+/* DEBOUT, LA BARRE DU TEXTE SE COUCHE AVEC SON MEUBLE — et ne se replie pas :
+   dans une colonne, un repli ferait une SECONDE colonne au lieu de faire
+   défiler, et la barre doublerait de largeur. */
+#bar-style.vertical #text-toolbar.tt-ancree {
+    flex-direction: column;
+    flex-wrap: nowrap;
+}
+
+/* ===========================================================
+   LA BARRE DE STYLE DEBOUT
+   « Il faut aussi pouvoir la verticaliser. » Même règle que la
+   barre du document : au bord DROIT, le gauche appartient à la
+   barre des outils. Le « right » exact est posé par le script —
+   elle se range à gauche de celle du document quand les deux
+   sont debout.
+   =========================================================== */
+#bar-style.vertical {
+    left: auto;
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: column;
+    align-items: center;
+    flex-wrap: nowrap;
+    width: max-content;
+    max-width: 160px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-radius: var(--arrondi);
+    padding: 8px 5px;
+    row-gap: 2px;
+}
+
+/* Chaque contexte de la barre est lui-même une rangée : mettre la barre en
+   colonne ne suffit pas, ses boutons resteraient alignés à l'intérieur de
+   leur groupe et déborderaient par le côté. */
+#bar-style.vertical .style-group,
+#bar-style.vertical .tool-group {
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+#bar-style.vertical .drag-handle { margin-right: 0 !important; margin-bottom: 2px; }
+#bar-style.vertical .drag-wrapper { flex-direction: row; gap: 2px; }
+
+/* MAIS UNE RÉGLETTE RESTE UNE LIGNE : un curseur vertical ne se règle pas.
+   Elle est seulement raccourcie pour tenir dans la colonne. */
+#bar-style.vertical .slider-container,
+#bar-style.vertical .opacity-container { flex-direction: row; }
+#bar-style.vertical .slider-container input[type="range"] { width: 52px; }
+
+/* ===========================================================
+   LE TIROIR DES TABLEAUX NE LAISSE PLUS DE RÉSIDU
+   « J'ai toujours un résidu de vignette de tableau à droite vers
+   le milieu. » C'était sa languette : dix-sept pixels de gris
+   collés au bord droit, à mi-hauteur, qui ne disaient pas ce
+   qu'ils étaient. Elle ne paraît plus que lorsque le tiroir est
+   ouvert — c'est alors la poignée qu'on saisit pour le refermer.
+   Fermé, il s'ouvre par « Mes tableaux », qui porte son nom.
+   =========================================================== */
+.drawer-toggle-v { display: none; }
+#right-drawer.open .drawer-toggle-v { display: flex; }

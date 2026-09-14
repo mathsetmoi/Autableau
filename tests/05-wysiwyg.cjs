@@ -631,9 +631,15 @@ module.exports = async function (browser) {
     // =====================================================================
     // UNE SEULE BARRE POUR LE MOT QU'ON ÉCRIT
     // « Pourquoi la barre de style apparaît alors qu'au-dessus du texte ça
-    //   apparaît ? » — deux barres pour le même mot : celle du texte flotte
-    //   au-dessus du bloc et porte le gras, la taille, la couleur ; celle du
+    //   apparaît ? » — deux barres pour le même mot : celle du texte flottait
+    //   au-dessus du bloc et portait le gras, la taille, la couleur ; celle du
     //   style affichait les mêmes réglages en haut de l'écran.
+    //
+    // Elles n'en font plus qu'une : « il faut utiliser celle du haut ». La
+    // barre du texte est RANGÉE dans la barre de style, qui reste donc là
+    // pendant la saisie — c'est toujours une seule barre, mais c'est l'autre
+    // qui se tait. Qui préfère l'ancienne disposition la retrouve d'un bouton,
+    // et c'est le second bloc ci-dessous qui la mesure.
     // =====================================================================
     const deuxBarresDuTexte = await page.evaluate(async () => {
         texts.length = 0; panX = 0; panY = 0; zoom = 1; selectedItems = [];
@@ -652,7 +658,14 @@ module.exports = async function (browser) {
         // repassait par là une fois la saisie ouverte.
         ouvrirLaSaisie(null, { x: 300, y: 300 });
         await new Promise(r => setTimeout(r, 200));
-        const pendant = { style: vu('bar-style'), saisie: wysiwygText.style.display === 'block' };
+        const tb = document.getElementById('text-toolbar');
+        const pendant = {
+            style: vu('bar-style'), saisie: wysiwygText.style.display === 'block',
+            // Le point : la barre du texte n'est pas un SECOND meuble posé
+            // par-dessus, elle est dans le premier.
+            dansLAutre: tb.parentNode.id === 'bar-style',
+            flottante: getComputedStyle(tb).position !== 'static'
+        };
         wysiwygText.innerText = 'un mot';
         finalizeText();
         await new Promise(r => setTimeout(r, 120));
@@ -662,17 +675,20 @@ module.exports = async function (browser) {
     });
     r.verifie('l\'outil Texte en main, la barre de style est là',
         deuxBarresDuTexte.avant, JSON.stringify(deuxBarresDuTexte));
-    r.egal('mais elle se tait pendant qu\'on écrit : la barre du texte suffit',
-        deuxBarresDuTexte.pendant, { style: false, saisie: true });
-    r.egal('et elle reprend la parole une fois le bloc posé',
+    r.egal('et elle reste pendant qu\'on écrit : c\'est elle qui porte le texte',
+        deuxBarresDuTexte.pendant,
+        { style: true, saisie: true, dansLAutre: true, flottante: false });
+    r.egal('le bloc posé, elle est toujours là, sans les réglages du texte',
         deuxBarresDuTexte.apres, { style: true, poses: 1 });
 
-    // ET LE MÊME GESTE À LA VRAIE SOURIS. « Aucun intérêt des 3 barres » : la
-    // barre de style était rendue muette au bon endroit, mais personne ne
-    // repassait par là une fois la saisie ouverte — elle restait affichée avec
-    // la taille et la couleur pendant que la barre du texte disait la même
-    // chose au-dessus du mot.
+    // ET LE MÊME GESTE À LA VRAIE SOURIS, POUR QUI A RENDU LA BARRE AU TEXTE.
+    // « Aucun intérêt des 3 barres » : la barre de style était rendue muette
+    // au bon endroit, mais personne ne repassait par là une fois la saisie
+    // ouverte — elle restait affichée avec la taille et la couleur pendant que
+    // la barre du texte disait la même chose au-dessus du mot. C'est la règle
+    // de l'ancienne disposition, et elle doit y tenir encore.
     await page.evaluate(() => {
+        basculerLAncrageDuTexte(false);
         texts.length = 0; panX = 0; panY = 0; zoom = 1; selectedItems = [];
         setMode('text'); draw();
     });
@@ -700,6 +716,9 @@ module.exports = async function (browser) {
         enEcrivant, { texte: true, style: false });
     r.egal('et le bloc posé, la barre de style revient seule',
         apresEcrit, { texte: false, style: true });
+    // La barre reste RENDUE AU TEXTE pour les deux blocs qui suivent : ils la
+    // déplacent au pixel près pour éprouver ses tiroirs aux quatre bords de
+    // l'écran, ce qu'un meuble rangé dans un autre ne saurait faire.
 
     // =====================================================================
     // LE TIROIR PEND DE SON PROPRE BOUTON
@@ -791,6 +810,17 @@ module.exports = async function (browser) {
     r.verifie('barre collée en haut, le tiroir descend au lieu d\'être tronqué',
         enHautDeLEcran.haut >= 0 && enHautDeLEcran.bas <= enHautDeLEcran.ecran,
         JSON.stringify(enHautDeLEcran));
+
+    // ET ELLE SAIT REVENIR. Une disposition qu'on quitte et qui ne se laisse
+    // pas reprendre est un piège : on remet la barre en haut, telle qu'elle
+    // est livrée, et l'on vérifie qu'elle y est bien retournée.
+    const remiseEnHaut = await page.evaluate(() => {
+        basculerLAncrageDuTexte(true);
+        const tt = document.getElementById('text-toolbar');
+        return { parent: tt.parentNode.id, ancree: tt.classList.contains('tt-ancree') };
+    });
+    r.egal('et la barre du texte sait revenir se ranger en haut',
+        remiseEnHaut, { parent: 'bar-style', ancree: true });
 
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();

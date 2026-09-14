@@ -573,6 +573,12 @@ module.exports = async function (browser) {
     // On mesure avec la couleur de réglage en cours (un bleu franc) : le noir
     // par défaut se confondrait avec un trait simplement resté noir.
     const surfaces = await page.evaluate(() => {
+        // LA BARRE DU TEXTE EST AUDITÉE COMME BARRE, donc rendue au texte le
+        // temps de la mesure : rangée dans la barre de style — sa place par
+        // défaut désormais —, elle n'est plus un meuble mais un groupe, et un
+        // groupe qui porterait son propre contour dessinerait un cadre au
+        // milieu de la barre qui l'accueille.
+        if (typeof basculerLAncrageDuTexte === 'function') basculerLAncrageDuTexte(false);
         const sels = ['#bar-style', '#bar-document', '#text-toolbar', '#text-toolbar .tt-panel',
             '#color-popover', '#export-popover', '#quick-edit-menu', '#bottom-drawer',
             '#bar-plugins', '#right-drawer', '.toolbar-menu', '#bande-morceaux', '.custom-toolbar'];
@@ -598,6 +604,17 @@ module.exports = async function (browser) {
     });
     r.egal('toutes les barres portent le trait du réglage, la barre du texte comprise',
         surfaces.manquantes, []);
+
+    // ET RANGÉE, ELLE N'EN PORTE PLUS : un cadre autour d'un groupe, au milieu
+    // de la barre qui l'accueille, ferait deux meubles là où il n'y en a qu'un.
+    const rangee = await page.evaluate(() => {
+        basculerLAncrageDuTexte(true);
+        const c = getComputedStyle(document.getElementById('text-toolbar'));
+        return { bord: parseFloat(c.borderTopWidth), ombre: c.boxShadow };
+    });
+    r.verifie('mais rangée dans celle du haut, elle n\'a plus de trait à elle',
+        rangee.bord === 0 && (rangee.ombre === 'none' || !rangee.ombre),
+        JSON.stringify(rangee));
 
     // ET LE MÊME ARRONDI. « Penses-tu que toutes les toolbars, style compris,
     // doivent avoir le même style ? Là, l'arrondi des bordures n'est pas le

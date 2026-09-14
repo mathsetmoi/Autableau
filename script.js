@@ -4025,6 +4025,12 @@ function generateSVGString(rect, keepBg) {
                         let curX = exX + L.indent;
                         if (alignL === 'center') curX = exX + (maxW - L.contentW) / 2;
                         else if (alignL === 'right') curX = exX + maxW - L.contentW;
+                        // Le même écart qu'à l'écran : une page exportée doit
+                        // ressembler à celle qu'on avait sous les yeux. Il est
+                        // porté par le « dx » du morceau qui SUIT l'espace,
+                        // les décalages d'un « text » SVG se cumulant.
+                        const ecart = resteAJustifier(L, alignL, maxW);
+                        let apresUnEspace = false;
 
                         if (L.marker) {
                             svg += `<text x="${curX}" y="${lineY}" font-family="${fontFamily}" font-size="${L.size}px" font-weight="${L.bold ? 'bold' : 'normal'}" fill="${color}" dominant-baseline="hanging" xml:space="preserve">${L.marker}</text>`;
@@ -4040,7 +4046,9 @@ function generateSVGString(rect, keepBg) {
                             const ff = seg.style.fontFamily ? ` font-family="${seg.style.fontFamily}"` : '';
                             const sz = seg.style.fontSize ? ` font-size="${seg.style.fontSize * (L.size / (obj.fontSize || 24))}px"` : '';
                             const escapedText = seg.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                            svg += `<tspan font-weight="${fw}" font-style="${fs}" text-decoration="${td}" fill="${fc}"${ff}${sz}>${escapedText}</tspan>`;
+                            const dx = (ecart && apresUnEspace) ? ` dx="${ecart}"` : '';
+                            svg += `<tspan font-weight="${fw}" font-style="${fs}" text-decoration="${td}" fill="${fc}"${ff}${sz}${dx}>${escapedText}</tspan>`;
+                            apresUnEspace = /^\s+$/.test(seg.text);
                         });
                         svg += `</text>`;
                     });
@@ -6474,6 +6482,40 @@ function placeDeLaBarreAPlat() {
     return document.body.classList.contains('focus-mode') ? 'en bas' : 'en haut';
 }
 
+// LA BARRE DE STYLE SE MET DEBOUT ELLE AUSSI. « Il faut aussi pouvoir la
+// verticaliser. » Elle ne le savait pas faire : seule celle du document en
+// avait le droit, parce qu'elle seule était longue. C'est elle, maintenant,
+// qui porte tout ce qui concerne le texte — et une barre à plat mange la
+// hauteur, la dimension qui fixe la taille d'une page projetée.
+//
+// Son orientation est la SIENNE : les deux barres se mettent debout
+// séparément, et celle du style se range à gauche de celle du document quand
+// toutes deux sont au bord droit.
+const CLE_BARRE_STYLE_DEBOUT = 'auTableau_barre_style_debout';
+let barreStyleDebout = false;
+try { barreStyleDebout = localStorage.getItem(CLE_BARRE_STYLE_DEBOUT) === 'true'; } catch (e) { /* stockage refusé */ }
+
+function majBoutonDOrientationDuStyle() {
+    const b = document.getElementById('bar-style-debout');
+    if (!b) return;
+    b.classList.toggle('actif', barreStyleDebout);
+    b.title = barreStyleDebout
+        ? 'Coucher la barre de style, ' + placeDeLaBarreAPlat()
+        : 'Mettre la barre de style debout, au bord droit';
+}
+
+function basculerLOrientationDeLaBarreStyle(force) {
+    barreStyleDebout = (force === undefined) ? !barreStyleDebout : !!force;
+    try { localStorage.setItem(CLE_BARRE_STYLE_DEBOUT, barreStyleDebout ? 'true' : 'false'); } catch (e) { /* refusé */ }
+    if (typeof updateStyleBarContext === 'function') updateStyleBarContext();
+    if (typeof showToast === 'function') {
+        showToast(barreStyleDebout ? 'Barre de style debout, au bord droit'
+                                   : 'Barre de style à plat, ' + placeDeLaBarreAPlat());
+    }
+    return barreStyleDebout;
+}
+window.basculerLOrientationDeLaBarreStyle = basculerLOrientationDeLaBarreStyle;
+
 function majBoutonDOrientation() {
     const b = document.getElementById('bar-style-orienter');
     if (!b) return;
@@ -6612,6 +6654,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const b = document.getElementById('bar-style-orienter');
     if (b) b.addEventListener('click', (e) => { e.stopPropagation(); basculerLOrientationDeLaBarre(); });
     majBoutonDOrientation();
+    const bs = document.getElementById('bar-style-debout');
+    if (bs) bs.addEventListener('click', (e) => { e.stopPropagation(); basculerLOrientationDeLaBarreStyle(); });
+    majBoutonDOrientationDuStyle();
+    // La barre du texte prend sa place dès le chargement : attendre la
+    // première saisie l'aurait fait paraître d'abord au mauvais endroit. Ici
+    // et non à son propre bloc, qui s'exécute AVANT que son réglage existe.
+    if (typeof placerLaBarreDuTexte === 'function') placerLaBarreDuTexte();
 });
 
 // La poignée générique des barres déplace celle-ci comme les autres ; il ne
@@ -6642,7 +6691,7 @@ function updateStyleBarContext() {
     // seule se met debout : une page est haute et étroite, là où le tableau
     // est large.
     const barStyle = document.getElementById('bar-style');
-    barStyle.className = 'toolbar visible';
+    barStyle.className = barreStyleDebout ? 'toolbar visible vertical' : 'toolbar visible';
     if (barStyle.parentNode !== document.body) {
         document.body.appendChild(barStyle);
         localStorage.setItem('minimized_bar-style', 'false');
@@ -6660,7 +6709,20 @@ function updateStyleBarContext() {
     // ELLE REVIENT TOUJOURS À SA PLACE. Son contenu change à chaque sélection ;
     // une barre dont le contenu change ET qui bouge ne se retrouve plus. C'est
     // la barre du DOCUMENT qui se déplace et se met debout.
-    {
+    if (barreStyleDebout) {
+        // DEBOUT AU BORD DROIT : le gauche appartient à la barre des outils.
+        // Et si la barre du document y est déjà debout, celle-ci se range à
+        // sa gauche — deux colonnes au même endroit se recouvriraient.
+        const doc = document.getElementById('bar-document');
+        const docDebout = doc && doc.classList.contains('vertical')
+            && doc.classList.contains('visible');
+        barStyle.removeAttribute('data-dragged');
+        barStyle.style.left = 'auto';
+        barStyle.style.bottom = 'auto';
+        barStyle.style.top = '50%';
+        barStyle.style.transform = 'translateY(-50%)';
+        barStyle.style.right = (docDebout ? (doc.offsetWidth || 60) + 30 : 20) + 'px';
+    } else {
         barStyle.removeAttribute('data-dragged');
         barStyle.style.left = '50%';
         barStyle.style.transform = 'translateX(-50%)';
@@ -6676,23 +6738,28 @@ function updateStyleBarContext() {
         }
     }
 
-    // Le bouton dit où la barre ira : cela dépend du plein écran, qui change
-    // sans qu'on touche à l'orientation.
+    // Les deux boutons disent où leur barre ira : cela dépend du plein écran,
+    // qui change sans qu'on touche à l'orientation.
     majBoutonDOrientation();
+    majBoutonDOrientationDuStyle();
 
     let targetType = mode; if (selectedItems.length === 1) targetType = selectedItems[0].type; else if (selectedItems.length > 1) targetType = 'multi';
     if (selectedItems.length === 0 && typeof activeWidgets !== 'undefined' && activeWidgets['compass']) targetType = 'compass';
 
-    // PENDANT QU'ON ÉCRIT, LA BARRE DU TEXTE SUFFIT. Elle flotte au-dessus du
-    // bloc et porte tout ce qui le concerne — le gras, la taille, la couleur,
-    // l'alignement. La barre de style affichait les mêmes réglages en haut de
-    // l'écran : deux barres pour le même mot, à deux endroits, et l'on ne
-    // savait plus laquelle règle quoi. Elle se tait le temps de la saisie, et
-    // revient dès que le bloc est posé.
+    // PENDANT QU'ON ÉCRIT, TOUT LE TEXTE SE RÈGLE AU MÊME ENDROIT. La barre du
+    // texte est rangée ici même — le gras, la taille, la couleur,
+    // l'alignement —, à côté des réglages qu'elle complète : c'est une seule
+    // barre pour un seul mot, et non deux à deux endroits. Qui a rendu la
+    // barre au texte retrouve l'ancienne règle : celle du haut se tait le
+    // temps de la saisie, et revient dès que le bloc est posé.
     if (typeof wysiwygText !== 'undefined' && wysiwygText
         && wysiwygText.style.display === 'block') {
-        barStyle.classList.remove('visible');
-        barStyle.removeAttribute('data-dragged');
+        if (typeof barreDuTexteEnHaut !== 'undefined' && barreDuTexteEnHaut) {
+            barStyle.classList.add('ctx-text', 'ctx-saisie');
+        } else {
+            barStyle.classList.remove('visible');
+            barStyle.removeAttribute('data-dragged');
+        }
     }
     // --- NOUVEAU : On ajoute 'ctx-point' pour les outils segment, curve et polygon ---
     else if (targetType === 'point') barStyle.classList.add('ctx-point');
@@ -7512,9 +7579,13 @@ function layoutTextObject(obj, measureCtx) {
 
     // Alignement propre à un paragraphe (posé par les boutons d'alignement
     // pendant la saisie) : il l'emporte sur celui du bloc entier.
+    // « justify » était ramené à « left » : la justification n'existait pas, et
+    // le HTML que l'éditeur écrivait pour elle se perdait au passage sur le
+    // tableau. Elle est maintenant rendue telle quelle, et c'est la peinture
+    // qui écarte les mots — voir « resteAJustifier » plus bas.
     const alignDe = (node) => {
         const v = (node.style && node.style.textAlign) || node.getAttribute?.('align') || '';
-        return /^(left|center|right|justify)$/.test(v) ? (v === 'justify' ? 'left' : v) : null;
+        return /^(left|center|right|justify)$/.test(v) ? v : null;
     };
 
     function walk(node, style, ctxBlock) {
@@ -7656,7 +7727,8 @@ function layoutTextObject(obj, measureCtx) {
         const markerW = p.marker ? measure(p.marker + ' ', { bold: p.bold }, size) : 0;
         const avail = col > 0 ? Math.max(size, col - indentPx - markerW) : Infinity;
 
-        wrap(p, avail, size).forEach((segs, i) => {
+        const lignesDuPara = wrap(p, avail, size);
+        lignesDuPara.forEach((segs, i) => {
             let segsW = 0;
             let tailleMax = size;
             segs.forEach(s => {
@@ -7671,13 +7743,37 @@ function layoutTextObject(obj, measureCtx) {
             lines.push({
                 segs, size, lineHeight: lhLigne, y,
                 indent: indentPx, marker: i === 0 ? p.marker : null, markerW,
-                bold: p.bold, contentW, align: p.align || null, tailleMax, demiInterligne
+                bold: p.bold, contentW, align: p.align || null, tailleMax, demiInterligne,
+                // La justification ne tire QUE les lignes qui se replient : la
+                // dernière d'un paragraphe reste ferrée à gauche, comme dans
+                // un livre. Sans cela, un paragraphe d'une seule ligne se
+                // retrouvait étiré sur toute la colonne.
+                derniereDuPara: (i === lignesDuPara.length - 1)
             });
             y += lhLigne;
         });
     });
 
     return { lines, maxW, width: col > 0 ? col : maxW, height: y };
+}
+
+// JUSTIFIER, C'EST ÉCARTER LES MOTS. Le repli a déjà placé les coupures ; il
+// ne reste qu'à répartir ce qui manque pour atteindre le bord droit, et à le
+// répartir sur les ESPACES — jamais entre les lettres, qui se liraient mal.
+// Le découpage en mots vient du repli lui-même : chaque espace y est un
+// segment à part, ce qui rend ce comptage exact plutôt qu'approché.
+//
+// Rend 0 partout où la justification n'a rien à faire : dernière ligne d'un
+// paragraphe, ligne sans espace, ligne déjà pleine ou qui déborde. Les deux
+// rendus — l'écran et l'export — passent par ici, faute de quoi une page
+// exportée ne ressemblerait pas à ce qu'on a sous les yeux.
+function resteAJustifier(L, align, largeurDuBloc) {
+    if (align !== 'justify' || L.derniereDuPara) return 0;
+    const manque = largeurDuBloc - (L.indent || 0) - L.contentW;
+    if (!(manque > 0)) return 0;
+    const espaces = L.segs.filter(s => /^\s+$/.test(s.text)).length;
+    if (!espaces) return 0;
+    return manque / espaces;
 }
 
 // ===================================================
@@ -11434,6 +11530,7 @@ function draw() {
                             let curX = startX + L.indent;
                             if (alignL === 'center') curX = startX + (w - L.contentW) / 2;
                             else if (alignL === 'right') curX = startX + w - L.contentW;
+                            const ecart = resteAJustifier(L, alignL, w);
 
                             if (L.marker) {
                                 setFont({ bold: L.bold });
@@ -11484,6 +11581,7 @@ function draw() {
                                     }
                                 }
                                 curX += sw;
+                                if (ecart && /^\s+$/.test(seg.text)) curX += ecart;
                             });
                         });
                     }
@@ -15760,9 +15858,16 @@ if (textToolbar) {
         e.preventDefault();
     });
 
+    // Le bouton qui décide où vit cette barre : dans celle du haut, ou
+    // au-dessus du texte. Il est branché avant les autres, et s'arrête là :
+    // il ne règle rien du texte lui-même.
+    const btnAncrer = document.getElementById('tt-ancrer');
+    if (btnAncrer) btnAncrer.addEventListener('click', () => { basculerLAncrageDuTexte(); });
+
     // 2. Écouteurs pour TOUS les boutons de la barre d'outils (Alignement, Gras, etc.)
     document.querySelectorAll('#text-toolbar button').forEach(btn => {
         btn.addEventListener('click', () => {
+            if (btn.id === 'tt-ancrer') return;
             // --- Gestion de l'alignement ---
             if (btn.classList.contains('btn-align')) {
                 const alignMode = btn.getAttribute('data-align');
@@ -15770,7 +15875,8 @@ if (textToolbar) {
                     // En saisie : on aligne la ligne (ou les lignes sélectionnées), pas tout le bloc
                     wysiwygText.focus();
                     normaliserLignesSaisie();
-                    const cmd = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' }[alignMode];
+                    const cmd = { left: 'justifyLeft', center: 'justifyCenter',
+                                  right: 'justifyRight', justify: 'justifyFull' }[alignMode];
                     if (cmd) document.execCommand(cmd, false, null);
                     activeStyle.textAlign = alignMode;
                     donnerUnCadreAuBloc(alignMode);
@@ -15848,11 +15954,15 @@ if (textToolbar) {
                 panneau.classList.add('tt-open');
                 tab.classList.add('tt-open');
 
-                // Le tiroir s'ouvre du côté opposé au texte : si la barre est
-                // au-dessus du bloc, il descendrait pile sur ce qu'on écrit.
+                // Le tiroir s'ouvre du côté opposé au texte : si la barre
+                // FLOTTE au-dessus du bloc, il descendrait pile sur ce qu'on
+                // écrit. Rangée dans la barre du haut, elle est loin du texte :
+                // le tiroir descend alors, comme tous les autres menus de
+                // l'application — s'ouvrir vers le haut l'aurait envoyé
+                // par-dessus le tiroir des plugins.
                 const barre = textToolbar.getBoundingClientRect();
                 const saisie = wysiwygText.getBoundingClientRect();
-                const barreAuDessus = barre.bottom <= saisie.top + 2;
+                const barreAuDessus = !barreDuTexteEnHaut && barre.bottom <= saisie.top + 2;
                 panneau.classList.toggle('tt-up', barreAuDessus);
 
                 // LE TIROIR PEND DE SON PROPRE BOUTON. Il s'ouvrait collé au
@@ -16497,8 +16607,93 @@ document.addEventListener('selectionchange', () => {
     if (wysiwygText && wysiwygText.style.display === 'block') syncBadgesTexte();
 });
 
+// ==============================================================================
+// OÙ VIT LA BARRE DU TEXTE
+//
+// « Je me rends compte que c'est super pénible d'avoir la barre de style qui
+// suit le texte, et en fait ça manque de cohérence avec le reste. Je pense
+// qu'il faut utiliser celle du haut. » Elle se posait au-dessus du bloc qu'on
+// écrivait : elle bougeait à chaque ligne tapée, sautait du dessus au dessous
+// quand le bloc approchait d'un bord, et se cherchait — pendant que toutes les
+// autres commandes de l'application vivent à un endroit fixe.
+//
+// Elle se range donc dans la barre de style, entre les réglages qu'elle
+// complète, et suit dès lors sa place, son orientation et sa poignée. Qui
+// préférait l'avoir sous la main la rend au texte d'un bouton ; le choix est
+// retenu d'une séance à l'autre.
+// ==============================================================================
+const CLE_TEXTE_EN_HAUT = 'auTableau_barre_texte_en_haut';
+let barreDuTexteEnHaut = true;
+try {
+    const garde = localStorage.getItem(CLE_TEXTE_EN_HAUT);
+    if (garde !== null) barreDuTexteEnHaut = (garde === 'true');
+} catch (e) { /* stockage refusé */ }
+
+function majBoutonDAncrageDuTexte() {
+    const b = document.getElementById('tt-ancrer');
+    if (!b) return;
+    b.classList.toggle('actif', barreDuTexteEnHaut);
+    b.title = barreDuTexteEnHaut
+        ? 'Rendre la barre au texte : elle le suivra'
+        : 'Ranger la barre du texte dans la barre de style, en haut';
+}
+
+// Le déménagement lui-même. La barre garde ses écouteurs : on la DÉPLACE, on
+// ne la reconstruit pas — sinon le gras, la couleur et les tiroirs seraient à
+// rebrancher à chaque aller-retour.
+function placerLaBarreDuTexte() {
+    if (!textToolbar) return;
+    const barStyle = document.getElementById('bar-style');
+    const ancree = barreDuTexteEnHaut && !!barStyle;
+    textToolbar.classList.toggle('tt-ancree', ancree);
+    if (ancree) {
+        // Juste après les réglages de texte de la barre : les commandes du
+        // même sujet se touchent.
+        const voisin = barStyle.querySelector('.group-text');
+        if (textToolbar.parentNode !== barStyle || (voisin && voisin.nextSibling !== textToolbar)) {
+            if (voisin) voisin.after(textToolbar); else barStyle.appendChild(textToolbar);
+        }
+        // Sa place flottante n'a plus besoin d'être effacée : rangée, la barre
+        // est « position: static », et le « left »/« top » d'un élément
+        // statique ne veut rien dire. Le lui retirer ici ne servait donc à
+        // rien — et « updateTextToolbarPosition » le réécrit de toute façon
+        // dès qu'elle repart flotter.
+    } else if (textToolbar.parentNode !== document.body) {
+        document.body.appendChild(textToolbar);
+    }
+    majBoutonDAncrageDuTexte();
+}
+window.placerLaBarreDuTexte = placerLaBarreDuTexte;
+
+function basculerLAncrageDuTexte(force) {
+    barreDuTexteEnHaut = (force === undefined) ? !barreDuTexteEnHaut : !!force;
+    try { localStorage.setItem(CLE_TEXTE_EN_HAUT, barreDuTexteEnHaut ? 'true' : 'false'); } catch (e) { /* refusé */ }
+    fermerTiroirsTexte();
+    placerLaBarreDuTexte();
+    // La barre de style se montre ou se tait selon que le texte y loge : c'est
+    // « updateStyleBarContext » qui en décide, il faut donc le rejouer.
+    if (typeof updateStyleBarContext === 'function') updateStyleBarContext();
+    if (typeof updateTextToolbarPosition === 'function') updateTextToolbarPosition();
+    if (typeof showToast === 'function') {
+        showToast(barreDuTexteEnHaut ? 'Le texte se règle dans la barre du haut'
+                                     : 'La barre du texte suit le texte');
+    }
+    return barreDuTexteEnHaut;
+}
+window.basculerLAncrageDuTexte = basculerLAncrageDuTexte;
+
 function updateTextToolbarPosition() {
     if (!textToolbar || !wysiwygText) return;
+
+    // RANGÉE DANS LA BARRE DU HAUT, elle n'a plus de place à calculer : elle
+    // suit celle de son meuble, comme les autres réglages.
+    if (barreDuTexteEnHaut) {
+        placerLaBarreDuTexte();
+        const enSaisie = wysiwygText.style.display === 'block';
+        textToolbar.style.display = enSaisie ? 'flex' : 'none';
+        if (enSaisie) syncBadgesTexte();
+        return;
+    }
 
     if (wysiwygText.style.display === 'block') {
         textToolbar.style.display = 'flex';
