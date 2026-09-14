@@ -138,14 +138,14 @@ module.exports = async function (browser) {
         renderExplorerLists();
         const aDeux = {
             texte: document.getElementById('exp-lot-compte').textContent,
-            montree: !document.getElementById('exp-lot').hidden
+            montree: getComputedStyle(document.getElementById('exp-lot')).display !== 'none'
         };
         // L'une part à la corbeille : il n'en reste qu'une.
         savedInterfaces.find(i => i.id === vivantes[0].id).deleted = true;
         renderExplorerLists();
         const aUne = {
             texte: document.getElementById('exp-lot-compte').textContent,
-            montree: !document.getElementById('exp-lot').hidden,
+            montree: getComputedStyle(document.getElementById('exp-lot')).display !== 'none',
             lot: lotExplorateur.size
         };
         savedInterfaces.find(i => i.id === vivantes[0].id).deleted = false;
@@ -166,7 +166,7 @@ module.exports = async function (browser) {
         renderExplorerLists();
         const etat = {
             texte: document.getElementById('exp-lot-compte').textContent,
-            montree: !document.getElementById('exp-lot').hidden,
+            montree: getComputedStyle(document.getElementById('exp-lot')).display !== 'none',
             lot: lotExplorateur.size
         };
         vivantes.forEach(i => { savedInterfaces.find(x => x.id === i.id).deleted = false; });
@@ -187,10 +187,10 @@ module.exports = async function (browser) {
         renderExplorerLists();
         const marquees = () => document.querySelectorAll('#interfaces-container .tree-item.du-lot').length;
         const avant = { lot: lotExplorateur.size, marquees: marquees(),
-                        barre: !document.getElementById('exp-lot').hidden };
+                        barre: getComputedStyle(document.getElementById('exp-lot')).display !== 'none' };
         document.getElementById('exp-lot-rien').click();
         return { avant, apres: { lot: lotExplorateur.size, marquees: marquees(),
-                                 barre: !document.getElementById('exp-lot').hidden } };
+                                 barre: getComputedStyle(document.getElementById('exp-lot')).display !== 'none' } };
     });
     r.egal('avant la croix : deux marquées, la barre est là',
         croix.avant, { lot: 2, marquees: 2, barre: true });

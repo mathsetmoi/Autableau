@@ -25455,6 +25455,12 @@ function buildTree(items, parentId) {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </div>
                 <span class="icon">${TREE_ICON_FOLDER}</span> <span class="label" style="font-weight:600;">${echapperTexte(item.name)}</span>
+                <div class="tree-item-actions">
+                    <button class="tree-action-btn" title="Nouveau dossier ici"
+                        onclick="creerDansLeDossier('${item.id}', 'folder'); event.stopPropagation();">${ICONE_DOSSIER_PLUS}</button>
+                    <button class="tree-action-btn" title="${currentExplorerTab === 'tableaux' ? 'Nouveau tableau ici' : 'Nouvelle interface ici'}"
+                        onclick="creerDansLeDossier('${item.id}', 'file'); event.stopPropagation();">${ICONE_FICHIER_PLUS}</button>
+                </div>
             `;
             treeItem.onclick = (e) => {
                 if (e.target.closest('.folder-toggle')) {
@@ -26505,6 +26511,34 @@ function cancelInlineCreation() {
     inlineCreationState = null;
     renderExplorerLists();
 }
+
+// ---------------------------------------------------------------------------
+// CRÉER DANS CE DOSSIER-CI
+//
+// « J'aimerais ajouter sur l'arborescence des tableaux un bouton pour ajouter
+// un répertoire et créer un tableau. »
+//
+// Les deux boutons de l'en-tête créent DANS LE DOSSIER CHOISI — encore
+// faut-il l'avoir choisi, et rien ne disait lequel l'était. On cliquait
+// « Nouveau », et le tableau atterrissait à la racine ou dans un dossier
+// qu'on avait sélectionné dix minutes plus tôt. Sur la ligne du dossier, il
+// n'y a plus de doute : c'est celui-là, et il s'ouvre pour qu'on voie le
+// nouveau venu s'y poser.
+// ---------------------------------------------------------------------------
+const ICONE_DOSSIER_PLUS = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>`;
+const ICONE_FICHIER_PLUS = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`;
+
+function creerDansLeDossier(id, quoi) {
+    const liste = currentExplorerTab === 'tableaux' ? savedTableaux : savedInterfaces;
+    const parent = liste.find(f => f.id === id && f.type === 'folder' && !f.deleted);
+    if (!parent) return false;
+    // Choisir le dossier SUFFIT : la création l'ouvre d'elle-même pour qu'on
+    // voie le nouveau venu s'y poser. Le rouvrir ici ne faisait que doubler.
+    selectedFolderId = id;
+    if (quoi === 'folder') createNewFolder(); else createNewFile();
+    return true;
+}
+window.creerDansLeDossier = creerDansLeDossier;
 
 function createNewFile() {
     inlineCreationState = { type: 'file', parentId: selectedFolderId, tab: currentExplorerTab };

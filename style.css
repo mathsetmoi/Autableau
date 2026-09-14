@@ -4824,6 +4824,13 @@ body.dark-mode {
     background: rgba(108, 92, 231, 0.22);
 }
 
+/* LA BARRE DU LOT SE CACHE POUR DE BON. « hidden » ne pèse rien face à une
+   classe qui pose « display: flex » : la barre restait affichée en
+   permanence, à annoncer « 0 sélectionnés », et la croix qui la vidait avait
+   l'air de ne rien faire — il n'y avait rien à désélectionner, et rien ne
+   disparaissait. */
+.exp-lot[hidden] { display: none; }
+
 .exp-lot {
     display: flex;
     align-items: center;
