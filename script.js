@@ -28577,6 +28577,7 @@ function renderHtmlPostits() {
                         <button class="btn-ancre-postit" title="Attaché au tableau : il suit le tableau quand on se déplace"></button>
                         <button class="btn-copier-postit" title="Copier le contenu"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path></svg></button>
                         <button class="btn-coller-postit" title="Coller à la fin"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg></button>
+                        <button class="btn-onglet-postit" title="Ouvrir dans un onglet du navigateur">↗</button>
                         <button class="btn-liste-postit" title="Transformer en liste à cocher"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 7 5 9 9 5"></polyline><polyline points="3 16 5 18 9 14"></polyline><line x1="12" y1="7" x2="21" y2="7"></line><line x1="12" y1="17" x2="21" y2="17"></line></svg></button>
                         <button class="btn-min-postit" title="Minimiser"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
                         <button class="btn-close-postit" title="Fermer"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
@@ -28584,6 +28585,7 @@ function renderHtmlPostits() {
                 </div>
                 <textarea class="html-postit-body"></textarea>
                 <div class="html-postit-liste"></div>
+                <div class="html-postit-web"></div>
             `;
             el.style.backgroundColor = p.bg;
             container.appendChild(el);
@@ -28734,13 +28736,26 @@ function renderHtmlPostits() {
             };
 
             const appliquerMode = (o, focusIdx) => {
-                const enListe = o.mode === 'liste';
+                // TROIS MODES, ET LE TROISIÈME EST UNE FENÊTRE. « Avoir la
+                // possibilité d'importer des applets GeoGebra serait top… De
+                // même, l'intégration de codes Python serait incroyable ! Je
+                // me dis qu'un iframe d'un site comme Basthon pourrait faire
+                // l'affaire. » Un post-it sait déjà se placer sur le tableau,
+                // se déplacer, se redimensionner, s'attacher ou se fixer à
+                // l'écran, se réduire, se fermer, et traverser une sauvegarde :
+                // une fenêtre web n'a besoin de rien d'autre.
+                const surLeWeb = o.mode === 'web';
+                const enListe = !surLeWeb && o.mode === 'liste';
                 el.classList.toggle('en-liste', enListe);
-                body.style.display = enListe ? 'none' : '';
+                el.classList.toggle('en-web', surLeWeb);
+                body.style.display = (enListe || surLeWeb) ? 'none' : '';
                 liste.style.display = enListe ? '' : 'none';
+                const cadre = el.querySelector('.html-postit-web');
+                if (cadre) cadre.style.display = surLeWeb ? '' : 'none';
                 el.querySelector('.btn-liste-postit').title = enListe
                     ? 'Revenir à la note libre' : 'Transformer en liste à cocher';
                 if (enListe) peindreListe(focusIdx);
+                if (surLeWeb) majLaFenetreWeb(el, o);
                 majAvancement(o);
             };
 
@@ -28768,6 +28783,16 @@ function renderHtmlPostits() {
             });
 
             el._postitAppliquerMode = appliquerMode;      // relu à chaque rendu
+
+            // UN CADRE PEUT RESTER BLANC — un site qui refuse d'être encadré,
+            // une salle sans réseau — et l'on ne peut rien y faire depuis la
+            // page. Cette porte-là mène toujours quelque part : le site
+            // s'ouvre dans un onglet, et le cours continue.
+            el.querySelector('.btn-onglet-postit').addEventListener('click', () => {
+                const o = htmlPostits.find(hp => hp.id === p.id);
+                if (!o || !o.url) return;
+                window.open(o.url, '_blank', 'noopener,noreferrer');
+            });
 
             // ---- Le titre --------------------------------------------------
             // Trois post-its jaunes se ressemblent tous. Un double-clic sur la
@@ -29074,15 +29099,152 @@ function renderHtmlPostits() {
         if (el._postitMajTitre) el._postitMajTitre(p);
         if (el._postitMajAncre) el._postitMajAncre(p);
 
-        const modeVoulu = p.mode === 'liste' ? 'liste' : 'texte';
+        const modeVoulu = (p.mode === 'liste' || p.mode === 'web') ? p.mode : 'texte';
         if (el.dataset.modeAffiche !== modeVoulu && el._postitAppliquerMode) {
             el.dataset.modeAffiche = modeVoulu;
             el._postitAppliquerMode(p);
         }
+        // L'adresse peut changer sans que le mode change : on la suit à part,
+        // et « majLaFenetreWeb » ne recharge que si elle a vraiment bougé.
+        if (modeVoulu === 'web') majLaFenetreWeb(el, p);
 
         el.style.zIndex = p.z || 10;
     });
 }
+
+// ==============================================================================
+// LES FENÊTRES WEB : GEOGEBRA, PYTHON, ET CE QU'ON VOUDRA
+//
+// « Avoir la possibilité d'importer des applets GeoGebra serait top ! Sur leur
+// site ils proposent des morceaux de code à intégrer… De même, l'intégration
+// de codes Python serait incroyable ! Je me dis qu'un iframe d'un site comme
+// Basthon pourrait faire l'affaire. »
+//
+// Ce qu'on colle, c'est ce que le site donne : un bloc « <iframe … > », le
+// script « deployggb.js » de GeoGebra, ou une simple adresse. Les trois mènent
+// à la même chose — une adresse à mettre dans un cadre —, et c'est ici qu'on
+// les ramène à cette adresse-là.
+// ==============================================================================
+
+// Les deux que l'on propose d'un clic. Le reste se colle.
+const FENETRES_TOUTES_PRETES = {
+    geogebra: { titre: 'GeoGebra', url: 'https://www.geogebra.org/calculator' },
+    python: { titre: 'Python', url: 'https://console.basthon.fr/' }
+};
+
+// GEOGEBRA NE SE LAISSE PAS ENCADRER PAR N'IMPORTE QUELLE PORTE. L'adresse
+// qu'on lit dans la barre du navigateur — « geogebra.org/m/abc123 » — refuse
+// d'être mise dans un cadre ; c'est « /material/iframe/id/abc123 » qu'il faut,
+// et c'est justement celle que leur bouton « Partager » donne. On fait la
+// conversion nous-mêmes : personne ne devrait avoir à la connaître.
+function adresseEncadrable(u) {
+    const m = String(u).match(/^https:\/\/(?:www\.)?geogebra\.org\/(?:m|material\/show\/id)\/([\w.-]+)/i);
+    if (m) return 'https://www.geogebra.org/material/iframe/id/' + m[1];
+    return u;
+}
+
+// Ce qu'on a collé, ramené à une adresse — ou rien, si ce n'en est pas une.
+// On exige « https » : une page servie en https (c'est le cas du tableau en
+// ligne) ne montre pas un cadre en http, le navigateur le bloque sans rien
+// dire, et l'on chercherait longtemps pourquoi la fenêtre reste blanche.
+function lireUneIntegration(code) {
+    const brut = String(code === undefined || code === null ? '' : code).trim();
+    if (!brut) return null;
+
+    let adresse = null, largeur = 0, hauteur = 0;
+
+    const balise = brut.match(/<iframe\b[^>]*>/i);
+    if (balise) {
+        const src = balise[0].match(/\ssrc\s*=\s*["']([^"']+)["']/i);
+        if (src) adresse = src[1];
+        const l = balise[0].match(/\swidth\s*=\s*["']?(\d+)/i);
+        const h = balise[0].match(/\sheight\s*=\s*["']?(\d+)/i);
+        if (l) largeur = parseInt(l[1], 10);
+        if (h) hauteur = parseInt(h[1], 10);
+    }
+    // Le script « deployggb.js » ne porte pas d'adresse : il porte un
+    // identifiant de matériel, et construit le cadre lui-même. On fait la
+    // construction à sa place.
+    if (!adresse) {
+        const mat = brut.match(/material_?id\s*["']?\s*[:=]\s*["']([\w.-]+)["']/i);
+        if (mat) adresse = 'https://www.geogebra.org/material/iframe/id/' + mat[1];
+    }
+    if (!adresse) {
+        const nue = brut.match(/https?:\/\/[^\s"'<>]+/);
+        if (nue) adresse = nue[0];
+    }
+    if (!adresse) return null;
+
+    let url;
+    try { url = new URL(adresseEncadrable(adresse.replace(/&amp;/g, '&'))); }
+    catch (e) { return null; }
+    if (url.protocol !== 'https:') return null;
+
+    return { url: url.href, hote: url.hostname.replace(/^www\./, ''),
+             w: largeur > 80 ? largeur : 0, h: hauteur > 80 ? hauteur : 0 };
+}
+window.lireUneIntegration = lireUneIntegration;
+
+// Le cadre lui-même. On ne le recharge QUE si l'adresse a changé : une
+// construction GeoGebra ou une console Python repartiraient de zéro à chaque
+// déplacement du tableau, c'est-à-dire tout le temps.
+function majLaFenetreWeb(el, o) {
+    const boite = el.querySelector('.html-postit-web');
+    if (!boite) return;
+    let cadre = boite.querySelector('iframe');
+    if (!cadre) {
+        cadre = document.createElement('iframe');
+        // Le cadre est cloisonné : il exécute son propre code et garde son
+        // propre stockage — GeoGebra et Basthon en ont besoin —, mais il ne
+        // peut ni sortir du cadre, ni piloter la page qui l'accueille.
+        cadre.setAttribute('sandbox',
+            'allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+        cadre.setAttribute('referrerpolicy', 'no-referrer');
+        cadre.setAttribute('allow', 'fullscreen; clipboard-write');
+        cadre.setAttribute('loading', 'lazy');
+        cadre.title = 'Fenêtre web';
+        boite.appendChild(cadre);
+    }
+    if (cadre.dataset.adresse !== (o.url || '')) {
+        cadre.dataset.adresse = o.url || '';
+        cadre.src = o.url || 'about:blank';
+    }
+}
+
+// OUVRIR UNE FENÊTRE. Elle se pose au milieu de ce qu'on regarde, à la taille
+// que le site demande s'il l'a dite, et prend pour titre le nom du site : une
+// fenêtre sans nom, réduite, ne se distingue plus d'une autre.
+function ouvrirUneFenetreWeb(code, options) {
+    const lu = lireUneIntegration(code);
+    if (!lu) {
+        if (typeof showToast === 'function') {
+            showToast("Ce n'est pas une adresse en https : collez le code « iframe » "
+                + 'que le site propose, ou son adresse.', '#e17055', '🌐');
+        }
+        return null;
+    }
+    const opts = options || {};
+    const l = Math.max(240, Math.min(1200, lu.w || 760));
+    const h = Math.max(200, Math.min(900, lu.h || 520));
+    const ech = zoom || 1;
+    const fenetre = {
+        id: nextId++,
+        // Au milieu de l'écran, en coordonnées du tableau.
+        x: (window.innerWidth / 2 - panX) / ech - l / 2,
+        y: (window.innerHeight / 2 - panY) / ech - h / 2,
+        w: l / ech, h: h / ech,
+        mode: 'web', url: lu.url,
+        titre: opts.titre || lu.hote,
+        content: '', bg: '#ffffff', minimized: false,
+        ancre: 'tableau', z: globalZ++
+    };
+    htmlPostits.push(fenetre);
+    saveState();
+    if (typeof renderHtmlPostits === 'function') renderHtmlPostits();
+    if (typeof showToast === 'function') showToast('🌐 ' + fenetre.titre + ' est sur le tableau');
+    return fenetre;
+}
+window.ouvrirUneFenetreWeb = ouvrirUneFenetreWeb;
 
 function formatTime(seconds) {
     if (isNaN(seconds)) return "0:00";

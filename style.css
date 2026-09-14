@@ -10379,3 +10379,52 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
    =========================================================== */
 .drawer-toggle-v { display: none; }
 #right-drawer.open .drawer-toggle-v { display: flex; }
+
+/* ===========================================================
+   LE POST-IT QUI EST UNE FENÊTRE WEB
+   « Avoir la possibilité d'importer des applets GeoGebra serait
+   top… De même, l'intégration de codes Python serait incroyable !
+   Je me dis qu'un iframe d'un site comme Basthon pourrait faire
+   l'affaire. » Un post-it sait déjà se placer sur le tableau, se
+   déplacer, se redimensionner, s'attacher ou se fixer à l'écran,
+   se réduire, se fermer et traverser une sauvegarde : une fenêtre
+   web n'a besoin de rien d'autre que d'un cadre à la place du
+   papier.
+   =========================================================== */
+.html-postit-web {
+    display: none;
+    flex-grow: 1;
+    min-height: 0;
+    background: #ffffff;
+    overflow: hidden;
+}
+
+.html-postit.en-web .html-postit-web { display: flex; }
+.html-postit.en-web.minimized .html-postit-web { display: none; }
+
+.html-postit-web iframe {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+    background: #ffffff;
+}
+
+/* CE QUI NE VEUT RIEN DIRE ICI NE S'AFFICHE PAS. La couleur du papier, la
+   liste à cocher, le copier-coller du texte : une console Python n'a pas de
+   papier jaune, et son contenu ne se lit pas depuis la page. Reste ce qui
+   sert : le titre, l'ancre, l'onglet, le repli et la fermeture. */
+.html-postit.en-web .cycle-color,
+.html-postit.en-web .btn-liste-postit,
+.html-postit.en-web .btn-copier-postit,
+.html-postit.en-web .btn-coller-postit,
+.html-postit.en-web .postit-avancement { display: none; }
+
+/* Et « ouvrir dans un onglet » n'a de sens QUE là : c'est la porte de secours
+   quand le site refuse d'être encadré, ou quand la salle n'a pas de réseau.
+   Deux classes, et non une : « .html-postit-actions button » pose déjà un
+   « display: flex » d'un poids supérieur à un simple « .btn-onglet-postit »,
+   et le bouton se montrait sur tous les post-its. */
+.html-postit .btn-onglet-postit { display: none; }
+.html-postit.en-web .btn-onglet-postit { display: flex; }

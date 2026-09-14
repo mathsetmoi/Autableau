@@ -35171,3 +35171,57 @@ registerPlugin('classPointsTool', 'Outils Profs', {
 
     edit: function () { this.ouvrir(); }
 });
+
+// ==================================================================
+// UNE FENÊTRE WEB SUR LE TABLEAU : GEOGEBRA, PYTHON, ET LE RESTE
+//
+// « Avoir la possibilité d'importer des applets GeoGebra serait top ! Sur leur
+// site ils proposent des morceaux de code à intégrer pour pouvoir importer
+// directement des fenêtres geogebra à l'intérieur d'un site et c'est pas très
+// compliqué. De même, l'intégration de codes python serait incroyable ! Je me
+// dis qu'un iframe d'un site comme "basthon" pourrait faire l'affaire ! »
+//
+// Deux raccourcis pour les deux dont on se sert tous les jours, et un champ
+// où coller ce que le site donne — un bloc « <iframe … > », le script
+// « deployggb.js », ou une simple adresse. La fenêtre qui en sort est un
+// post-it comme les autres : elle se déplace, se redimensionne, s'attache au
+// tableau ou se fixe à l'écran, se réduit, se ferme, et traverse une
+// sauvegarde. C'est ce qui a permis de n'ajouter ici qu'un bouton.
+// ==================================================================
+registerPlugin('webWindowTool', 'Outils Profs', {
+    init: function () {
+        const grid = document.getElementById('plugins-grid'); if (!grid) return;
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.id = 'btn-fenetre-web';
+        btn.title = 'Fenêtre web : GeoGebra, Python…';
+        btn.innerHTML = `<svg viewBox="0 0 24 24" class="stroke-icon" fill="none" stroke="currentColor"`
+            + ` stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`
+            + `<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/></svg>`;
+        grid.appendChild(btn);
+        btn.addEventListener('click', (e) => { e.stopPropagation(); this.ouvrir(); });
+    },
+
+    ouvrir: function () {
+        const prets = (typeof FENETRES_TOUTES_PRETES !== 'undefined') ? FENETRES_TOUTES_PRETES : {};
+        openCustomPrompt('Fenêtre web', [
+            { type: 'select', label: 'Ce qu\'on ouvre', value: 'geogebra', options: [
+                { value: 'geogebra', label: 'GeoGebra' },
+                { value: 'python', label: 'Python (console Basthon)' },
+                { value: 'colle', label: 'Coller un code ou une adresse' }
+            ] },
+            { type: 'text', label: 'Code « iframe » ou adresse (pour « coller »)',
+              value: '', placeholder: '<iframe src="https://www.geogebra.org/material/iframe/id/…"' }
+        ], null, (res) => {
+            const quoi = res[0];
+            if (quoi !== 'colle') {
+                const p = prets[quoi];
+                if (p) ouvrirUneFenetreWeb(p.url, { titre: p.titre });
+                return;
+            }
+            ouvrirUneFenetreWeb(res[1]);
+        });
+    },
+
+    edit: function () { this.ouvrir(); }
+});
