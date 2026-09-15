@@ -35512,3 +35512,69 @@ registerPlugin('webWindowTool', 'Outils Profs', {
 
     edit: function () { this.ouvrir(); }
 });
+
+// ==================================================================
+// PYTHON SUR LE TABLEAU
+//
+// « On pourrait envisager un compilateur Python inline ? »
+//
+// La console Basthon dans un cadre marchait — mais c'est un autre site : le
+// programme écrit devant la classe ne part pas avec la séance, et une salle
+// dont le pare-feu bloque basthon.fr n'a plus rien. Ici le programme
+// s'exécute DANS la page, et le post-it qui le porte s'enregistre avec le
+// tableau. Le moteur, lui, se télécharge à la demande : « je ne veux pas les
+// embarquer hors ligne, ça fait trop gros. »
+//
+// TROIS DÉPARTS TOUT FAITS, parce qu'une fenêtre vide devant vingt-cinq
+// élèves coûte une minute de frappe : une boucle, une fonction, un tirage au
+// sort. On les efface d'un Ctrl+A ; c'est plus rapide que de les écrire.
+// ==================================================================
+const DEPARTS_PYTHON = {
+    vide: { nom: 'Fenêtre vide', code: '' },
+    boucle: {
+        nom: 'Une boucle',
+        code: 'for i in range(1, 11):\n    print(i, "x 7 =", i * 7)\n'
+    },
+    fonction: {
+        nom: 'Une fonction',
+        code: 'def aire_du_disque(r):\n    return 3.14159 * r ** 2\n\n'
+            + 'for rayon in [1, 2, 5]:\n    print(rayon, "cm ->", round(aire_du_disque(rayon), 2), "cm2")\n'
+    },
+    hasard: {
+        nom: 'Un tirage au sort',
+        code: 'import random\n\nfaces = [random.randint(1, 6) for _ in range(20)]\n'
+            + 'print("Les 20 lancers :", faces)\n'
+            + 'for f in range(1, 7):\n    print(f, ":", faces.count(f), "fois")\n'
+    }
+};
+
+registerPlugin('pythonTool', 'Outils Profs', {
+    init: function () {
+        const grid = document.getElementById('plugins-grid'); if (!grid) return;
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.id = 'btn-python';
+        btn.title = 'Python : écrire et exécuter un programme';
+        btn.innerHTML = `<svg viewBox="0 0 24 24" class="stroke-icon" fill="none" stroke="currentColor"`
+            + ` stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`
+            + `<polyline points="8 7 4 12 8 17"/><polyline points="16 7 20 12 16 17"/>`
+            + `<line x1="13" y1="5" x2="11" y2="19"/></svg>`;
+        grid.appendChild(btn);
+        btn.addEventListener('click', (e) => { e.stopPropagation(); this.ouvrir(); });
+    },
+
+    ouvrir: function () {
+        const options = Object.keys(DEPARTS_PYTHON)
+            .map(cle => ({ value: cle, label: DEPARTS_PYTHON[cle].nom }));
+        openCustomPrompt('Python', [
+            { type: 'select', label: 'Par quoi commencer', value: 'boucle', options }
+        ], null, (res) => {
+            const depart = DEPARTS_PYTHON[res[0]] || DEPARTS_PYTHON.vide;
+            if (typeof ouvrirUneFenetrePython === 'function') {
+                ouvrirUneFenetrePython({ code: depart.code });
+            }
+        });
+    },
+
+    edit: function () { this.ouvrir(); }
+});

@@ -29602,6 +29602,15 @@ function renderHtmlPostits() {
                 <textarea class="html-postit-body"></textarea>
                 <div class="html-postit-liste"></div>
                 <div class="html-postit-web"></div>
+                <div class="html-postit-python">
+                    <textarea class="py-code" spellcheck="false"
+                        placeholder="# Votre programme\nfor i in range(3):\n    print(i)"></textarea>
+                    <div class="py-commandes">
+                        <button class="py-lancer" type="button">▶ Exécuter</button>
+                        <span class="py-etat"></span>
+                    </div>
+                    <pre class="py-sortie"></pre>
+                </div>
             `;
             el.style.backgroundColor = p.bg;
             container.appendChild(el);
@@ -29761,17 +29770,22 @@ function renderHtmlPostits() {
                 // l'écran, se réduire, se fermer, et traverser une sauvegarde :
                 // une fenêtre web n'a besoin de rien d'autre.
                 const surLeWeb = o.mode === 'web';
-                const enListe = !surLeWeb && o.mode === 'liste';
+                const enPython = o.mode === 'python';
+                const enListe = !surLeWeb && !enPython && o.mode === 'liste';
                 el.classList.toggle('en-liste', enListe);
                 el.classList.toggle('en-web', surLeWeb);
-                body.style.display = (enListe || surLeWeb) ? 'none' : '';
+                el.classList.toggle('en-python', enPython);
+                body.style.display = (enListe || surLeWeb || enPython) ? 'none' : '';
                 liste.style.display = enListe ? '' : 'none';
                 const cadre = el.querySelector('.html-postit-web');
                 if (cadre) cadre.style.display = surLeWeb ? '' : 'none';
+                const py = el.querySelector('.html-postit-python');
+                if (py) py.style.display = enPython ? '' : 'none';
                 el.querySelector('.btn-liste-postit').title = enListe
                     ? 'Revenir à la note libre' : 'Transformer en liste à cocher';
                 if (enListe) peindreListe(focusIdx);
                 if (surLeWeb) majLaFenetreWeb(el, o);
+                if (enPython) majLaFenetrePython(el, o);
                 majAvancement(o);
             };
 
@@ -29799,6 +29813,68 @@ function renderHtmlPostits() {
             });
 
             el._postitAppliquerMode = appliquerMode;      // relu à chaque rendu
+
+            // LE PROGRAMME S'ÉCRIT ET S'EXÉCUTE ICI. Le code part avec le
+            // tableau — c'est tout l'intérêt sur le cadre d'un autre site :
+            // ce qu'on a tapé devant la classe est encore là la semaine
+            // suivante. La sortie aussi : on rouvre la séance et le résultat
+            // est sous le programme, sans avoir à relancer.
+            const champCode = el.querySelector('.py-code');
+            const boutonPy = el.querySelector('.py-lancer');
+            const etatPy = el.querySelector('.py-etat');
+            const sortiePy = el.querySelector('.py-sortie');
+
+            champCode.addEventListener('input', () => {
+                const o = htmlPostits.find(hp => hp.id === p.id); if (!o) return;
+                o.code = champCode.value;
+                clearTimeout(el._pySauve);
+                el._pySauve = setTimeout(() => saveState(), 600);
+            });
+            // LA TABULATION INDENTE, elle ne saute pas au bouton suivant. En
+            // Python l'indentation EST la syntaxe : sans cela on écrit une
+            // boucle et l'on sort du champ au moment de lui donner un corps.
+            champCode.addEventListener('keydown', (e) => {
+                if (e.key !== 'Tab' || e.ctrlKey || e.altKey) return;
+                e.preventDefault();
+                const d = champCode.selectionStart, f = champCode.selectionEnd;
+                champCode.value = champCode.value.slice(0, d) + '    ' + champCode.value.slice(f);
+                champCode.selectionStart = champCode.selectionEnd = d + 4;
+                champCode.dispatchEvent(new Event('input'));
+            });
+
+            const lancerLeProgramme = async () => {
+                const o = htmlPostits.find(hp => hp.id === p.id); if (!o) return;
+                o.code = champCode.value;
+                boutonPy.disabled = true;
+                etatPy.textContent = (typeof window.__BRYTHON__ === 'undefined')
+                    ? 'Chargement de Python…' : 'Calcul…';
+                sortiePy.classList.remove('py-rate');
+                const r = await executerDuPython(o.code);
+                boutonPy.disabled = false;
+                etatPy.textContent = '';
+                if (r.reseau) {
+                    // LE SEUL MORCEAU DE L'APPLICATION QUI DEMANDE LE RÉSEAU.
+                    // On le dit, au lieu de laisser une fenêtre qui ne répond
+                    // pas : dans une salle sans wifi, c'est une information,
+                    // pas une panne.
+                    o.sortie = 'Python n’a pas pu être chargé.\n'
+                        + 'Cette fenêtre est la seule qui demande une connexion :\n'
+                        + 'le moteur se télécharge une fois, puis le navigateur le garde.';
+                    sortiePy.classList.add('py-rate');
+                } else {
+                    o.sortie = r.sortie + (r.erreur ? (r.sortie ? '\n' : '') + r.erreur : '');
+                    if (r.erreur) sortiePy.classList.add('py-rate');
+                    if (!o.sortie) o.sortie = '(le programme n’a rien affiché)';
+                }
+                sortiePy.textContent = o.sortie;
+                saveState();
+            };
+            boutonPy.addEventListener('click', lancerLeProgramme);
+            el._pyLancer = lancerLeProgramme;
+            // Ctrl+Entrée : le geste de tous les carnets de code.
+            champCode.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); lancerLeProgramme(); }
+            });
 
             // UN CADRE PEUT RESTER BLANC — un site qui refuse d'être encadré,
             // une salle sans réseau — et l'on ne peut rien y faire depuis la
@@ -29899,6 +29975,9 @@ function renderHtmlPostits() {
                 if (o.mode === 'liste') {
                     return (o.taches || []).map(t => (t.fait ? '✔ ' : '') + (t.t || '')).join('\n');
                 }
+                // C'est le PROGRAMME qu'on recopie d'un tableau à l'autre, pas
+                // la note libre restée vide derrière lui.
+                if (o.mode === 'python') return o.code || '';
                 return body.value || '';
             };
 
@@ -29943,6 +30022,20 @@ function renderHtmlPostits() {
 
             const ajouterDuTexte = (texte) => {
                 const o = htmlPostits.find(hp => hp.id === p.id); if (!o) return;
+                // DU CODE NE SE « NETTOIE » PAS. « lignesPropres » rogne les
+                // blancs de début de ligne et jette les lignes vides : sur du
+                // Python, cela revient à coller un programme dont toutes les
+                // boucles ont perdu leur corps. On garde le texte tel quel.
+                if (o.mode === 'python') {
+                    const brut = String(texte).replace(/\r\n?/g, '\n');
+                    if (!brut.trim()) return;
+                    const champ = el.querySelector('.py-code');
+                    o.code = (o.code ? o.code.replace(/\s*$/, '') + '\n' : '') + brut;
+                    if (champ) champ.value = o.code;
+                    saveState();
+                    if (typeof showToast === 'function') showToast('📋 Programme collé');
+                    return;
+                }
                 const lignes = lignesPropres(texte);
                 if (!lignes.length) return;
                 if (o.mode === 'liste') {
@@ -30115,7 +30208,8 @@ function renderHtmlPostits() {
         if (el._postitMajTitre) el._postitMajTitre(p);
         if (el._postitMajAncre) el._postitMajAncre(p);
 
-        const modeVoulu = (p.mode === 'liste' || p.mode === 'web') ? p.mode : 'texte';
+        const modeVoulu = (p.mode === 'liste' || p.mode === 'web' || p.mode === 'python')
+            ? p.mode : 'texte';
         if (el.dataset.modeAffiche !== modeVoulu && el._postitAppliquerMode) {
             el.dataset.modeAffiche = modeVoulu;
             el._postitAppliquerMode(p);
@@ -30123,6 +30217,7 @@ function renderHtmlPostits() {
         // L'adresse peut changer sans que le mode change : on la suit à part,
         // et « majLaFenetreWeb » ne recharge que si elle a vraiment bougé.
         if (modeVoulu === 'web') majLaFenetreWeb(el, p);
+        if (modeVoulu === 'python') majLaFenetrePython(el, p);
 
         el.style.zIndex = p.z || 10;
     });
@@ -30261,6 +30356,253 @@ function ouvrirUneFenetreWeb(code, options) {
     return fenetre;
 }
 window.ouvrirUneFenetreWeb = ouvrirUneFenetreWeb;
+
+// ==============================================================================
+// PYTHON DANS LE TABLEAU, SANS SORTIR DU TABLEAU
+//
+// « On pourrait envisager un compilateur Python inline ? »
+//
+// La console Basthon dans un cadre marchait, mais c'est un autre site : on y
+// perd le copier-coller vers le tableau, le code ne part pas avec la séance, et
+// une salle dont le pare-feu bloque basthon.fr n'a plus rien. Ici, le programme
+// s'exécute DANS la page, et le post-it qui le porte s'enregistre avec le reste.
+//
+// LE MOTEUR EST BRYTHON, et il n'est PAS embarqué : « je ne veux pas les
+// embarquer hors ligne, ça fait trop gros ; quand on le charge, on appelle les
+// CDN. » C'est la seule pièce de l'application qui demande le réseau, et elle
+// le demande une fois par navigateur — ensuite le cache s'en charge. On le dit
+// franchement quand il manque, plutôt que de laisser une fenêtre morte.
+//
+// ET ON NE CHARGE QUE CE QU'ON UTILISE : le moteur seul fait 1,3 Mo et suffit
+// aux boucles, aux fonctions, aux classes et aux f-strings ; la bibliothèque
+// standard en fait 4,8 de plus et n'est appelée que si le programme écrit
+// « import ». Un premier cours sans import démarre donc quatre fois plus vite.
+// ==============================================================================
+const PYTHON_CDN = 'https://cdn.jsdelivr.net/npm/brython@3.14.3/';
+const PYTHON_MOTEUR = PYTHON_CDN + 'brython.min.js';
+const PYTHON_BIBLIOTHEQUE = PYTHON_CDN + 'brython_stdlib.js';
+
+// Les chargements en cours, pour que deux fenêtres ouvertes en même temps ne
+// téléchargent pas deux fois la même chose.
+const scriptsEnRoute = new Map();
+
+function chargerUnScript(url) {
+    if (scriptsEnRoute.has(url)) return scriptsEnRoute.get(url);
+    const promesse = new Promise((ok, non) => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.async = true;
+        s.addEventListener('load', () => ok(true));
+        s.addEventListener('error', () => {
+            // Un script qui a échoué doit pouvoir être redemandé : le réseau
+            // revient, et l'on ne va pas condamner la fenêtre pour la séance.
+            scriptsEnRoute.delete(url);
+            s.remove();
+            non(new Error('chargement impossible : ' + url));
+        });
+        document.head.appendChild(s);
+    });
+    scriptsEnRoute.set(url, promesse);
+    return promesse;
+}
+window.chargerUnScript = chargerUnScript;
+
+// « import » quelque part dans le programme : c'est le seul indice dont on
+// dispose avant de l'exécuter, et il suffit. Un faux positif coûte un
+// téléchargement de plus ; un faux négatif coûterait un « ImportError » que
+// personne ne comprendrait.
+function leCodeImporte(code) {
+    return /(^|\n)\s*(import\s+\w|from\s+[\w.]+\s+import)/.test(String(code || ''));
+}
+window.leCodeImporte = leCodeImporte;
+
+let pythonPret = null;
+
+function preparerPython(avecLaBibliotheque) {
+    const besoin = !!avecLaBibliotheque;
+    // Déjà prêt, et assez complet pour ce qu'on demande.
+    if (pythonPret && (pythonPret.complet || !besoin)) return pythonPret.promesse;
+    const promesse = chargerUnScript(PYTHON_MOTEUR)
+        .then(() => besoin ? chargerUnScript(PYTHON_BIBLIOTHEQUE) : true)
+        .then(() => {
+            if (typeof window.brython !== 'function') throw new Error('moteur Python illisible');
+            // « ids: [] » : on ne veut pas que Brython parte chercher les
+            // balises « text/python » de la page — il n'y en a pas, et nos
+            // programmes passent par « runPythonSource ».
+            if (!window.__BRYTHON__ || !window.__BRYTHON__.$brython_lance) {
+                window.brython({ debug: 0, ids: [] });
+                if (window.__BRYTHON__) window.__BRYTHON__.$brython_lance = true;
+            }
+            return true;
+        });
+    pythonPret = { promesse, complet: besoin };
+    promesse.catch(() => { pythonPret = null; });   // on pourra réessayer
+    return promesse;
+}
+window.preparerPython = preparerPython;
+
+// LE NOM DU MODULE DEVIENT UN IDENTIFIANT JAVASCRIPT chez Brython : un nom
+// contenant « < » ou un tiret casse la compilation avec une erreur de syntaxe
+// JavaScript que rien, dans le programme de l'élève, n'explique.
+let numeroDExecution = 0;
+
+// LA SORTIE SE RAMASSE EN REDÉFINISSANT « print », et elle s'écrit dans un
+// tableau de la PAGE, au fur et à mesure.
+//
+// Deux fausses pistes ont précédé celle-ci, et valent d'être dites :
+//   — « import sys » puis détournement de « sys.stdout » : sans la
+//     bibliothèque standard — c'est-à-dire pour tout programme qui n'importe
+//     rien, justement celui qu'on voulait servir vite — Brython n'a pas de
+//     « sys » et va chercher un fichier local que le navigateur lui refuse ;
+//   — relire une variable du module après coup : ce que « runPythonSource »
+//     rend n'expose pas les noms du module comme des propriétés JavaScript.
+//
+// Le pont « from browser import window », lui, vit dans le moteur et non dans
+// la bibliothèque : il répond toujours. Et comme on écrit au fil de
+// l'exécution, ce qui a été affiché AVANT une erreur est gardé — c'est la
+// moitié de ce qu'on regarde quand on cherche où un programme s'arrête.
+//
+// Un nom défini au niveau du module masque le « print » natif, y compris dans
+// les fonctions que le programme définit ensuite.
+//
+// « input » est masqué lui aussi, pour une autre raison : le « input » natif
+// de Brython ouvre une boîte du NAVIGATEUR. Ces boîtes-là sont bannies de
+// toute l'application — elles n'ont ni notre habillage ni le mode nuit, et sur
+// vidéoprojecteur elles s'affichent avec l'adresse du site en gros. On répond
+// donc par une erreur qui dit quoi faire à la place.
+const PYTHON_CAPTURE = [
+    'from browser import window as _autableau_page',
+    '_autableau_sortie = _autableau_page.SORTIE_PYTHON',
+    'def print(*valeurs, sep=" ", end="\\n"):',
+    '    _autableau_sortie.push(sep.join([str(v) for v in valeurs]) + end)',
+    'def input(invite=""):',
+    '    raise RuntimeError("Cette fenêtre ne lit pas le clavier pendant qu\'un '
+        + 'programme tourne. Donnez la valeur dans le programme, par exemple : n = 7")',
+    ''
+].join('\n');
+
+// Ce que le programme a écrit, et dont on sait combien de lignes de capture le
+// précèdent : un message d'erreur qui annonce « ligne 34 » sur un programme de
+// six lignes ne renseigne personne.
+const PYTHON_LIGNES_DE_CAPTURE = PYTHON_CAPTURE.split('\n').length - 1;
+
+// Ce que Brython lève n'est pas une erreur JavaScript : c'est un objet Python.
+// Sans cette lecture, l'élève voyait « [object Object] » à la place de
+// « ZeroDivisionError: division by zero ».
+function direLErreurPython(e) {
+    if (!e) return 'Erreur inconnue';
+    // C'EST « repr » QUI SAIT LE NOM. L'objet levé par Brython ne porte pas sa
+    // classe en clair — ni « __class__.$infos », ni « constructor.name », on a
+    // essayé les deux — mais « repr(e) » rend exactement
+    // « ZeroDivisionError('division by zero') ». Or « ZeroDivisionError » est
+    // précisément le mot qu'on apprend à chercher : sans lui, l'élève lit
+    // « division by zero » sans savoir de quelle famille d'erreur il s'agit.
+    let classe = '', dit = '';
+    try {
+        const r = String(window.__BRYTHON__.builtins.repr(e));
+        const m = r.match(/^([A-Za-z_][\w.]*)\((.*)\)$/s);
+        if (m) {
+            classe = m[1];
+            dit = m[2].replace(/^(['"])([\s\S]*)\1$/, '$2');
+        } else { dit = r; }
+    } catch (x) { /* on retombe sur « args » juste dessous */ }
+    if (!dit) { try { dit = e.args !== undefined ? String(e.args) : ''; } catch (x) { dit = ''; } }
+    if (!dit) { try { dit = String(e.message || e); } catch (x) { dit = ''; } }
+    // LA LIGNE FAUTIVE, RENDUE AU PROGRAMME. Brython compte à partir de la
+    // première ligne de ce qu'on lui a donné — préambule de capture compris.
+    // Sans cette soustraction, une erreur de la première ligne du programme
+    // s'annonçait à la septième, dans un texte que l'élève n'a jamais écrit.
+    let ligne = null;
+    try {
+        let brut = NaN;
+        if (e.lineno !== undefined && e.lineno !== null) brut = Number(e.lineno);
+        else if (e.__traceback__ && e.__traceback__.tb_lineno !== undefined) {
+            // Une erreur d'exécution ne porte pas sa ligne : c'est sa trace
+            // qui l'a, et l'on descend jusqu'au dernier appel — celui qui a
+            // vraiment échoué, et non celui qui a lancé le programme.
+            let t = e.__traceback__;
+            while (t && t.tb_next) t = t.tb_next;
+            brut = Number(t.tb_lineno);
+        }
+        if (Number.isFinite(brut)) {
+            const vraie = brut - PYTHON_LIGNES_DE_CAPTURE;
+            if (vraie >= 1) ligne = vraie;
+        }
+    } catch (x) { ligne = null; }
+    return (classe ? classe + ' : ' : '') + dit + (ligne ? '\n(ligne ' + ligne + ')' : '');
+}
+
+// Le contenu de la fenêtre, redessiné. On ne réécrit PAS le champ pendant
+// qu'on y tape : c'est la règle de tous les champs de cette application, et
+// celle-ci se redessine à chaque coup de molette sur le tableau.
+function majLaFenetrePython(el, o) {
+    const code = el.querySelector('.py-code');
+    const sortie = el.querySelector('.py-sortie');
+    if (!code || !sortie) return;
+    if (document.activeElement !== code && code.value !== (o.code || '')) {
+        code.value = o.code || '';
+    }
+    if (sortie.textContent !== (o.sortie || '')) sortie.textContent = o.sortie || '';
+}
+window.majLaFenetrePython = majLaFenetrePython;
+
+// OUVRIR UNE FENÊTRE PYTHON. Un post-it de plus, avec son mode à lui : il se
+// déplace, se redimensionne, s'attache au tableau ou se fixe à l'écran, se
+// réduit, se ferme et traverse une sauvegarde — rien de tout cela n'est à
+// réécrire ici.
+function ouvrirUneFenetrePython(options) {
+    const opts = options || {};
+    const l = 520, h = 420;
+    const ech = zoom || 1;
+    const fenetre = {
+        id: nextId++,
+        x: (window.innerWidth / 2 - panX) / ech - (l / ech) / 2,
+        y: (window.innerHeight / 2 - panY) / ech - (h / ech) / 2,
+        w: l / ech, h: h / ech,
+        mode: 'python',
+        titre: opts.titre || 'Python',
+        code: opts.code || '', sortie: '',
+        content: '', bg: '#ffffff', minimized: false,
+        ancre: 'tableau', z: globalZ++
+    };
+    htmlPostits.push(fenetre);
+    saveState();
+    if (typeof renderHtmlPostits === 'function') renderHtmlPostits();
+    // ON PRÉPARE LE MOTEUR SANS ATTENDRE QU'ON CLIQUE. Le temps d'écrire trois
+    // lignes, il est là : le premier « Exécuter » ne fait plus patienter la
+    // classe. Un échec ici ne dit rien — on le dira au moment d'exécuter.
+    preparerPython(false).catch(() => { /* on réessaiera à l'exécution */ });
+    if (typeof showToast === 'function') showToast('🐍 Python est sur le tableau');
+    return fenetre;
+}
+window.ouvrirUneFenetrePython = ouvrirUneFenetrePython;
+
+// EXÉCUTER. Rend « { sortie, erreur } » — jamais une exception : un programme
+// d'élève a le droit de planter, c'est même ce qu'on lui apprend à lire.
+async function executerDuPython(code) {
+    const source = String(code || '');
+    try {
+        await preparerPython(leCodeImporte(source));
+    } catch (e) {
+        return { sortie: '', erreur: null, reseau: true };
+    }
+    numeroDExecution++;
+    window.SORTIE_PYTHON = [];
+    const relire = () => {
+        try { return (window.SORTIE_PYTHON || []).map(m => String(m)).join(''); }
+        catch (x) { return ''; }
+    };
+    try {
+        window.__BRYTHON__.runPythonSource(
+            PYTHON_CAPTURE + source, 'autableau_' + numeroDExecution);
+        return { sortie: relire(), erreur: null };
+    } catch (e) {
+        // Ce qui a été imprimé AVANT l'erreur est déjà dans la pile : on écrit
+        // au fil de l'exécution, précisément pour ne pas le perdre ici.
+        return { sortie: relire(), erreur: direLErreurPython(e) };
+    }
+}
+window.executerDuPython = executerDuPython;
 
 function formatTime(seconds) {
     if (isNaN(seconds)) return "0:00";

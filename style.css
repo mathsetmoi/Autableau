@@ -10458,6 +10458,105 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
 .html-postit.en-web .btn-onglet-postit { display: flex; }
 
 /* ===========================================================
+   LA FENÊTRE PYTHON
+   « On pourrait envisager un compilateur Python inline ? » Le
+   programme en haut, le bouton au milieu, ce qu'il affiche en
+   bas — c'est la disposition de tous les carnets de code, et
+   elle se lit de loin, ce qui est le critère ici : un élève du
+   fond doit voir la ligne qui a produit le résultat.
+   =========================================================== */
+.html-postit-python {
+    display: none;
+    flex-direction: column;
+    flex-grow: 1;
+    min-height: 0;
+    background: #ffffff;
+    overflow: hidden;
+}
+
+.html-postit.en-python .html-postit-python { display: flex; }
+.html-postit.en-python.minimized .html-postit-python { display: none; }
+
+/* Le programme et sa sortie se partagent la hauteur : deux tiers pour ce
+   qu'on écrit, un tiers pour ce qu'il répond — et chacun garde un minimum,
+   sinon une longue sortie écrasait le code jusqu'à le rendre illisible. */
+.html-postit-python .py-code {
+    flex: 2 1 0;
+    min-height: 60px;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 10px 12px;
+    background: #1e1e28;
+    color: #f2f2f7;
+    /* Une chasse fixe : en Python, l'indentation EST la syntaxe, et deux
+       lignes décalées d'un espace doivent se voir décalées. */
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 14px;
+    line-height: 1.45;
+    tab-size: 4;
+    white-space: pre;
+    overflow: auto;
+}
+
+.html-postit-python .py-code::placeholder { color: #6c6a80; }
+
+.html-postit-python .py-commandes {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: #2a2937;
+    border-top: 1px solid #3a3850;
+}
+
+.html-postit-python .py-lancer {
+    border: none;
+    border-radius: 6px;
+    padding: 5px 14px;
+    background: #00b894;
+    color: #062a22;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.html-postit-python .py-lancer:hover { background: #0ecfa6; }
+.html-postit-python .py-lancer:disabled { background: #4a5a58; color: #9aa; cursor: progress; }
+
+.html-postit-python .py-etat {
+    font-size: 11.5px;
+    color: #b9b7cc;
+}
+
+.html-postit-python .py-sortie {
+    flex: 1 1 0;
+    min-height: 44px;
+    margin: 0;
+    padding: 10px 12px;
+    background: #12121a;
+    color: #d8f5e9;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 13.5px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow: auto;
+}
+
+/* Une erreur se voit SANS LA LIRE : c'est ce qu'on cherche des yeux quand un
+   programme ne fait pas ce qu'on annonçait à la classe. */
+.html-postit-python .py-sortie.py-rate { color: #ff9b8a; }
+
+/* Ce qui ne veut rien dire ici ne s'affiche pas — comme pour la fenêtre web.
+   La couleur du papier, la liste à cocher : un programme n'a pas de papier
+   jaune. Le copier-coller reste, lui : recopier un programme d'un tableau à
+   l'autre est exactement ce qu'on veut pouvoir faire. */
+.html-postit.en-python .cycle-color,
+.html-postit.en-python .btn-liste-postit,
+.html-postit.en-python .postit-avancement { display: none; }
+
+/* ===========================================================
    COMPOSER UNE BARRE D'OUTILS
    « Un menu de création de barres d'outils qui affiche une liste
    d'outils cochables et propose une localisation pour la
