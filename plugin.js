@@ -1914,8 +1914,72 @@ registerPlugin('solidTool', 'Maths - Géométrie', {
 });
 
 // 5. AXE MATHÉMATIQUE
+// ==============================================================================
+// L'AXE GRADUÉ : TROIS NIVEAUX DE TRAIT, ET DES POINTS DESSUS
+//
+// « Pour le plugin axe gradué, j'aimerais la possibilité d'avoir des couleurs
+// différentes pour les graduations (au millimètre) et milieu (et hauteurs
+// différentes) et possibilité d'ajouter des points dessus. »
+//
+// L'axe ne connaissait qu'une couleur et deux hauteurs : le trait de l'unité
+// et le petit trait du dixième, tous les deux de la teinte de l'axe. Au
+// tableau, on montre justement l'INVERSE : « où est 3,5 ? » se lit sur le
+// demi, pas sur le millimètre, et un demi de la même couleur que ses neuf
+// voisins ne se voit pas. Le trait porte donc désormais son rang :
+//
+//   l'unité   — le plus haut, la couleur de l'axe, avec son nombre écrit ;
+//   le demi   — à mi-chemin, sa propre couleur, plus court que l'unité ;
+//   le dixième — le plus court, sa propre couleur aussi.
+//
+// Et l'on pose des points dessus, parce qu'un axe sert à situer : « 3,5=A ;
+// 7=B » place deux pastilles nommées. La virgule est celle du cours, le
+// point-virgule sépare — on écrit comme on dicte.
+// ==============================================================================
+
+// UN POINT SUR L'AXE S'ÉCRIT « valeur » ou « valeur=Nom ». On sépare au
+// point-virgule et non à la virgule : la virgule est le séparateur DÉCIMAL de
+// « 3,5 », et c'est celui-là que le professeur tape.
+function pointsDeLAxe(brut) {
+    if (!brut) return [];
+    return String(brut).split(';').map(bout => {
+        const t = bout.trim();
+        if (!t) return null;
+        const eg = t.indexOf('=');
+        const nombre = (eg >= 0 ? t.slice(0, eg) : t).trim().replace(',', '.');
+        const nom = eg >= 0 ? t.slice(eg + 1).trim() : '';
+        const val = parseFloat(nombre);
+        return Number.isFinite(val) ? { val, nom } : null;
+    }).filter(Boolean);
+}
+window.pointsDeLAxe = pointsDeLAxe;
+
 registerPlugin('axeTool', 'Maths - Numérique', {
     currentStamp: null, currentArgs: null,
+    champs: function (args) {
+        const a = args || [];
+        // UN AXE ENREGISTRÉ HIER N'A QUE SIX RÉGLAGES. Les trois derniers sont
+        // nés aujourd'hui : sans ce repli, rouvrir un ancien axe le repeindrait
+        // en noir sur noir et perdrait ses points.
+        const couleur = a[5] || "#2d3436";
+        return [
+            { type: 'number', label: "Min", value: a[0] !== undefined ? a[0] : "0" },
+            { type: 'number', label: "Max", value: a[1] !== undefined ? a[1] : "10" },
+            { type: 'number', label: "Pas", value: a[2] !== undefined ? a[2] : "1" },
+            {
+                type: 'select', label: "Graduations", value: a[3] || "no", options: [
+                    { value: 'no', label: 'Aucune' },
+                    { value: 'mid', label: 'Les milieux seulement' },
+                    { value: 'yes', label: 'Milieux et millimètres' }
+                ]
+            },
+            { type: 'select', label: "Flèches", value: a[4] || "right", options: [{ value: 'right', label: 'À droite' }, { value: 'both', label: 'Des deux côtés' }] },
+            { type: 'color', label: "Couleur de l'axe", value: couleur },
+            { type: 'color', label: "Couleur des milieux", value: a[6] || couleur },
+            { type: 'color', label: "Couleur des millimètres", value: a[7] || couleur },
+            { type: 'text', label: "Points (3,5=A ; 7=B)", value: a[8] || "" },
+            { type: 'color', label: "Couleur des points", value: a[9] || "#d63031" }
+        ];
+    },
     init: function () {
         const btn = document.createElement('button'); btn.className = 'btn'; btn.dataset.mode = 'axe_math'; btn.title = 'Axe Mathématique';
         btn.innerHTML = `<svg viewBox="0 0 24 24" class="stroke-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="12" x2="22" y2="12"></line><line x1="6" y1="8" x2="6" y2="16"></line><line x1="12" y1="8" x2="12" y2="16"></line><line x1="18" y1="8" x2="18" y2="16"></line><polygon points="22,12 18,9 18,15" fill="currentColor"/></svg>`;
@@ -1923,44 +1987,72 @@ registerPlugin('axeTool', 'Maths - Numérique', {
 
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('#bar-tools .btn, #bar-plugins .btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); setMode('axe_math');
-            openCustomPrompt("Axe Mathématique", [
-                { type: 'number', label: "Min", value: "0" }, { type: 'number', label: "Max", value: "10" }, { type: 'number', label: "Pas", value: "1" },
-                { type: 'select', label: "Graduations", value: "no", options: [{ value: 'no', label: 'Non' }, { value: 'yes', label: 'Oui (Millimètres)' }] },
-                { type: 'select', label: "Flèches", value: "right", options: [{ value: 'right', label: 'À droite' }, { value: 'both', label: 'Des deux côtés' }] },
-                { type: 'color', label: "Couleur", value: "#2d3436" }
-            ], (res) => this.generateSVG(res[0], res[1], res[2], res[3], res[4], res[5]),
-                (res) => { createStampFromSVG(this.generateSVG(res[0], res[1], res[2], res[3], res[4], res[5], true), (stamp) => { this.currentStamp = stamp; this.currentArgs = res; showToast("📌 Tamponnez l'axe !"); }); });
+            openCustomPrompt("Axe Mathématique", this.champs(),
+                (res) => this.generateSVG(res),
+                (res) => { createStampFromSVG(this.generateSVG(res, true), (stamp) => { this.currentStamp = stamp; this.currentArgs = res; showToast("📌 Tamponnez l'axe !"); }); });
             e.stopPropagation();
         });
     },
     edit: function (imgObj) {
-        const args = imgObj.pluginData.args;
-        openCustomPrompt("Modifier l'Axe Mathématique", [
-            { type: 'number', label: "Min", value: args[0] }, { type: 'number', label: "Max", value: args[1] }, { type: 'number', label: "Pas", value: args[2] },
-            { type: 'select', label: "Graduations", value: args[3], options: [{ value: 'no', label: 'Non' }, { value: 'yes', label: 'Oui' }] },
-            { type: 'select', label: "Flèches", value: args[4], options: [{ value: 'right', label: 'À droite' }, { value: 'both', label: 'Des deux côtés' }] },
-            { type: 'color', label: "Couleur", value: args[5] }
-        ], (res) => this.generateSVG(res[0], res[1], res[2], res[3], res[4], res[5]),
-            (res) => { createStampFromSVG(this.generateSVG(res[0], res[1], res[2], res[3], res[4], res[5], true), (stamp) => { imgObj.src = stamp.src; imgObj.w = stamp.w; imgObj.h = stamp.h; imgObj.cw = stamp.w; imgObj.ch = stamp.h; imgObj.pluginData.args = res; draw(); saveState(); }); });
+        openCustomPrompt("Modifier l'Axe Mathématique", this.champs(imgObj.pluginData.args),
+            (res) => this.generateSVG(res),
+            (res) => { createStampFromSVG(this.generateSVG(res, true), (stamp) => { imgObj.src = stamp.src; imgObj.w = stamp.w; imgObj.h = stamp.h; imgObj.cw = stamp.w; imgObj.ch = stamp.h; imgObj.pluginData.args = res; draw(); saveState(); }); });
     },
-    generateSVG: function (minStr, maxStr, stepStr, hasSub, arrows, color, isExport = false) {
-        let min = parseFloat(minStr) || 0; let max = parseFloat(maxStr) || 10; let step = parseFloat(stepStr) || 1; if (step <= 0) step = 1; if (max <= min) max = min + step;
-        const w = isExport ? 900 : 400, h = isExport ? 100 : 60, mX = isExport ? 40 : 20, y = h / 2;
+    generateSVG: function (res, isExport = false) {
+        res = res || [];
+        let min = parseFloat(res[0]) || 0; let max = parseFloat(res[1]) || 10; let step = parseFloat(res[2]) || 1;
+        if (step <= 0) step = 1; if (max <= min) max = min + step;
+        const gradins = res[3] || 'no';
+        const arrows = res[4] || 'right';
+        const color = res[5] || '#2d3436';
+        const couleurMilieu = res[6] || color;
+        const couleurMm = res[7] || color;
+        const points = pointsDeLAxe(res[8]);
+        const couleurPoints = res[9] || '#d63031';
+
+        // Les points s'écrivent AU-DESSUS de l'axe : sans cette hauteur en plus,
+        // le nom du point sortait du cadre et disparaissait au tamponnage.
+        const hautDesPoints = points.length ? (isExport ? 26 : 16) : 0;
+        const w = isExport ? 900 : 400, h = (isExport ? 100 : 60) + hautDesPoints;
+        const mX = isExport ? 40 : 20, y = hautDesPoints + (isExport ? 50 : 30);
         let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${isExport ? w : '100%'}" height="${isExport ? h : '100%'}">`;
         svg += `<line x1="${mX}" y1="${y}" x2="${w - mX}" y2="${y}" stroke="${color}" stroke-width="2"/>`;
         if (arrows === 'both') svg += `<polygon points="${mX},${y} ${mX + 12},${y - 6} ${mX + 12},${y + 6}" fill="${color}"/>`;
         svg += `<polygon points="${w - mX},${y} ${w - mX - 12},${y - 6} ${w - mX - 12},${y + 6}" fill="${color}"/>`;
         const pxPerUnit = (w - (mX * 2) - 40) / (max - min); const startX = mX + 20;
-        if (hasSub === 'yes') {
-            for (let val = min; val <= max + 0.0001; val += step / 10) {
-                if (Math.abs((val - min) % step) > 0.0001) svg += `<line x1="${startX + ((val - min) * pxPerUnit)}" y1="${y - 4}" x2="${startX + ((val - min) * pxPerUnit)}" y2="${y + 4}" stroke="${color}" stroke-width="1"/>`;
+        const abscisse = (val) => startX + ((val - min) * pxPerUnit);
+
+        // ON COMPTE EN DIXIÈMES, ON N'ADDITIONNE PAS DES DIXIÈMES. « val += pas/10 »
+        // accumulait son erreur : sur un axe de 0 à 100 au pas de 3, les derniers
+        // traits dérivaient d'un pixel et le rang se lisait de travers.
+        if (gradins !== 'no') {
+            const dixiemes = Math.floor((max - min) / (step / 10) + 1e-9);
+            for (let k = 0; k <= dixiemes; k++) {
+                if (k % 10 === 0) continue;                    // c'est une unité : plus bas
+                const milieu = (k % 5 === 0);
+                if (!milieu && gradins !== 'yes') continue;    // les milieux seuls
+                const x = abscisse(min + k * (step / 10));
+                const demiHauteur = milieu ? 6 : 3;
+                svg += `<line x1="${x}" y1="${y - demiHauteur}" x2="${x}" y2="${y + demiHauteur}" stroke="${milieu ? couleurMilieu : couleurMm}" stroke-width="${milieu ? 2 : 1}"/>`;
             }
         }
-        for (let val = min; val <= max + 0.0001; val += step) {
-            const x = startX + ((val - min) * pxPerUnit);
-            svg += `<line x1="${x}" y1="${y - 8}" x2="${x}" y2="${y + 8}" stroke="${color}" stroke-width="2"/>`;
+
+        const pas = Math.floor((max - min) / step + 1e-9);
+        for (let i = 0; i <= pas; i++) {
+            const val = min + i * step;
+            const x = abscisse(val);
+            svg += `<line x1="${x}" y1="${y - 9}" x2="${x}" y2="${y + 9}" stroke="${color}" stroke-width="2"/>`;
             svg += `<text x="${x}" y="${y + 25}" font-family="sans-serif" font-weight="bold" font-size="${isExport ? 16 : 10}" fill="${color}" text-anchor="middle">${Number.isInteger(val) ? val : parseFloat(val.toFixed(2))}</text>`;
         }
+
+        // Un point hors de l'axe n'est pas un point : on ne le dessine pas dans
+        // le vide à côté de la flèche, on l'ignore.
+        points.forEach(p => {
+            if (p.val < min - 1e-9 || p.val > max + 1e-9) return;
+            const x = abscisse(p.val);
+            svg += `<circle cx="${x}" cy="${y}" r="${isExport ? 6 : 4}" fill="${couleurPoints}"/>`;
+            if (p.nom) svg += `<text x="${x}" y="${y - (isExport ? 14 : 9)}" font-family="sans-serif" font-weight="bold" font-size="${isExport ? 18 : 11}" fill="${couleurPoints}" text-anchor="middle">${echapperTexte(p.nom)}</text>`;
+        });
         return svg + `</svg>`;
     },
     onDraw: function (ctx) { if (mode === 'axe_math' && this.currentStamp && mouseLogicalPos) { ctx.globalAlpha = 0.5; ctx.drawImage(this.currentStamp.img, mouseLogicalPos.x - this.currentStamp.w / 2, mouseLogicalPos.y - this.currentStamp.h / 2); ctx.globalAlpha = 1.0; } },

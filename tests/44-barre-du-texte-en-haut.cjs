@@ -377,10 +377,15 @@ module.exports = async function (browser) {
         recouchee, { vertical: false, centree: true, enHaut: true, temoin: false });
 
     // ------------------------------------------------------------------
-    // 6. LE TIROIR DES TABLEAUX NE LAISSE PLUS DE RÉSIDU
+    // 6. LA LANGUETTE DU TIROIR DES TABLEAUX
     // « J'ai toujours un résidu de vignette de tableau à droite vers le
     // milieu. » C'était sa languette : dix-sept pixels de gris au bord droit,
-    // à mi-hauteur, qui ne disaient pas ce qu'ils étaient.
+    // à mi-hauteur, qui ne disaient pas ce qu'ils étaient. On l'avait retirée ;
+    // « tu peux remettre la flèche pour le tiroir de droite » l'a rappelée,
+    // car c'est par là qu'on ouvre ses tableaux. Elle est donc là dans les
+    // deux états — ce qu'on lui demande, c'est de se PRÉSENTER, et c'est la
+    // suite 50 qui l'éprouve. Ici, on tient seulement qu'elle ouvre et
+    // referme, et que le bord droit n'a pas d'autre résidu.
     // ------------------------------------------------------------------
     const languette = await page.evaluate(async () => {
         const t = document.querySelector('.drawer-toggle-v');
@@ -396,16 +401,16 @@ module.exports = async function (browser) {
         toggleRightDrawer();
         await new Promise(r => setTimeout(r, 450));
         return { ferme, ouvert,
-                 // Et l'on peut toujours l'ouvrir : « Mes tableaux » porte son nom.
+                 // Et l'on peut aussi l'ouvrir par « Mes tableaux », qui porte son nom.
                  autrePorte: !!document.getElementById('btn-tableaux') };
     });
-    r.egal('tiroir fermé, la languette ne traîne plus au bord droit',
-        { display: languette.ferme.display, largeur: languette.ferme.r },
-        { display: 'none', largeur: 0 });
-    r.verifie('tiroir ouvert, elle est là : c\'est la poignée qui le referme',
+    r.verifie('tiroir fermé, la languette est là pour l\'ouvrir',
+        languette.ferme.display === 'flex' && languette.ferme.r > 10,
+        JSON.stringify(languette.ferme));
+    r.verifie('tiroir ouvert, elle est là aussi : c\'est la poignée qui le referme',
         languette.ouvert.display === 'flex' && languette.ouvert.r > 0,
         JSON.stringify(languette.ouvert));
-    r.verifie('et le tiroir garde une porte qui porte son nom',
+    r.verifie('et le tiroir garde une seconde porte, qui porte son nom',
         languette.autrePorte, String(languette.autrePorte));
 
     // Plus rien ne dépasse au bord droit, à mi-hauteur : on le MESURE, au lieu

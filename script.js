@@ -17650,6 +17650,39 @@ window.annulerModePlugin = annulerModePlugin;
 // réglages ouverte. Sans appelant particulier, on repose l'outil du plugin.
 let annulerLaBoite = null;
 
+// UNE BOÎTE QUI DÉBORDE DE L'ÉCRAN N'A PLUS DE BOUTON « OK ». Elle est posée
+// à une hauteur fixe, sans ascenseur, et elle grandit avec le nombre de
+// réglages : l'axe gradué en compte dix depuis qu'il distingue l'unité, le
+// demi et le dixième. Sous cette taille-là, l'aperçu — c'est-à-dire la raison
+// d'être de cette boîte — et les deux boutons tombaient sous le bord de
+// l'écran, hors d'atteinte.
+//
+// On la remonte d'abord. Si cela ne suffit pas, ce sont les RÉGLAGES SEULS
+// qui prennent un ascenseur : l'aperçu et les boutons restent sous les yeux,
+// sinon on aurait déplacé le problème d'un cran.
+function poserLaBoiteDansLEcran() {
+    const m = document.getElementById('custom-prompt-modal');
+    const reglages = m && m.querySelector('.prompt-reglages');
+    if (!m || !reglages || !m.getClientRects().length) return;
+    reglages.style.maxHeight = '';
+    reglages.style.overflowY = '';
+    const marge = 12;
+    // Tout ce qui ne défile pas : la poignée du titre, l'aperçu, les boutons.
+    const fixe = m.offsetHeight - reglages.offsetHeight;
+    let haut = parseFloat(m.style.top);
+    if (!Number.isFinite(haut)) haut = m.getBoundingClientRect().top;
+    if (haut + m.offsetHeight > window.innerHeight - marge) {
+        haut = Math.max(marge, window.innerHeight - marge - m.offsetHeight);
+        m.style.top = haut + 'px';
+    }
+    const place = window.innerHeight - marge - haut - fixe;
+    if (reglages.offsetHeight > place) {
+        reglages.style.maxHeight = Math.max(120, place) + 'px';
+        reglages.style.overflowY = 'auto';
+    }
+}
+window.poserLaBoiteDansLEcran = poserLaBoiteDansLEcran;
+
 function openCustomPrompt(title, fields, onChange, onValidate, onCancel) {
     annulerLaBoite = onCancel || annulerModePlugin;
     document.getElementById('custom-prompt-title').innerText = title;
@@ -17836,6 +17869,8 @@ function openCustomPrompt(title, fields, onChange, onValidate, onCancel) {
         // Si onChange retourne une chaîne, on l'injecte. Si elle gère l'injection elle-même (comme pour la pyramide), initialSvg sera vide, ce qui est parfait.
         if (initialSvg && previewBox && typeof initialSvg === 'string') previewBox.innerHTML = initialSvg;
     }
+
+    poserLaBoiteDansLEcran();
 
     const btnOk = document.getElementById('custom-prompt-ok'); const btnCancel = document.getElementById('custom-prompt-cancel');
     const newBtnOk = btnOk.cloneNode(true); const newBtnCancel = btnCancel.cloneNode(true);

@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=139">
+    <link rel="stylesheet" href="style.css?v=140">
 </head>
 
 <body>
@@ -1721,8 +1721,12 @@
             style="height: 35px; background: #1e272e; color: #dfe6e9; display: flex; align-items: center; padding: 0 15px; font-size: 13px; font-weight: bold; cursor: grab; user-select: none;">
             <span id="custom-prompt-title">Titre</span>
         </div>
-        <div style="padding: 15px;">
-            <div id="custom-prompt-inputs" style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px;">
+        <div class="prompt-corps" style="padding: 15px;">
+            <!-- Seuls les RÉGLAGES défilent quand la boîte ne tient pas dans
+                 l'écran : l'aperçu et les deux boutons restent sous les yeux. -->
+            <div class="prompt-reglages">
+                <div id="custom-prompt-inputs" style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px;">
+                </div>
             </div>
             <div id="custom-prompt-preview"
                 style="width: 100%; height: 140px; background: #f1f2f6; border: 2px dashed #b2bec3; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
@@ -2507,7 +2511,7 @@
     </div>
 
     <div id="right-drawer" class="drawer">
-        <div class="drawer-toggle-v" data-title="Fichiers" onclick="toggleRightDrawer()">
+        <div class="drawer-toggle-v" data-title="Mes tableaux" onclick="toggleRightDrawer()">
             <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" id="right-chev" viewBox="0 0 24 24">
                 <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -3227,9 +3231,9 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=250"></script>
+    <script src="script.js?v=251"></script>
     <script src="pc-figures.js?v=1"></script>
-    <script src="plugin.js?v=103"></script>
+    <script src="plugin.js?v=104"></script>
     <script src="./lib/documents/documents.js?v=2"></script>
     <script src="./lib/cloud/explorateur.js?v=6"></script>
     <script src="./lib/cloud/config.js?v=1"></script>

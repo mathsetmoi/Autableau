@@ -972,7 +972,14 @@ html {
     padding: 0;
     border-radius: 8px;
     background: transparent;
-    pointer-events: auto;
+    /* PAS DE « pointer-events: auto » ICI. La grille vit toujours dans une
+       « .custom-toolbar », qui le pose déjà pour elle : la ligne était sans
+       effet le reste du temps, et désastreuse quand la barre s'efface. Le mode
+       Focus rend la barre invisible ET intouchable — « pointer-events: none » —
+       mais un enfant qui repasse à « auto » se rend le clic à lui-même. Une
+       page projetée en plein écran cachait donc vingt-deux boutons qu'on ne
+       voyait plus et qui répondaient encore : un clic sur le PDF, à l'endroit
+       où dormait l'équerre, posait l'équerre. */
 }
 
 .cwrap>.btn,
@@ -10369,16 +10376,37 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
 #bar-style.vertical .slider-container input[type="range"] { width: 52px; }
 
 /* ===========================================================
-   LE TIROIR DES TABLEAUX NE LAISSE PLUS DE RÉSIDU
+   LA LANGUETTE DU TIROIR DES TABLEAUX
    « J'ai toujours un résidu de vignette de tableau à droite vers
-   le milieu. » C'était sa languette : dix-sept pixels de gris
-   collés au bord droit, à mi-hauteur, qui ne disaient pas ce
-   qu'ils étaient. Elle ne paraît plus que lorsque le tiroir est
-   ouvert — c'est alors la poignée qu'on saisit pour le refermer.
-   Fermé, il s'ouvre par « Mes tableaux », qui porte son nom.
+   le milieu. » C'était elle : dix-sept pixels de gris collés au
+   bord, à mi-hauteur, qui ne disaient pas ce qu'ils étaient. On
+   l'a d'abord retirée — « tu peux remettre la flèche pour le
+   tiroir de droite » : c'est par là qu'on ouvre ses tableaux, et
+   passer par le menu à chaque fois coûte un geste de plus.
+   Elle revient donc, mais elle se présente : une flèche nette au
+   lieu d'un bord fantôme, la même ombre que le tiroir pour se
+   lire comme sa poignée, et son nom au survol.
    =========================================================== */
-.drawer-toggle-v { display: none; }
-#right-drawer.open .drawer-toggle-v { display: flex; }
+.drawer-toggle-v {
+    width: 18px;
+    height: 56px;
+    left: -18px;
+    color: var(--ink);
+    box-shadow: -3px 0 10px rgba(0, 0, 0, 0.08);
+}
+
+/* Une polyline sans consigne se REMPLIT de noir : le chevron paraissait en
+   pâté, ce qui n'a pas peu fait pour le prendre pour un résidu. On lui donne
+   un trait et pas de fond, c'est-à-dire une flèche. */
+.drawer-toggle-v .ico.sm {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
 
 /* ===========================================================
    LE POST-IT QUI EST UNE FENÊTRE WEB
