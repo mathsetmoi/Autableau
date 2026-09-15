@@ -1517,13 +1517,15 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(boite ? 'Tout est à l\'écran' : 'Rien à montrer : le tableau est vide');
         }
     });
-    document.getElementById('btn-fullscreen').addEventListener('click', () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => { showToast("Plein écran non supporté."); });
-        } else {
-            document.exitFullscreen();
-        }
-    });
+    // LE PLEIN ÉCRAN DU NAVIGATEUR N'A PLUS QU'UN BOUTON. « Je crois qu'il y a
+    // plusieurs plein écran. » Il y en avait deux pour CE geste-là : celui-ci,
+    // dans le tiroir du bas, et celui du coin haut droit — mis là à la demande
+    // (« un tout petit bouton vraiment collé en haut à droite »), toujours
+    // visible, et qui rendait le premier inutile. Le tiroir gardait donc une
+    // porte de plus vers une pièce qui en avait déjà une, ouverte en
+    // permanence. C'est « basculerPleinEcran », appelé par « btn-ecran-plein »
+    // plus haut, qui fait le travail, et le raccourci Ctrl+Maj+F désigne
+    // désormais ce bouton-là.
 
     // Initialisation Mode Sombre
     const darkModeBtn = document.getElementById('btn-dark-mode');
@@ -4913,7 +4915,7 @@ const RACCOURCIS_PARTOUT = [
 // table des touches simples, qui elle s'efface devant la saisie.
 const RACCOURCIS_COMBINES = [
     { touche: 'Ctrl+Maj+1 … 7', nom: 'Couleur de la palette' },
-    { touche: 'Ctrl+Maj+F', nom: 'Plein écran', bouton: ['btn-fullscreen'] },
+    { touche: 'Ctrl+Maj+F', nom: 'Plein écran', bouton: ['btn-ecran-plein'] },
     { touche: 'Ctrl+K', nom: 'Chercher une commande', bouton: ['plugin-search-btn'] },
     { touche: 'Ctrl+Maj+L', nom: 'Document en pleine page (aussi : « D »)' }
 ];
@@ -15417,9 +15419,14 @@ function majBarreDocument() {
         bPlein.style.display = unDocument ? 'inline-flex' : 'none';
         bPlein.classList.toggle('actif', etatPlein > 0);
         bPlein.classList.toggle('avec-barres', etatPlein === 2);
+        // LE MÊME MOT QUE SON JUMEAU DU COIN : les deux boutons font le même
+        // geste, ils doivent le dire pareil. « Quitter le plein écran »
+        // renvoyait au vocabulaire du plein écran du NAVIGATEUR, qui est un
+        // autre bouton — la moitié du « je crois qu'il y a plusieurs plein
+        // écran » tenait à ce mot partagé.
         bPlein.setAttribute('data-tooltip', etatPlein > 0
-            ? 'Quitter le plein écran (Échap)'
-            : 'Présenter en plein écran (D) — molette et Page↓ pour descendre dans la page');
+            ? 'Rendre la page au tableau (Échap)'
+            : 'Projeter la page en grand (D) — molette et Page↓ pour descendre dans la page');
         const icone = document.getElementById('doc-plein-ecran-icone');
         if (icone) icone.innerHTML = ICONES_PLEIN_ECRAN[etatPlein > 0 ? 2 : 0];
     }
@@ -15501,12 +15508,25 @@ const ICONES_MODE_DOC = {
 // LES TROIS TEMPS DU PLEIN ÉCRAN, chacun montrant CE QU'IL VA FAIRE :
 // les quatre coins qui s'écartent (on agrandit), la page avec ses barres
 // (on rappelle les outils), les quatre coins qui se referment (on sort).
+// PROJETER N'EST PAS AGRANDIR LA FENÊTRE, et les deux gestes ne portent plus
+// la même icône. « Je crois qu'il y a plusieurs plein écran » : les quatre
+// coins de l'agrandi servaient ici ET au plein écran du navigateur, deux
+// boutons voisins dans le coin de l'écran, indiscernables à quatorze pixels.
+// Ce geste-ci pose UNE PAGE SUR UN ÉCRAN ; les quatre coins restent à celui
+// qui agrandit vraiment la fenêtre.
 const ICONES_PLEIN_ECRAN = [
-    '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    // Projeter : la page occupe l'écran.
+    '<rect x="2" y="4" width="20" height="13" rx="2"/>'
+        + '<path d="M9 8h6v5H9z" fill="currentColor" stroke="none"/>'
+        + '<path d="M9 21h6"/>',
+    // L'écran et sa barre : l'affichage, et non la projection.
     '<rect x="3" y="4" width="18" height="16" rx="2"/>'
         + '<path d="M3 8.5h18" opacity="0.9"/>'
         + '<path d="M6 6.2h2M10 6.2h2M14 6.2h2" stroke-width="1.6"/>',
-    '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>'
+    // Rendre la page au tableau : elle redescend de l'écran.
+    '<rect x="2" y="4" width="20" height="13" rx="2"/>'
+        + '<path d="M12 7v6M9 10.5l3 3 3-3"/>'
+        + '<path d="M9 21h6"/>'
 ];
 
 // Le bouton « Modifier » ne parait que si la vignette tenue sait se rouvrir,
@@ -21187,9 +21207,27 @@ function majBoutonPresenterDeLEcran() {
     // bouton-ci. Seuls les deux boutons de SORTIE restent à leur condition,
     // dans la feuille de style — ils n'ont rien à faire sur l'écran ordinaire.
     b.classList.toggle('actif', enCours);
+    // ON NE DIT PLUS « PLEIN ÉCRAN » ICI. Le voisin immédiat s'appelle
+    // « Plein écran du navigateur » : deux boutons côte à côte portant le même
+    // mot et la même icône, c'était la moitié du « je crois qu'il y a
+    // plusieurs plein écran ». Celui-ci projette LA PAGE.
     b.setAttribute('data-title', enCours
-        ? 'Quitter le plein écran (Échap)'
-        : 'Présenter la page en plein écran (D)');
+        ? 'Rendre la page au tableau (Échap)'
+        : 'Projeter la page en grand (D)');
+    // Et son icône dit lequel des deux gestes il fera. ON N'ÉCRIT QUE SI ÇA
+    // CHANGE, et ce n'est pas de la coquetterie : cette fonction ne repasse pas
+    // seulement à chaque changement de sélection, elle repasse à CHAQUE IMAGE
+    // de l'animation du zoom — mesuré, douze fois en une demi-seconde. Un
+    // « innerHTML » par image reconstruit des nœuds pour rien et alourdit la
+    // boucle au point que le zoom n'a plus le temps d'arriver : c'est une
+    // vérification du zoom à la molette qui l'a dit, sur un vrai PDF, où les
+    // images sont déjà chères.
+    const icone = document.getElementById('icone-ecran-presenter');
+    const voulue = enCours ? '2' : '0';
+    if (icone && icone.dataset.geste !== voulue) {
+        icone.dataset.geste = voulue;
+        icone.innerHTML = ICONES_PLEIN_ECRAN[enCours ? 2 : 0];
+    }
 }
 window.majBoutonPresenterDeLEcran = majBoutonPresenterDeLEcran;
 

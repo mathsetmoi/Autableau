@@ -275,12 +275,18 @@ module.exports = async function (browser) {
         { etat: presente.dedans.etat, focus: presente.dedans.focus,
           actif: presente.dedans.actif },
         { etat: 1, focus: true, actif: true });
-    r.verifie('et le bouton dit alors qu\'il en sort',
-        /[Qq]uitter/.test(presente.dedans.titre), presente.dedans.titre);
+    r.verifie('et le bouton dit alors qu\'il rend la page au tableau',
+        /[Rr]endre la page au tableau/.test(presente.dedans.titre), presente.dedans.titre);
     r.egal('le même appui en sort, et le bouton reprend sa promesse',
         { etat: presente.dehors.etat, actif: presente.dehors.actif },
         { etat: 0, actif: false });
-    r.verifie('« Présenter » de nouveau', /[Pp]résenter/.test(presente.dehors.titre),
+    // ET IL NE DIT PLUS « PLEIN ÉCRAN » : son voisin de coin porte ce mot-là
+    // pour le plein écran du NAVIGATEUR. « Je crois qu'il y a plusieurs plein
+    // écran » venait d'abord de ces deux boutons mitoyens qui le disaient tous
+    // les deux, sous la même icône.
+    r.verifie('« Projeter la page » de nouveau, et jamais « plein écran »',
+        /[Pp]rojeter la page/.test(presente.dehors.titre)
+        && !/plein écran/i.test(presente.dehors.titre),
         presente.dehors.titre);
 
     // DEUX PAGES À L'ÉCRAN : on ne devine pas laquelle projeter.

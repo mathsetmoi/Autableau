@@ -297,6 +297,95 @@ module.exports = async function (browser) {
     r.verifie('la taille, elle, suit bien tout le bloc pendant la saisie',
         taille.aGrandi, JSON.stringify(taille));
 
+    // ------------------------------------------------------------------
+    // 5. IL N'Y A PLUS « PLUSIEURS PLEIN ÉCRAN »
+    //
+    // « Je crois qu'il y a plusieurs plein écran. » Il y en avait quatre, pour
+    // DEUX gestes seulement — et les quatre portaient les mêmes quatre coins :
+    //
+    //   projeter LA PAGE      → « doc-plein-ecran » (barre du document)
+    //                           et « btn-ecran-presenter » (coin) ;
+    //   agrandir LA FENÊTRE   → « btn-ecran-plein » (coin)
+    //                           et « btn-fullscreen » (tiroir du bas).
+    //
+    // Les deux premiers sont voulus — deux portes vers le même geste, dans des
+    // meubles différents, et l'on n'enlève pas une porte pour en ouvrir une
+    // autre. Les deux suivants faisaient doublon : celui du coin est là en
+    // permanence depuis qu'on l'a demandé, celui du tiroir menait au même
+    // endroit après avoir ouvert un tiroir. Il est parti.
+    //
+    // Restait le pire : dans le coin, les deux gestes étaient MITOYENS et
+    // portaient la même icône. Projeter pose désormais une page sur un écran ;
+    // les quatre coins restent à qui agrandit vraiment la fenêtre.
+    // ------------------------------------------------------------------
+    const pleins = await page.evaluate((px) => {
+        images.length = 0;
+        images.push({ id: 'D1', type: 'image', src: px, x: 100, y: 100, w: 600, h: 800 });
+        selectedItems = [{ type: 'image', id: 'D1' }];
+        majBarreDocument();
+        const vus = [];
+        document.querySelectorAll('button').forEach(b => {
+            const t = (b.getAttribute('data-title') || b.dataset.tooltip || b.title || '');
+            if (!/plein écran|projeter|présenter/i.test(t)) return;
+            const svg = b.querySelector('svg');
+            vus.push({ id: b.id || '(sans id)', nom: t.split('—')[0].trim(),
+                       dessin: svg ? svg.innerHTML.replace(/\s+/g, ' ').trim() : '' });
+        });
+        return vus;
+    }, PIXEL);
+
+    const projeter = pleins.filter(v => /projeter/i.test(v.nom));
+    const agrandirLaFenetre = pleins.filter(v => /plein écran/i.test(v.nom));
+    r.egal('un seul bouton pour agrandir la fenêtre du navigateur',
+        agrandirLaFenetre.map(v => v.id), ['btn-ecran-plein']);
+    r.egal('et deux portes vers la projection de la page, voulues et jumelles',
+        projeter.map(v => v.id).sort(), ['btn-ecran-presenter', 'doc-plein-ecran']);
+    r.verifie('les deux portes jumelles portent bien le même dessin',
+        projeter.length === 2 && projeter[0].dessin === projeter[1].dessin,
+        JSON.stringify(projeter.map(v => v.dessin.slice(0, 50))));
+
+    // LE CŒUR : les deux gestes ne se ressemblent plus.
+    const memeDessin = projeter.some(p => agrandirLaFenetre.some(f => f.dessin === p.dessin));
+    r.verifie('projeter la page et agrandir la fenêtre n\'ont plus la même icône',
+        !memeDessin, JSON.stringify({ projeter: projeter[0] && projeter[0].dessin.slice(0, 60),
+                                      fenetre: agrandirLaFenetre[0] && agrandirLaFenetre[0].dessin.slice(0, 60) }));
+    r.verifie('et le mot « plein écran » est réservé à la fenêtre',
+        projeter.every(v => !/plein écran/i.test(v.nom)),
+        JSON.stringify(projeter.map(v => v.nom)));
+
+    // L'icône du coin dit lequel des deux gestes elle fera — et elle ne se
+    // réécrit pas à chaque image de l'animation du zoom, où cette fonction
+    // repasse douze fois par demi-seconde.
+    const bascule = await page.evaluate(async () => {
+        const icone = document.getElementById('icone-ecran-presenter');
+        const avant = icone.innerHTML;
+        let ecritures = 0;
+        const observateur = new MutationObserver(() => ecritures++);
+        observateur.observe(icone, { childList: true, subtree: true });
+        presenterCeQuOnRegarde();
+        await new Promise(ok => setTimeout(ok, 300));
+        const pendant = icone.innerHTML;
+        const apresBascule = ecritures;
+        // Dix rafraîchissements de barre sans changement d'état : aucun ne doit
+        // toucher au dessin. LE DÉLAI N'EST PAS DÉCORATIF : un MutationObserver
+        // livre ses lots en microtâche, donc APRÈS le bloc synchrone. Lire le
+        // compteur tout de suite donnait toujours zéro — le contrôle passait
+        // même sans le garde-fou, ce qu'un sabotage a montré.
+        for (let i = 0; i < 10; i++) majBoutonPresenterDeLEcran();
+        await new Promise(ok => setTimeout(ok, 60));
+        const apresDix = ecritures;
+        observateur.disconnect();
+        quitterLaPresentation(); majBarreDocument();
+        await new Promise(ok => setTimeout(ok, 200));
+        return { change: avant !== pendant, revenu: icone.innerHTML === avant,
+                 ecrituresALaBascule: apresBascule > 0, ecrituresEnTrop: apresDix - apresBascule };
+    });
+    r.verifie('en projetant, l\'icône change pour dire qu\'elle rendra la page',
+        bascule.change && bascule.ecrituresALaBascule, JSON.stringify(bascule));
+    r.verifie('et elle revient quand on sort', bascule.revenu, JSON.stringify(bascule));
+    r.egal('mais dix rafraîchissements sans changement n\'écrivent rien',
+        bascule.ecrituresEnTrop, 0);
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

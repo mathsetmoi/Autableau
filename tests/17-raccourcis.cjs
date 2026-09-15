@@ -140,7 +140,7 @@ module.exports = async function (browser) {
         return {
             annuler: lire('btn-undo'), copier: lire('btn-copier'),
             coller: lire('btn-coller'), collerBis: lire('btn-coller-tableau'),
-            supprimer: lire('btn-quick-delete'), pleinEcran: lire('btn-fullscreen'),
+            supprimer: lire('btn-quick-delete'), pleinEcran: lire("btn-ecran-plein"),
             chercher: lire('plugin-search-btn'),
             // Toutes les entrées de la table qui nomment un bouton l'ont trouvé
             orphelins: [].concat(RACCOURCIS_PARTOUT, RACCOURCIS_COMBINES)
@@ -876,8 +876,12 @@ module.exports = async function (browser) {
           focus: cycle.troisieme.focus, plein: cycle.troisieme.plein },
         { etat: 0, presentation: false, focus: false, plein: false });
     r.verifie('chaque bouton dit ce qu\'il fait, et l\'icône du plein écran change',
-        /Présenter/.test(cycle.depart.aide) && /[Qq]uitter/.test(cycle.premier.aide)
-        && /[Qq]uitter/.test(cycle.second.aide)
+        // « PROJETER » ET NON « PLEIN ÉCRAN » : ce bouton-ci met LA PAGE en
+        // grand, et son voisin du coin met la FENÊTRE en grand. Tant qu'ils
+        // partageaient le mot et l'icône, on croyait à plusieurs plein écran.
+        /Projeter la page/.test(cycle.depart.aide)
+        && /Rendre la page au tableau/.test(cycle.premier.aide)
+        && /Rendre la page au tableau/.test(cycle.second.aide)
         && /[Mm]ontrer les outils/.test(cycle.premier.aideBarres)
         && /[Rr]anger les outils/.test(cycle.second.aideBarres)
         && cycle.depart.icone !== cycle.premier.icone,

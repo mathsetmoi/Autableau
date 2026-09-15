@@ -686,14 +686,21 @@
              pour retrouver le bouton le plus utilisé de l'application. Ici, il
              ne bouge plus — et il agit sur la page qu'on a sous les yeux,
              qu'on la tienne ou non. -->
-        <button id="btn-ecran-presenter" data-title="Présenter la page en plein écran (D)">
+        <!-- SON ICÔNE N'EST PLUS « QUATRE COINS ». « Je crois qu'il y a
+             plusieurs plein écran. » Ce bouton et son voisin « plein écran du
+             navigateur » portaient tous deux les quatre coins de l'agrandi :
+             à quatorze pixels, côte à côte, rien ne les séparait. Celui-ci
+             projette LA PAGE — on dessine donc une page sur un écran ; les
+             quatre coins restent au geste qui agrandit vraiment la fenêtre. -->
+        <button id="btn-ecran-presenter" data-title="Projeter la page en grand (D)">
+            <!-- Vide : c'est « ICONES_PLEIN_ECRAN » qui le remplit, et qui
+                 l'échange quand on projette. Un dessin écrit ici serait une
+                 seconde source de vérité, effacée dès le chargement. -->
             <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                id="icone-ecran-presenter">
-                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-            </svg>
+                id="icone-ecran-presenter"></svg>
         </button>
-        <button id="btn-ecran-plein" data-title="Plein écran du navigateur">
+        <button id="btn-ecran-plein" data-title="Plein écran du navigateur (Ctrl+Maj+F)">
             <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                 id="icone-ecran-plein">
@@ -1756,7 +1763,7 @@
                     viewBox="0 0 24 24">
                     <path d="M19 13H5v-2h14v2z" />
                 </svg></button>
-            <button class="tw-btn" id="btn-tw-fs" title="Plein écran"><svg xmlns="http://www.w3.org/2000/svg"
+            <button class="tw-btn" id="btn-tw-fs" title="Agrandir l'horloge"><svg xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24">
                     <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
                 </svg></button>
@@ -2385,11 +2392,10 @@
                         <line x1="11" y1="8" x2="11" y2="14"></line>
                         <line x1="8" y1="11" x2="14" y2="11"></line>
                     </svg></button>
-                <button class="btn" id="btn-fullscreen" data-tooltip="Plein Écran"><svg xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24" class="stroke-icon">
-                        <path
-                            d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-                    </svg></button>
+                <!-- LE PLEIN ÉCRAN DU NAVIGATEUR VIVAIT ICI AUSSI. « Je crois
+                     qu'il y a plusieurs plein écran. » Il en reste UN, au coin
+                     haut droit, toujours visible : ce bouton-ci menait au même
+                     endroit depuis un tiroir qu'il fallait ouvrir. -->
             </div>
                     <div class="tool-group" data-groupe="papier">
                 <button class="btn" id="btn-cycle" data-tooltip="Fonds"><svg xmlns="http://www.w3.org/2000/svg"
@@ -2842,11 +2848,10 @@
              mêlait le plein écran et les outils. Ce bouton-ci ne répond plus
              qu'à une question : la page est-elle en grand ? -->
         <button class="doc-btn" id="doc-plein-ecran"
-            data-tooltip="Présenter en plein écran (D) — molette et Page↓ pour descendre dans la page">
+            data-tooltip="Projeter la page en grand (D) — molette et Page↓ pour descendre dans la page">
+            <!-- Vide, pour la même raison que son jumeau du coin. -->
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" id="doc-plein-ecran-icone">
-                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-            </svg></button>
+                stroke-linecap="round" stroke-linejoin="round" id="doc-plein-ecran-icone"></svg></button>
         <!-- LES BARRES, PENDANT QU'ON PRÉSENTE. C'était le deuxième temps d'un
              cycle à trois : pour retrouver ses outils sur la page projetée il
              fallait appuyer deux fois, et un appui de trop refermait tout.
@@ -3231,7 +3236,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=256"></script>
+    <script src="script.js?v=258"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>
