@@ -697,8 +697,18 @@ html {
    prise pour déplacer la barre, et rend ses deux boutons dès
    qu'on passe dessus. Sur écran tactile, où il n'y a pas de
    survol, ils restent là : voir la règle « hover: none » plus bas.
+
+   TOUT CE BLOC EST PRÉFIXÉ « .custom-toolbar », ET CE N'EST PAS
+   DE L'ORNEMENT. « .cbar-head » n'est pas la classe des seules
+   barres composées : la barre de STYLE et celle du DOCUMENT
+   portent chacune un « <div class="drag-handle cbar-head"> »
+   (index.html:2671 et 2824). Sans préfixe, la barrette grise
+   ci-dessous se peignait EN TRAVERS de leur icône « Déplacer »,
+   et la hauteur forcée à 22 px écrasait la poignée. Le professeur
+   y a vu un doublon : « il y a des doublons dans les barres de
+   style, ça déconne un peu ». C'était un seul bouton, barré.
    =========================================================== */
-.cbar-head {
+.custom-toolbar .cbar-head {
     /* LA HAUTEUR NE BOUGE JAMAIS — vingt-deux pixels, au repos comme au
        survol. Les deux boutons sont posés HORS DU FLUX à l'intérieur : sans
        cela, ou bien ils gardaient leur place en étant invisibles (on ne
@@ -713,7 +723,7 @@ html {
 
 /* La prise reste lisible sans rien peser : un trait gris au milieu, comme la
    poignée d'un tiroir. Il s'efface quand les boutons paraissent. */
-.cbar-head::after {
+.custom-toolbar .cbar-head::after {
     content: '';
     position: absolute;
     left: 50%;
@@ -727,7 +737,7 @@ html {
     transition: opacity 0.15s;
 }
 
-.cbar-head .c-action {
+.custom-toolbar .cbar-head .c-action {
     position: absolute;
     top: 1px;
     width: 20px;
@@ -737,9 +747,9 @@ html {
     transition: opacity 0.15s;
 }
 
-.cbar-head .c-action.settings { left: 4px; }
-.cbar-head .c-action.min { right: 4px; }
-.cbar-head .c-action.close { right: 26px; }
+.custom-toolbar .cbar-head .c-action.settings { left: 4px; }
+.custom-toolbar .cbar-head .c-action.min { right: 4px; }
+.custom-toolbar .cbar-head .c-action.close { right: 26px; }
 
 .custom-toolbar:hover .cbar-head .c-action { opacity: 1; pointer-events: auto; }
 .custom-toolbar:hover .cbar-head::after { opacity: 0; }
@@ -748,11 +758,11 @@ html {
    qu'au passage du curseur n'existe tout simplement pas là-bas — et c'est
    précisément l'écran sur lequel cette application est faite pour tourner. */
 @media (hover: none) {
-    .cbar-head .c-action { opacity: 1; pointer-events: auto; }
-    .cbar-head::after { opacity: 0; }
+    .custom-toolbar .cbar-head .c-action { opacity: 1; pointer-events: auto; }
+    .custom-toolbar .cbar-head::after { opacity: 0; }
 }
 
-.cbar-head:active {
+.custom-toolbar .cbar-head:active {
     cursor: grabbing;
 }
 
@@ -10389,6 +10399,21 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
    l'onglet qui reste : il porte aussi la police et l'interligne, que la
    réglette ne sait pas dire. Le bloc une fois posé, la réglette revient. */
 #bar-style.ctx-saisie .group-text { display: none; }
+
+/* ET LA COULEUR NON PLUS NE SE CHOISIT PAS DEUX FOIS. Le même défaut que
+   ci-dessus, à un bouton près — et c'est celui-là que le professeur a vu :
+   « il y a des doublons dans les barres de style ». Pendant la saisie, la
+   barre portait DEUX pastilles rondes à quinze centimètres l'une de l'autre :
+   « Couleur et Opacité » (#btn-color-popover) et « Couleur » (la barre du
+   texte). La première est enfant DIRECT de #bar-style, hors de toute
+   « .style-group » — la règle du dessus ne l'atteignait donc pas.
+   Elles ne font même pas la même chose : celle du texte colore ce qu'on va
+   taper, l'autre repeint le bloc entier. Deux pastilles qui finissent par
+   montrer deux couleurs sans que rien ne dise laquelle fait foi.
+   C'est celle du texte qui reste : elle seule colore juste, et elle porte en
+   plus la police et l'interligne. */
+#bar-style.ctx-saisie #btn-color-popover,
+#bar-style.ctx-saisie #btn-color-popover + .divider { display: none; }
 
 /* Les tiroirs pendent toujours de leur propre bouton — c'est le script qui
    les y pose —, mais ils se mesurent désormais à la barre de STYLE, seule

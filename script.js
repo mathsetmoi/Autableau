@@ -6876,6 +6876,12 @@ function updateStyleBarContext() {
         && wysiwygText.style.display === 'block') {
         if (typeof barreDuTexteEnHaut !== 'undefined' && barreDuTexteEnHaut) {
             barStyle.classList.add('ctx-text', 'ctx-saisie');
+            // SA PASTILLE S'EN VA, SA FENÊTRE AUSSI. La feuille de style
+            // retire « Couleur et Opacité » le temps de la saisie — le doublon
+            // de pastilles —, mais une fenêtre déjà ouverte serait restée
+            // pendue à un bouton devenu invisible. Même geste qu'à
+            // « syncTextStyleControls », pour la même raison.
+            document.getElementById('color-popover')?.classList.remove('visible');
         } else {
             barStyle.classList.remove('visible');
             barStyle.removeAttribute('data-dragged');
@@ -7095,8 +7101,23 @@ function pushStyleToObject() {
     }
 
     if (wysiwygText.style.display === 'block') {
+        // LE BLOC GARDE LA COULEUR DE SON OUVERTURE. La ligne qui manque ici
+        // repeignait le bloc ENTIER avec « activeStyle.strokeColor », et elle
+        // mentait deux fois : ce qui était déjà écrit changeait de couleur
+        // sous les yeux, et la validation rendait quand même l'ancienne — car
+        // l'objet se pose avec « couleurBlocSaisie », figé à l'ouverture.
+        // Mesuré : titre rouge, un réglage de la barre, titre turquoise à
+        // l'écran, objet posé rouge. Le professeur voit sa couleur revenir
+        // toute seule.
+        //
+        // La règle est écrite deux fois ailleurs, et c'est ici qu'elle était
+        // trahie : « Couleur du bloc = celle en vigueur À L'OUVERTURE.
+        // Choisir une autre couleur ensuite ne doit repeindre que ce qui
+        // suit, pas ce qui est déjà écrit » (plus bas, à l'ouverture de la
+        // saisie), et « Repeindre le bloc entier changeait toute la phrase
+        // alors qu'on ne voulait colorer que le mot suivant » (le raccourci
+        // de couleur). La taille, elle, vaut bien pour tout le bloc.
         wysiwygText.style.fontSize = (activeStyle.fontSize * zoom) + 'px';
-        wysiwygText.style.color = activeStyle.strokeColor;
     }
     if (selectedItems.length === 0) return;
     // Les images ne portent aucun de ces styles : inutile de sérialiser tout
