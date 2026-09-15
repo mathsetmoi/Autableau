@@ -17,23 +17,38 @@ const ATTENDUES = [
 // pas : si la machine est chargée, on lisait encore l'ANCIENNE page, avec sa
 // barre complète. On marque donc le document, et on attend qu'il ait disparu.
 // CHARGER UNE INTERFACE REDÉMARRE TOUTE L'APPLICATION — quatre-vingt-six
-// outils à réenregistrer. Vingt secondes suffisent d'ordinaire, mais pas
-// quand la machine porte déjà la suite entière : l'attente expirait, et
-// c'est le fichier complet qui tombait, pas une vérification. Quarante-cinq
-// ne suffisent pas toujours non plus : on lâche donc la bride pour de bon.
-// Une attente longue ne coûte rien tant qu'elle aboutit — c'est le plafond
-// qui compte, pas le temps passé.
+// outils à réenregistrer. Une attente longue ne coûte rien tant qu'elle
+// aboutit : c'est le plafond qui compte, pas le temps passé.
+// UNE ATTENTE QUI EXPIRE NE DOIT PAS EMPORTER LE FICHIER. Lancée seule, cette
+// suite passe ; lancée derrière les quarante-sept autres, l'un des trois
+// chargements dépassait parfois son plafond — et l'exception faisait tomber
+// les SOIXANTE-DIX vérifications du fichier, dont aucune n'avait rien à voir
+// avec le retard. On note l'expiration, on continue, et l'on en fait une
+// vérification à part, tout en bas : une lenteur se lit alors pour ce qu'elle
+// est, au lieu d'effacer le reste.
+const CHARGEMENTS_EXPIRES = [];
+
 async function chargerInterface(page, id) {
+    const patienter = async (quoi, fn, arg) => {
+        try {
+            await page.waitForFunction(fn, arg, { timeout: 180000, polling: 200 });
+            return true;
+        } catch (e) {
+            CHARGEMENTS_EXPIRES.push(id + ' : ' + quoi);
+            return false;
+        }
+    };
     await page.evaluate((x) => { window.__avantRedemarrage = true; loadInterface(x); }, id);
-    await page.waitForFunction(() => !window.__avantRedemarrage, { timeout: 120000 });
-    await page.waitForFunction(() => window.PluginManager && Object.keys(PluginManager.plugins).length > 50, { timeout: 120000 });
+    if (!await patienter('le redémarrage', () => !window.__avantRedemarrage)) return;
+    if (!await patienter('les outils réenregistrés',
+        () => window.PluginManager && Object.keys(PluginManager.plugins).length > 50)) return;
     // Le démarrage réécrit les barres (migration, remise en place). Attendre
     // qu'elles « ne bougent plus » ne suffit pas : sur une machine lente, les
     // barres de l'interface PRÉCÉDENTE tiennent en place assez longtemps pour
     // paraître stables, et l'on mesurait alors l'état d'avant — 22 outils là
     // où l'interface demandée en a 5. On attend donc l'état ATTENDU, c'est-à-
     // dire les barres du modèle que l'on vient de charger.
-    await page.waitForFunction((x) => {
+    await patienter('les barres du modèle', (x) => {
         const modele = savedInterfaces.find(i => i.id === x);
         const voulues = (modele && modele.data && modele.data.toolbars) || [];
         const barres = getStoredFloatingToolbars();
@@ -43,7 +58,7 @@ async function chargerInterface(page, id) {
         if (!memes) return false;
         // ... et qu'elles soient vraiment dessinées, s'il y en a
         return !voulues.length || document.querySelectorAll('#custom-bars-container > *').length > 0;
-    }, id, { timeout: 120000, polling: 200 });
+    }, id);
 }
 
 module.exports = async function (browser) {
@@ -784,6 +799,11 @@ module.exports = async function (browser) {
     r.egal('et AUCUNE n\'échappe au trait, pas même celles qu\'on ne fait que démasquer',
         montrees.sans, []);
     await contexte2.close();
+
+    // La lenteur se lit pour ce qu'elle est : une vérification à part, et non
+    // un fichier entier qui tombe.
+    r.verifie('aucun chargement d\'interface n\'a expiré',
+        CHARGEMENTS_EXPIRES.length === 0, CHARGEMENTS_EXPIRES.join(' | '));
 
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();

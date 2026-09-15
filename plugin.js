@@ -1267,13 +1267,100 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
     // LES COLONNES D'UNE GRANDEUR, décrites une fois pour toutes : le dessin
     // s'en sert, et le placement d'un nombre aussi. Les tenir à deux endroits,
     // c'était se condamner à ce qu'ils divergent.
-    colonnesDe: function (type) {
+    colonnesDeBase: function (type) {
         if (type === 'mass') return { cols: ['kg', 'hg', 'dag', 'g', 'dg', 'cg', 'mg'], subCols: 1 };
         if (type === 'cap') return { cols: ['kL', 'hL', 'daL', 'L', 'dL', 'cL', 'mL'], subCols: 1 };
         if (type === 'num') return { cols: ['C', 'D', 'U', '1/10', '1/100', '1/1000'], subCols: 1 };
         if (type === 'area') return { cols: ['km²', 'hm²', 'dam²', 'm²', 'dm²', 'cm²', 'mm²'], subCols: 2 };
         if (type === 'vol') return { cols: ['km³', 'hm³', 'dam³', 'm³', 'dm³', 'cm³', 'mm³'], subCols: 3 };
         return { cols: ['km', 'hm', 'dam', 'm', 'dm', 'cm', 'mm'], subCols: 1 };
+    },
+
+    // ==================================================================
+    // LE TABLEAU S'ALLONGE QUAND LE NOMBRE DÉBORDE
+    //
+    // « Demander si on rajoute des colonnes à gauche et à droite, et le faire
+    // si le nombre déborde. »
+    //
+    // Sept colonnes ne suffisent pas toujours : « 1 234 567 m » perd trois
+    // chiffres à gauche. Et l'on ne peut pas s'en sortir en changeant d'unité
+    // — un tableau de conversion range les chiffres par MAGNITUDE, écrire la
+    // mesure en kilomètres ne les déplace pas d'une case, c'est tout l'objet
+    // du tableau. Il faut donc vraiment des colonnes de plus.
+    //
+    // MAIS ON N'INVENTE PAS D'UNITÉ. Entre le kilomètre et le millier de
+    // kilomètres, aucune n'a de nom : écrire « Mm » sauterait deux décades, et
+    // laisser l'en-tête vide ressemblerait à une case oubliée. Une colonne
+    // ajoutée porte donc son rapport à l'unité du bout : « 10 km », « 100 km »
+    // à gauche, « 0,1 mm » à droite. C'est exact, ça se lit, et c'est ce qu'un
+    // enseignant écrirait lui-même à la craie.
+    //
+    // Là où l'usage scolaire A un nom, c'est lui qui passe devant : le quintal
+    // et la tonne pour les masses (aux bonnes places — le quintal vaut CENT
+    // kilogrammes, il y a donc une décade sans nom entre les deux), et les
+    // unités, dizaines et centaines de mille pour la numération.
+    // ==================================================================
+    RALLONGES: {
+        // Le rang 0 est la colonne juste à côté de la dernière du tableau. Une
+        // chaîne vide dit « cette décade-là n'a pas de nom » : entre le
+        // quintal (cent kilogrammes) et le kilogramme, il y en a une.
+        mass: { gauche: ['', 'q', 't'], droite: [] },
+        num: { gauche: ['UM', 'DM', 'CM'], droite: [] }
+    },
+
+    // Le nom d'une colonne ajoutée, ou « null » s'il faut le calculer.
+    nomDeRallonge: function (type, cote, rang) {
+        // LA NUMÉRATION CONTINUE SA PROPRE SUITE. Ses colonnes s'appellent
+        // « 1/10 », « 1/100 » : la suivante est « 1/10000 », et non
+        // « 0,1 1/1000 », qui ne veut rien dire.
+        if (type === 'num' && cote === 'droite') return '1/1' + '0'.repeat(4 + rang);
+        const r = (this.RALLONGES[type] || {})[cote] || [];
+        const nom = r[rang];
+        return (nom === undefined || nom === '') ? null : nom;
+    },
+
+    // « 10 km », « 100 km », « 0,1 mm »… Le rapport s'écrit en toutes lettres
+    // plutôt qu'en puissance : on le lit d'un coup d'œil du fond de la classe.
+    //
+    // UNE COLONNE D'AIRES VAUT CENT FOIS LA SUIVANTE, et une de volumes mille :
+    // c'est le nombre de sous-colonnes qui donne le pas. Écrire « 10 km² » à
+    // gauche de « km² » serait faux d'un facteur dix.
+    rapportEcrit: function (unite, rang, versLaGauche, pas) {
+        const decades = (pas || 1) * (rang + 1);
+        if (versLaGauche) {
+            const dix = Math.pow(10, decades);
+            return dix.toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ') + ' ' + unite;
+        }
+        // À droite, on divise : 0,1 puis 0,01 puis 0,001…
+        return '0,' + '0'.repeat(decades - 1) + '1 ' + unite;
+    },
+
+    // Combien de colonnes ce tableau a-t-il gagné de chaque côté ? Un tableau
+    // posé avant ce réglage n'en a pas : il garde ses sept colonnes.
+    rallongesDe: function (args) {
+        const brut = args && args[4];
+        const entier = (v) => {
+            const n = parseInt(v, 10);
+            return (isFinite(n) && n > 0) ? Math.min(n, 12) : 0;
+        };
+        if (!brut || typeof brut !== 'object') return { g: 0, d: 0 };
+        return { g: entier(brut.g), d: entier(brut.d) };
+    },
+
+    colonnesDe: function (type, rallonges) {
+        const base = this.colonnesDeBase(type);
+        const r = rallonges || { g: 0, d: 0 };
+        if (!r.g && !r.d) return base;
+        const cols = base.cols.slice();
+        for (let i = 0; i < r.g; i++) {
+            cols.unshift(this.nomDeRallonge(type, 'gauche', i)
+                || this.rapportEcrit(base.cols[0], i, true, base.subCols));
+        }
+        for (let i = 0; i < r.d; i++) {
+            cols.push(this.nomDeRallonge(type, 'droite', i)
+                || this.rapportEcrit(base.cols[base.cols.length - 1], i, false, base.subCols));
+        }
+        return { cols, subCols: base.subCols };
     },
 
     // CHAQUE TABLEAU A SA GRANDEUR, ET SON UNITÉ DE RÉFÉRENCE. « Ne pas
@@ -1314,14 +1401,21 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
         if (!cherche) return null;
         const types = Object.keys(this.FAMILLES);
         for (const t of types) {
-            if (this.colonnesDe(t).cols.some(u => this.normaliserUnite(u) === cherche)) return t;
+            // Les colonnes de base, PLUS les rallonges qui portent un vrai
+            // nom — la tonne et le quintal sont des masses, même sur un
+            // tableau qui ne les montre pas encore. Les autres rallonges
+            // s'appellent « 10 km » : ce n'est pas une unité qu'on tape.
+            const nommees = ((this.RALLONGES[t] || {}).gauche || [])
+                .concat((this.RALLONGES[t] || {}).droite || []).filter(Boolean);
+            if (this.colonnesDeBase(t).cols.concat(nommees)
+                .some(u => this.normaliserUnite(u) === cherche)) return t;
         }
         return null;
     },
 
-    generateSVG: function (type, color, lignes, isExport = false, contenu) {
+    generateSVG: function (type, color, lignes, isExport = false, contenu, rallonges) {
         const nLignes = this.nombreDeLignes(lignes);
-        const plan = this.colonnesDe(type);
+        const plan = this.colonnesDe(type, rallonges);
         const cols = plan.cols;
         const subCols = plan.subCols;
         const cases = (contenu && typeof contenu === 'object') ? contenu : {};
@@ -1396,7 +1490,7 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
     // La géométrie du tampon posé : c'est le dessin d'export qu'on a sous les
     // yeux, donc ses mesures à lui.
     mesuresDuTampon: function (args) {
-        const plan = this.colonnesDe(args[0]);
+        const plan = this.colonnesDe(args[0], this.rallongesDe(args));
         const nLignes = this.nombreDeLignes(args[2]);
         const colW = 90, rowH = 45;
         return { plan, nLignes, colW, rowH,
@@ -1448,16 +1542,27 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
         const couleur = reglages.couleur !== undefined ? reglages.couleur : args[1];
         const lignes = reglages.lignes !== undefined ? reglages.lignes : args[2];
         const contenu = reglages.contenu !== undefined ? reglages.contenu : this.contenuDe(args);
-        const m = this.mesuresDuTampon([type, couleur, lignes]);
+        const avant = this.rallongesDe(args);
+        const apres = reglages.rallonges !== undefined
+            ? this.rallongesDe([type, couleur, lignes, contenu, reglages.rallonges])
+            : avant;
+        // UNE COLONNE AJOUTÉE À GAUCHE DÉCALE TOUT CE QUI EST ÉCRIT. Les cases
+        // sont repérées par leur rang depuis le bord gauche : sans ce décalage,
+        // « 12,5 cm » se retrouverait en décimètres dès qu'on élargit le
+        // tableau, et l'exercice deviendrait faux sous les yeux de la classe.
+        const plan = this.colonnesDeBase(type);
+        const decalage = (apres.g - avant.g) * plan.subCols;
+        const m = this.mesuresDuTampon([type, couleur, lignes, contenu, apres]);
         const garde = {};
         Object.keys(contenu).forEach(k => {
-            const [r, c] = k.split(',').map(Number);
-            if (r < m.nLignes && c < m.nbCases) garde[k] = contenu[k];
+            const [r, c0] = k.split(',').map(Number);
+            const c = c0 + decalage;
+            if (r < m.nLignes && c >= 0 && c < m.nbCases) garde[r + ',' + c] = contenu[k];
         });
-        const svg = this.generateSVG(type, couleur, lignes, true, garde);
+        const svg = this.generateSVG(type, couleur, lignes, true, garde, apres);
         createStampFromSVG(svg, (stamp) => {
             updatePluginStampInPlace(imgObj, stamp, undefined, { quiet: true });
-            imgObj.pluginData.args = [type, couleur, String(lignes), garde];
+            imgObj.pluginData.args = [type, couleur, String(lignes), garde, apres];
             if (typeof saveState === 'function') saveState();
             if (typeof updateQuickMenu === 'function') updateQuickMenu();
             if (typeof draw === 'function') draw();
@@ -1552,18 +1657,23 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
                     }
                     return;
                 }
-                const mis = GrilleDeChiffres.poser(nombre, cible.case, m.nbCases);
+                // LE DÉBORDEMENT SE RÉGLE EN COLONNES, PAS EN CHIFFRES. Un
+                // tableau de conversion range les chiffres par MAGNITUDE :
+                // récrire la mesure dans une autre unité ne les déplace pas
+                // d'une case — c'est tout l'objet du tableau. Ce qui manque,
+                // ce sont des colonnes, et l'on propose de les ajouter plutôt
+                // que de laisser trois chiffres de côté sans rien dire.
+                const essai = GrilleDeChiffres.poser(nombre, cible.case, m.nbCases);
+                if (!essai.complet && this.rallongerPourLeNombre(imgObj, nombre, cible, m, essai, rang)) {
+                    return;
+                }
+                const mis = essai;
                 const suite = Object.assign({}, contenu);
                 Object.keys(suite).forEach(k => {
                     if (Number(k.split(',')[0]) === rang) delete suite[k];
                 });
                 Object.keys(mis.cases).forEach(c => { suite[rang + ',' + c] = mis.cases[c]; });
                 this.refaireLeTampon(imgObj, { contenu: suite });
-                // LE DÉBORDEMENT SE DIT EN COLONNES, PAS EN CHIFFRES. Un
-                // tableau de conversion range les chiffres par MAGNITUDE :
-                // récrire la mesure dans une autre unité ne les déplace pas
-                // d'une case — c'est tout l'objet du tableau. Ce qui manque,
-                // ce sont des colonnes, et l'on dit donc combien.
                 if (!mis.complet && typeof showToast === 'function') {
                     const cote = mis.perdus.gauche ? 'gauche' : 'droite';
                     const chiffres = mis.perdus.gauche || mis.perdus.droite;
@@ -1578,10 +1688,61 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
         return true;
     },
 
+    // ON DEMANDE AVANT D'ALLONGER. Le tableau qu'on a préparé pour l'heure a
+    // la largeur qu'on lui a donnée ; l'élargir sans prévenir, devant la
+    // classe, déplacerait tout ce qui y est déjà écrit. On pose donc la
+    // question, une fois, et l'on fait ce qui a été dit.
+    rallongerPourLeNombre: function (imgObj, nombre, cible, m, essai, rang) {
+        const args = (imgObj.pluginData && imgObj.pluginData.args) || [];
+        const sub = m.plan.subCols;
+        const aGauche = Math.ceil((essai.perdus.gauche || 0) / sub);
+        const aDroite = Math.ceil((essai.perdus.droite || 0) / sub);
+        if (!aGauche && !aDroite) return false;
+        const deja = this.rallongesDe(args);
+        const voulu = { g: deja.g + aGauche, d: deja.d + aDroite };
+        if (voulu.g > 12 || voulu.d > 12) return false;      // au-delà, c'est un autre exercice
+        const cote = aGauche
+            ? aGauche + ' colonne' + (aGauche > 1 ? 's' : '') + ' à gauche'
+            : aDroite + ' colonne' + (aDroite > 1 ? 's' : '') + ' à droite';
+        const demande = (typeof window !== 'undefined' && window.confirm)
+            ? window.confirm('Cette mesure déborde du tableau.\n\nAjouter ' + cote + ' ?')
+            : false;
+        if (!demande) return false;
+
+        // ON N'ALLONGE QU'UNE FOIS, et l'on pose le nombre dans le même geste.
+        // « refaireLeTampon » décale ce qui est écrit d'autant de colonnes que
+        // le tableau en gagne à gauche : ce qui s'y trouvait déjà se donne tel
+        // quel, et les chiffres du NOUVEAU nombre — calculés dans le tableau
+        // élargi — se donnent décalés en sens inverse, pour retomber juste.
+        const decalage = aGauche * sub;
+        const aPasser = {};
+        const contenu = this.contenuDe(args);
+        Object.keys(contenu).forEach(k => {
+            if (Number(k.split(',')[0]) === rang) return;    // la rangée visée se refait
+            aPasser[k] = contenu[k];
+        });
+        const neufs = [args[0], args[1], args[2], {}, voulu];
+        const mNeuf = this.mesuresDuTampon(neufs);
+        const cibleNeuve = this.caseDeLUnite(neufs, nombre.unite);
+        const mis = GrilleDeChiffres.poser(nombre, cibleNeuve.case, mNeuf.nbCases);
+        Object.keys(mis.cases).forEach(c => {
+            aPasser[rang + ',' + (Number(c) - decalage)] = mis.cases[c];
+        });
+        this.refaireLeTampon(imgObj, { contenu: aPasser, rallonges: voulu });
+        if (typeof showToast === 'function') {
+            showToast('Le tableau s\'est allongé : ' + cote + '.', '#00b894', '📏');
+        }
+        return true;
+    },
+
     actionsRapides: function (imgObj) {
         const args = (imgObj && imgObj.pluginData && imgObj.pluginData.args) || null;
         if (!args) return [];
         const m = this.mesuresDuTampon(args);
+        const r = this.rallongesDe(args);
+        // POSER UNE MESURE RESTE LE PREMIER GESTE : c'est celui qu'on fait
+        // vingt fois par heure. Les largeurs viennent après les hauteurs, avec
+        // lesquelles elles font paire.
         return [
             { titre: 'Poser une mesure dans le tableau', texte: '123',
               faire: () => this.demanderUnNombre(imgObj) },
@@ -1591,6 +1752,15 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
             { titre: 'Une ligne de moins', texte: '－⬓',
               actif: m.nLignes > 1,
               faire: () => this.refaireLeTampon(imgObj, { lignes: String(m.nLignes - 1) }) },
+            { titre: 'Une colonne de plus à gauche', texte: '◀＋',
+              actif: r.g < 12,
+              faire: () => this.refaireLeTampon(imgObj, { rallonges: { g: r.g + 1, d: r.d } }) },
+            { titre: 'Une colonne de plus à droite', texte: '＋▶',
+              actif: r.d < 12,
+              faire: () => this.refaireLeTampon(imgObj, { rallonges: { g: r.g, d: r.d + 1 } }) },
+            { titre: 'Reprendre la largeur d\'origine', texte: '▶◀',
+              actif: r.g > 0 || r.d > 0,
+              faire: () => this.refaireLeTampon(imgObj, { rallonges: { g: 0, d: 0 } }) },
             { titre: 'Effacer ce qui est écrit dans les cases', texte: '⌫',
               actif: Object.keys(this.contenuDe(args)).length > 0,
               faire: () => this.refaireLeTampon(imgObj, { contenu: {} }) }

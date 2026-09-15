@@ -391,6 +391,196 @@ module.exports = async function (browser) {
         const quiTient = await essayer('12,5 m');
         return { tropGrand, quiTient };
     });
+    // Taper une mesure dans le champ du tableau, en refermant d'abord ce qui
+    // traînerait : deux champs ouverts l'un sur l'autre, et le second n'est
+    // jamais celui qu'on croit.
+    await page.evaluate(() => {
+        window.__taper = async (p, texte, attente) => {
+            document.querySelectorAll('.gr-champ-case').forEach(c => c.remove());
+            p.demanderUnNombre(images[0]);
+            for (let i = 0; i < 30 && !document.querySelector('.gr-champ-case'); i++) {
+                await new Promise(ok => setTimeout(ok, 30));
+            }
+            const champ = document.querySelector('.gr-champ-case');
+            if (!champ) throw new Error('le champ ne s\'est pas ouvert');
+            champ.value = texte;
+            champ.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            await new Promise(ok => setTimeout(ok, attente || 500));
+        };
+    });
+
+    // ==================================================================
+    // LE TABLEAU S'ALLONGE QUAND LE NOMBRE DÉBORDE
+    // « Demander si on rajoute des colonnes à gauche et à droite, et le faire
+    //   si le nombre déborde. »
+    // On n'invente pas d'unité : entre le kilomètre et le millier de
+    // kilomètres, aucune n'a de nom. Une colonne ajoutée porte donc son
+    // rapport à l'unité du bout — sauf là où l'usage scolaire A un nom.
+    // ==================================================================
+    const rallonges = await page.evaluate(() => {
+        const p = PluginManager.plugins['conversionTool'];
+        const cols = (t, g, d) => p.colonnesDe(t, { g, d }).cols;
+        return {
+            base: cols('len', 0, 0),
+            gauche: cols('len', 3, 0),
+            droite: cols('len', 0, 2),
+            // Le quintal vaut CENT kilogrammes : il y a une décade sans nom
+            // entre lui et le kilogramme, et le tableau le dit.
+            masses: cols('mass', 3, 0),
+            // Au-delà des noms de l'usage, on continue au rapport.
+            massesLoin: cols('mass', 4, 0),
+            // La numération continue sa propre suite.
+            numGauche: cols('num', 3, 0),
+            numDroite: cols('num', 0, 2),
+            // UNE COLONNE D'AIRES VAUT CENT FOIS LA SUIVANTE, et une de
+            // volumes mille : « 10 km² » serait faux d'un facteur dix.
+            aires: cols('area', 1, 0)[0],
+            volumes: cols('vol', 1, 0)[0],
+            // Une valeur bricolée ne casse rien.
+            bornes: [p.rallongesDe([]), p.rallongesDe(['len', '#000', '3', {}, { g: -5, d: 99 }])],
+            // « t » et « q » restent des masses même si le tableau ne les
+            // montre pas encore ; « 10 km » n'est l'unité de personne.
+            familles: [p.familleDeLUnite('t'), p.familleDeLUnite('q'), p.familleDeLUnite('10 km')]
+        };
+    });
+    r.egal('trois colonnes à gauche portent leur rapport au kilomètre',
+        rallonges.gauche.slice(0, 4), ['1 000 km', '100 km', '10 km', 'km']);
+    r.egal('et deux à droite, leur rapport au millimètre',
+        rallonges.droite.slice(-3), ['mm', '0,1 mm', '0,01 mm']);
+    r.egal('les masses reprennent la tonne et le quintal, à leur vraie place',
+        rallonges.masses.slice(0, 4), ['t', 'q', '10 kg', 'kg']);
+    r.egal('au-delà, on continue au rapport',
+        rallonges.massesLoin[0], '10 000 kg');
+    r.egal('la numération continue sa propre suite, des deux côtés',
+        { g: rallonges.numGauche.slice(0, 3), d: rallonges.numDroite.slice(-2) },
+        { g: ['CM', 'DM', 'UM'], d: ['1/10000', '1/100000'] });
+    r.egal('une colonne d\'aires vaut cent fois la suivante, une de volumes mille',
+        { aires: rallonges.aires, volumes: rallonges.volumes },
+        { aires: '100 km²', volumes: '1 000 km³' });
+    r.egal('un réglage bricolé est ramené dans les bornes',
+        rallonges.bornes, [{ g: 0, d: 0 }, { g: 0, d: 12 }]);
+    r.egal('la tonne et le quintal restent des masses, « 10 km » n\'est rien',
+        rallonges.familles, ['mass', 'mass', null]);
+    r.egal('sans rallonge, le tableau garde ses sept colonnes',
+        rallonges.base.length, 7);
+
+    // ON DEMANDE AVANT D'ALLONGER, et l'on fait ce qui a été dit.
+    const refuse2 = await page.evaluate(async () => {
+        const p = PluginManager.plugins['conversionTool'];
+        p.refaireLeTampon(images[0], { contenu: {}, rallonges: { g: 0, d: 0 } });
+        await new Promise(ok => setTimeout(ok, 450));
+        window.confirm = () => false;                    // « non »
+        await window.__taper(p, '1234567 m');
+        const args = images[0].pluginData.args;
+        return { rallonges: p.rallongesDe(args), cases: Object.keys(args[3]).length };
+    });
+    r.egal('on répond non : le tableau garde sa largeur, et pose ce qui tient',
+        { rallonges: refuse2.rallonges, cases: refuse2.cases },
+        { rallonges: { g: 0, d: 0 }, cases: 4 });
+
+    const accepte = await page.evaluate(async () => {
+        const p = PluginManager.plugins['conversionTool'];
+        p.refaireLeTampon(images[0], { contenu: {}, rallonges: { g: 0, d: 0 } });
+        await new Promise(ok => setTimeout(ok, 450));
+        const demandes = [];
+        window.confirm = (q) => { demandes.push(q); return true; };   // « oui »
+        await window.__taper(p, '1234567 m', 700);
+        const args = images[0].pluginData.args;
+        const m = p.mesuresDuTampon(args);
+        // Les sept chiffres doivent être là, et dans l'ordre : le 7 sur la
+        // case des mètres, le reste qui se déroule vers la gauche.
+        const lus = [];
+        for (let c = 0; c < m.nbCases; c++) if (args[3]['0,' + c] !== undefined) lus.push(args[3]['0,' + c]);
+        const uniteM = p.caseDeLUnite(args, 'm');
+        return { demandes, rallonges: p.rallongesDe(args), lus: lus.join(''),
+                 cols: m.plan.cols.slice(0, 4),
+                 leSept: args[3]['0,' + uniteM.case] };
+    });
+    r.verifie('on répond oui : la question disait combien de colonnes, et de quel côté',
+        accepte.demandes.length === 1 && /3 colonnes à gauche/.test(accepte.demandes[0]),
+        JSON.stringify(accepte.demandes));
+    r.egal('le tableau gagne ses trois colonnes', accepte.rallonges, { g: 3, d: 0 });
+    r.egal('et elles portent leur rapport au kilomètre',
+        accepte.cols, ['1 000 km', '100 km', '10 km', 'km']);
+    r.egal('les sept chiffres sont posés, dans l\'ordre', accepte.lus, '1234567');
+    // ET LE TAMPON LE MONTRE VRAIMENT. Les mesures peuvent dire dix colonnes
+    // pendant que le dessin en porte sept : c'est le dessin qu'on projette.
+    const dessine = await page.evaluate(() => {
+        const svg = window.lireLeDessin(images[0].src);
+        const p = PluginManager.plugins['conversionTool'];
+        const m = p.mesuresDuTampon(images[0].pluginData.args);
+        return {
+            porteLesEntetes: ['1 000 km', '100 km', '10 km'].every(u => svg.includes(u)),
+            // La largeur du dessin suit le nombre de colonnes.
+            largeur: Math.round(images[0].w / (images[0].cw / (m.plan.cols.length * m.colW))),
+            colonnes: m.plan.cols.length,
+            // Autant de traits verticaux que de colonnes.
+            traits: (svg.match(/<line[^>]*y1="0"/g) || []).length
+        };
+    });
+    r.verifie('et le dessin porte vraiment les trois en-têtes ajoutés',
+        dessine.porteLesEntetes, JSON.stringify(dessine));
+    r.egal('avec un trait vertical par colonne', dessine.traits, dessine.colonnes);
+    r.egal('et le chiffre des unités tombe bien sur les mètres', accepte.leSept, '7');
+
+    // CE QUI ÉTAIT DÉJÀ ÉCRIT NE BOUGE PAS DE COLONNE. Les cases se repèrent
+    // depuis le bord gauche : sans décalage, « 12,5 cm » deviendrait
+    // « 12,5 dm » dès qu'on élargit, et l'exercice serait faux sous les yeux
+    // de la classe.
+    const garde = await page.evaluate(async () => {
+        const p = PluginManager.plugins['conversionTool'];
+        p.refaireLeTampon(images[0], { contenu: {}, rallonges: { g: 0, d: 0 } });
+        await new Promise(ok => setTimeout(ok, 450));
+        const avantArgs = images[0].pluginData.args;
+        const cm = p.caseDeLUnite(avantArgs, 'cm');
+        p.refaireLeTampon(images[0], { contenu: { ['0,' + cm.case]: '7' } });
+        await new Promise(ok => setTimeout(ok, 450));
+        p.refaireLeTampon(images[0], { rallonges: { g: 2, d: 0 } });
+        await new Promise(ok => setTimeout(ok, 450));
+        const args = images[0].pluginData.args;
+        const cmApres = p.caseDeLUnite(args, 'cm');
+        return { toujoursEnCm: args[3]['0,' + cmApres.case],
+                 combien: Object.keys(args[3]).length };
+    });
+    r.egal('le chiffre écrit en centimètres y est toujours après l\'élargissement',
+        garde, { toujoursEnCm: '7', combien: 1 });
+
+    // Et l'on peut reprendre la largeur d'origine.
+    const reprise = await page.evaluate(async () => {
+        const p = PluginManager.plugins['conversionTool'];
+        const lire = () => p.actionsRapides(images[0]).map(a => ({ titre: a.titre, actif: a.actif }));
+        const actions = lire();
+        // On élargit PAR LE BOUTON, puis on reprend la largeur d'origine PAR
+        // LE BOUTON : c'est le geste de l'enseignant, et non l'appel interne.
+        const avantLeBouton = p.rallongesDe(images[0].pluginData.args);
+        const plus = p.actionsRapides(images[0]).find(a => /plus à droite/.test(a.titre));
+        plus.faire();
+        await new Promise(ok => setTimeout(ok, 450));
+        const apres = p.rallongesDe(images[0].pluginData.args);
+        const apresLeBouton = { g: apres.g - avantLeBouton.g, d: apres.d - avantLeBouton.d };
+        const reprendre = p.actionsRapides(images[0]).find(a => /largeur d'origine/.test(a.titre));
+        const vivant = reprendre.actif;
+        reprendre.faire();
+        await new Promise(ok => setTimeout(ok, 450));
+        const args = images[0].pluginData.args;
+        return { actions, apresLeBouton, vivant,
+                 eteintApres: lire().find(a => /largeur d'origine/.test(a.titre)).actif,
+                 rallonges: p.rallongesDe(args),
+                 cols: p.mesuresDuTampon(args).plan.cols.length };
+    });
+    r.egal('le bouton « une colonne de plus à droite » en ajoute une, à droite',
+        reprise.apresLeBouton, { g: 0, d: 1 });
+    r.egal('« reprendre la largeur d\'origine » s\'allume alors, et s\'éteint après',
+        { vivant: reprise.vivant, eteint: reprise.eteintApres },
+        { vivant: true, eteint: false });
+    r.verifie('la barre de l\'objet propose d\'ajouter une colonne de chaque côté',
+        reprise.actions.some(a => /à gauche/.test(a.titre))
+        && reprise.actions.some(a => /à droite/.test(a.titre)),
+        JSON.stringify(reprise.actions.map(a => a.titre)));
+    r.egal('et de reprendre la largeur d\'origine',
+        { rallonges: reprise.rallonges, cols: reprise.cols },
+        { rallonges: { g: 0, d: 0 }, cols: 7 });
+
     r.verifie('« 1 234 567 m » déborde : on dit combien de colonnes manquent à gauche',
         /gauche/.test(debordement.tropGrand.message)
         && /3 chiffre/.test(debordement.tropGrand.message)

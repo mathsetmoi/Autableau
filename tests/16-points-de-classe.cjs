@@ -1851,6 +1851,17 @@ module.exports = async function (browser) {
             oublis: Array.from(document.querySelectorAll('.cm-fiche-bloc')).map(b => b.textContent.replace(/\s+/g, ' ').trim()),
             periodes: document.querySelectorAll('.cm-fiche-periode').length,
             active: (document.querySelector('.cm-fiche-periode.actif') || {}).textContent,
+            // CE QU'ON ATTEND SE CALCULE, IL NE SE DEVINE PAS. Un bloc plus
+            // haut renomme le premier trimestre et lui donne une date : selon
+            // le jour où la suite tourne, la période courante s'appelle donc
+            // « 1er trimestre » ou « Semestre 1 ». Chercher le MOT
+            // « trimestre » revenait à faire dépendre la suite du calendrier,
+            // et elle est tombée le jour où l'on a passé cette date-là.
+            attendue: (() => {
+                const p = PluginManager.plugins.classPointsTool;
+                const i = p.trimestreCourant();
+                return (i === null) ? null : p.nomCourtDePeriode('tri' + i);
+            })(),
             memo: !!document.getElementById('cm-fiche-memo')
         };
     });
@@ -1867,7 +1878,10 @@ module.exports = async function (browser) {
         && /\d{2}\/\d{2}/.test(fiche.oublis.join(' ')), fiche.oublis.join(' ').slice(0, 200));
     r.verifie('elle propose les mêmes périodes que le bilan', fiche.periodes >= 7, String(fiche.periodes));
     r.verifie('et s\'ouvre sur le trimestre en cours',
-        /trimestre|année/i.test(fiche.active || ''), String(fiche.active));
+        fiche.attendue
+            ? (fiche.active || '').trim() === fiche.attendue.trim()
+            : /trimestre|année/i.test(fiche.active || ''),
+        'ouverte sur « ' + fiche.active + ' », attendu « ' + fiche.attendue + ' »');
     r.verifie('le mot noté sur l\'élève y est modifiable', fiche.memo);
 
     // La période filtre bien : « depuis le début » rattrape la trace de 2001
