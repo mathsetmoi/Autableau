@@ -1664,24 +1664,12 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
                 // ce sont des colonnes, et l'on propose de les ajouter plutôt
                 // que de laisser trois chiffres de côté sans rien dire.
                 const essai = GrilleDeChiffres.poser(nombre, cible.case, m.nbCases);
+                // La question prend l'affaire en main : elle posera le nombre
+                // elle-même, avec ou sans les colonnes, selon la réponse.
                 if (!essai.complet && this.rallongerPourLeNombre(imgObj, nombre, cible, m, essai, rang)) {
                     return;
                 }
-                const mis = essai;
-                const suite = Object.assign({}, contenu);
-                Object.keys(suite).forEach(k => {
-                    if (Number(k.split(',')[0]) === rang) delete suite[k];
-                });
-                Object.keys(mis.cases).forEach(c => { suite[rang + ',' + c] = mis.cases[c]; });
-                this.refaireLeTampon(imgObj, { contenu: suite });
-                if (!mis.complet && typeof showToast === 'function') {
-                    const cote = mis.perdus.gauche ? 'gauche' : 'droite';
-                    const chiffres = mis.perdus.gauche || mis.perdus.droite;
-                    const colonnes = Math.ceil(chiffres / m.plan.subCols);
-                    showToast('Le tableau ne va pas assez loin à ' + cote + ' : '
-                        + chiffres + ' chiffre(s) de côté, soit ' + colonnes
-                        + ' colonne(s) qui manquent.', '#e17055', '📏');
-                }
+                this.poserSansAllonger(imgObj, nombre, cible, m, rang);
             }
         });
         if (champ) champ.placeholder = 'Tapez une mesure : 12,5 cm — 3,4 kg — 0,75 L';
@@ -1704,11 +1692,48 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
         const cote = aGauche
             ? aGauche + ' colonne' + (aGauche > 1 ? 's' : '') + ' à gauche'
             : aDroite + ' colonne' + (aDroite > 1 ? 's' : '') + ' à droite';
-        const demande = (typeof window !== 'undefined' && window.confirm)
-            ? window.confirm('Cette mesure déborde du tableau.\n\nAjouter ' + cote + ' ?')
-            : false;
-        if (!demande) return false;
+        // LA QUESTION SE POSE DANS LA FENÊTRE DE L'APPLICATION, et non dans
+        // celle du navigateur : « les boîtes du navigateur n'ont ni notre
+        // habillage, ni le mode nuit, et sur vidéoprojecteur elles s'affichent
+        // avec l'adresse du site en gros ». Elle se répond plus tard : on rend
+        // « true » pour dire qu'on prend l'affaire en main, et l'on pose le
+        // nombre dans les deux cas — avec les colonnes, ou sans.
+        if (typeof demanderConfirmation !== 'function') return false;
+        demanderConfirmation('Le tableau est trop étroit',
+            'Cette mesure déborde du tableau.\n\nAjouter ' + cote + ' ?', false)
+            .then(oui => {
+                if (oui) this.allongerEtPoser(imgObj, nombre, voulu, aGauche, sub, rang, cote);
+                else this.poserSansAllonger(imgObj, nombre, cible, m, rang);
+            });
+        return true;
+    },
 
+    // Poser le nombre tel quel, dans le tableau tel qu'il est : c'est ce qu'on
+    // faisait avant qu'on sache allonger, et c'est ce qu'on fait encore quand
+    // on répond « non ». Ce qui ne tient pas est dit, pas tu.
+    poserSansAllonger: function (imgObj, nombre, cible, m, rang) {
+        const args = (imgObj.pluginData && imgObj.pluginData.args) || [];
+        const contenu = this.contenuDe(args);
+        const mis = GrilleDeChiffres.poser(nombre, cible.case, m.nbCases);
+        const suite = Object.assign({}, contenu);
+        Object.keys(suite).forEach(k => {
+            if (Number(k.split(',')[0]) === rang) delete suite[k];
+        });
+        Object.keys(mis.cases).forEach(c => { suite[rang + ',' + c] = mis.cases[c]; });
+        this.refaireLeTampon(imgObj, { contenu: suite });
+        if (!mis.complet && typeof showToast === 'function') {
+            const cote = mis.perdus.gauche ? 'gauche' : 'droite';
+            const chiffres = mis.perdus.gauche || mis.perdus.droite;
+            const colonnes = Math.ceil(chiffres / m.plan.subCols);
+            showToast('Le tableau ne va pas assez loin à ' + cote + ' : '
+                + chiffres + ' chiffre(s) de côté, soit ' + colonnes
+                + ' colonne(s) qui manquent.', '#e17055', '📏');
+        }
+        return true;
+    },
+
+    allongerEtPoser: function (imgObj, nombre, voulu, aGauche, sub, rang, cote) {
+        const args = (imgObj.pluginData && imgObj.pluginData.args) || [];
         // ON N'ALLONGE QU'UNE FOIS, et l'on pose le nombre dans le même geste.
         // « refaireLeTampon » décale ce qui est écrit d'autant de colonnes que
         // le tableau en gagne à gauche : ce qui s'y trouvait déjà se donne tel

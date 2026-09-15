@@ -7704,18 +7704,15 @@ function nImporteQuelLienSousLePoint(pos) {
 }
 window.nImporteQuelLienSousLePoint = nImporteQuelLienSousLePoint;
 
-// POSER, CHANGER OU RETIRER L'ADRESSE D'UN OBJET. Un champ vide la retire :
-// c'est le geste qu'on fait sans y penser, et il ne doit pas laisser un lien
-// mort sur une forme.
-function poserUnLienSurLObjet(item) {
+// CE QU'ON RÉPOND, ET CE QU'ON EN FAIT. Séparé de la question pour une raison
+// simple : la question est une fenêtre, elle se répond plus tard, et tout ce
+// qui suit doit pouvoir s'éprouver sans attendre personne.
+function appliquerLeLienSurLObjet(item, brut) {
     if (!item) return false;
     const o = getObjectById(item.type, item.id);
     if (!o) return false;
-    const brut = window.prompt(
-        'Adresse à ouvrir quand on clique sur cet objet\n(laissez vide pour retirer le lien)',
-        o.lien || 'https://');
-    if (brut === null) return false;                 // annulé : on ne touche à rien
-    const propre = brut.trim();
+    if (brut === null || brut === undefined) return false;   // renoncé : on ne touche à rien
+    const propre = String(brut).trim();
     if (!propre) {
         if (!o.lien) return false;
         delete o.lien;
@@ -7735,6 +7732,34 @@ function poserUnLienSurLObjet(item) {
     saveState(); draw();
     if (typeof updateQuickMenu === 'function') updateQuickMenu();
     if (typeof showToast === 'function') showToast('🔗 Lien posé — un clic dessus l\'ouvre');
+    return true;
+}
+window.appliquerLeLienSurLObjet = appliquerLeLienSurLObjet;
+
+// POSER, CHANGER OU RETIRER L'ADRESSE D'UN OBJET. Un champ vide la retire :
+// c'est le geste qu'on fait sans y penser, et il ne doit pas laisser un lien
+// mort sur une forme.
+//
+// LA QUESTION SE POSE DANS LA FENÊTRE DE L'APPLICATION, et non dans celle du
+// navigateur : « les boîtes du navigateur n'ont ni notre habillage, ni le mode
+// nuit, et sur vidéoprojecteur elles s'affichent avec l'adresse du site en
+// gros ». C'est écrit plus haut dans ce fichier, et je l'avais oublié.
+//
+// « openCustomPrompt » plutôt que « demanderUneLigne » : celle-ci rend « null »
+// pour un champ vide comme pour un renoncement, et l'on ne saurait plus
+// distinguer « retire le lien » de « laisse tout tel quel ».
+function poserUnLienSurLObjet(item) {
+    if (!item) return false;
+    const o = getObjectById(item.type, item.id);
+    if (!o) return false;
+    openCustomPrompt(
+        o.lien ? 'Changer le lien de cet objet' : 'Poser un lien sur cet objet',
+        [{ label: 'Adresse à ouvrir au clic (vide : retirer le lien)',
+           type: 'text', value: o.lien || 'https://',
+           placeholder: 'https://www.geogebra.org/…' }],
+        null,
+        (vals) => appliquerLeLienSurLObjet(item, vals[0] === undefined ? '' : vals[0]),
+        () => { /* renoncé : rien ne bouge */ });
     return true;
 }
 window.poserUnLienSurLObjet = poserUnLienSurLObjet;

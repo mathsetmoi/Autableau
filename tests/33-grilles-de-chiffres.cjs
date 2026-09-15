@@ -382,7 +382,14 @@ module.exports = async function (browser) {
             const champ = document.querySelector('.gr-champ-case');
             champ.value = texte;
             champ.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-            await new Promise(ok => setTimeout(ok, 450));
+            await new Promise(ok => setTimeout(ok, 250));
+            // Si la mesure déborde, l'application propose d'élargir. On dit
+            // non : c'est alors le message de débordement qu'on veut lire.
+            const boite = document.getElementById('confirm-modal');
+            if (boite && getComputedStyle(boite).display !== 'none') {
+                document.getElementById('confirm-cancel-btn').click();
+                await new Promise(ok => setTimeout(ok, 600));
+            }
             return { message: [...document.querySelectorAll('#toast-container *')]
                         .map(t => t.textContent).join(' '),
                      cases: Object.keys(images[0].pluginData.args[3]).length };
@@ -395,6 +402,22 @@ module.exports = async function (browser) {
     // traînerait : deux champs ouverts l'un sur l'autre, et le second n'est
     // jamais celui qu'on croit.
     await page.evaluate(() => {
+        // LA QUESTION SE POSE DANS LA FENÊTRE DE L'APPLICATION. On y répond
+        // comme un enseignant : on clique « Oui » ou « Annuler ».
+        window.__repondre = async (oui) => {
+            for (let i = 0; i < 40; i++) {
+                const b = document.getElementById('confirm-modal');
+                if (b && getComputedStyle(b).display !== 'none') break;
+                await new Promise(ok => setTimeout(ok, 30));
+            }
+            const b = document.getElementById('confirm-modal');
+            if (!b || getComputedStyle(b).display === 'none') return null;
+            const titre = document.getElementById('confirm-title').textContent;
+            const texte = document.getElementById('confirm-text').textContent;
+            document.getElementById(oui ? 'confirm-yes-btn' : 'confirm-cancel-btn').click();
+            await new Promise(ok => setTimeout(ok, 600));
+            return { titre, texte };
+        };
         window.__taper = async (p, texte, attente) => {
             document.querySelectorAll('.gr-champ-case').forEach(c => c.remove());
             p.demanderUnNombre(images[0]);
@@ -469,11 +492,15 @@ module.exports = async function (browser) {
         const p = PluginManager.plugins['conversionTool'];
         p.refaireLeTampon(images[0], { contenu: {}, rallonges: { g: 0, d: 0 } });
         await new Promise(ok => setTimeout(ok, 450));
-        window.confirm = () => false;                    // « non »
-        await window.__taper(p, '1234567 m');
+        await window.__taper(p, '1234567 m', 150);
+        const question = await window.__repondre(false);          // « non »
         const args = images[0].pluginData.args;
-        return { rallonges: p.rallongesDe(args), cases: Object.keys(args[3]).length };
+        return { question, rallonges: p.rallongesDe(args), cases: Object.keys(args[3]).length };
     });
+    r.verifie('la question se pose dans la fenêtre de l\'application, et dit quoi',
+        refuse2.question && /trop étroite?/i.test(refuse2.question.titre)
+        && /3 colonnes à gauche/.test(refuse2.question.texte),
+        JSON.stringify(refuse2.question));
     r.egal('on répond non : le tableau garde sa largeur, et pose ce qui tient',
         { rallonges: refuse2.rallonges, cases: refuse2.cases },
         { rallonges: { g: 0, d: 0 }, cases: 4 });
@@ -482,9 +509,11 @@ module.exports = async function (browser) {
         const p = PluginManager.plugins['conversionTool'];
         p.refaireLeTampon(images[0], { contenu: {}, rallonges: { g: 0, d: 0 } });
         await new Promise(ok => setTimeout(ok, 450));
+        await window.__taper(p, '1234567 m', 150);
         const demandes = [];
-        window.confirm = (q) => { demandes.push(q); return true; };   // « oui »
-        await window.__taper(p, '1234567 m', 700);
+        const q = await window.__repondre(true);                  // « oui »
+        if (q) demandes.push(q.texte);
+        await new Promise(ok => setTimeout(ok, 500));
         const args = images[0].pluginData.args;
         const m = p.mesuresDuTampon(args);
         // Les sept chiffres doivent être là, et dans l'ordre : le 7 sur la

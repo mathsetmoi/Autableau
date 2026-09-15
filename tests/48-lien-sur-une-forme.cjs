@@ -28,13 +28,27 @@ module.exports = async function (browser) {
     const { page, context, erreurs } = await ouvrirApp(browser, { viewport: { width: 1280, height: 800 } });
     await page.waitForFunction(() => typeof poserUnLienSurLObjet === 'function', { timeout: 20000 });
 
-    // On répond à la demande d'adresse sans clavier : « prompt » est bloquant.
-    const repondre = (valeur) => page.evaluate((v) => {
-        window.__prompts = [];
-        window.prompt = (question, defaut) => {
-            window.__prompts.push({ question, defaut });
-            return v;                                  // null = annulé
-        };
+    // LA QUESTION SE POSE DANS LA FENÊTRE DE L'APPLICATION, pas dans celle du
+    // navigateur : « les boîtes du navigateur n'ont ni notre habillage, ni le
+    // mode nuit, et sur vidéoprojecteur elles s'affichent avec l'adresse du
+    // site en gros ». On y répond donc comme un enseignant : on tape dans le
+    // champ, et l'on clique « Valider » — ou « Annuler ».
+    const repondre = (valeur) => page.evaluate(async (v) => {
+        const boite = document.getElementById('custom-prompt-modal');
+        const champ = document.querySelector('#custom-prompt-inputs input[type="text"]');
+        if (!boite || !champ) throw new Error('la fenêtre de l\'application ne s\'est pas ouverte');
+        window.__pose = { titre: document.getElementById('custom-prompt-title').textContent,
+                          libelle: document.querySelector('#custom-prompt-inputs label').innerText,
+                          propose: champ.value };
+        if (v === null) {
+            document.getElementById('custom-prompt-cancel').click();
+        } else {
+            champ.value = v;
+            champ.dispatchEvent(new Event('input', { bubbles: true }));
+            document.getElementById('custom-prompt-ok').click();
+        }
+        await new Promise(ok => setTimeout(ok, 150));
+        return window.__pose;
     }, valeur);
 
     const poserUnRectangle = () => page.evaluate(() => {
@@ -57,19 +71,20 @@ module.exports = async function (browser) {
     // 1. POSER UNE ADRESSE SUR UNE FORME
     // ------------------------------------------------------------------
     const id = await poserUnRectangle();
-    await repondre('https://www.geogebra.org/calculator');
-    const pose = await page.evaluate((id) => {
-        const fait = poserUnLienSurLObjet({ type: 'rectangle', id });
-        const o = getObjectById('rectangle', id);
-        return { fait, lien: o.lien,
-                 // La demande rappelle l'adresse déjà posée, s'il y en a une.
-                 propose: window.__prompts[0].defaut };
-    }, id);
-    r.egal('une forme accepte une adresse',
-        { fait: pose.fait, lien: pose.lien },
-        { fait: true, lien: 'https://www.geogebra.org/calculator' });
-    r.egal('et la demande part d\'une adresse vide la première fois',
-        pose.propose, 'https://');
+    const ouverte = await page.evaluate((id) => ({
+        fait: poserUnLienSurLObjet({ type: 'rectangle', id }),
+        boite: getComputedStyle(document.getElementById('custom-prompt-modal')).display
+    }), id);
+    const questionnee = await repondre('https://www.geogebra.org/calculator');
+    const pose = await page.evaluate((id) => getObjectById('rectangle', id).lien, id);
+    r.egal('poser un lien ouvre la fenêtre de l\'application, pas celle du navigateur',
+        { fait: ouverte.fait, boite: ouverte.boite }, { fait: true, boite: 'flex' });
+    r.egal('elle dit ce qu\'elle demande, et part d\'une adresse vide la première fois',
+        { titre: questionnee.titre, propose: questionnee.propose },
+        { titre: 'Poser un lien sur cet objet', propose: 'https://' });
+    r.verifie('et le libellé dit qu\'un champ vide retire le lien',
+        /vide *: *retirer/i.test(questionnee.libelle), questionnee.libelle);
+    r.egal('une forme accepte une adresse', pose, 'https://www.geogebra.org/calculator');
 
     // Le clic dessus l'ouvre — on remplace « window.open » pour le voir sans
     // ouvrir d'onglet.
@@ -124,39 +139,77 @@ module.exports = async function (browser) {
     // Un tableau se partage entre collègues par un fichier : une adresse
     // « javascript: » s'exécuterait chez celui qui clique.
     // ------------------------------------------------------------------
-    await repondre('javascript:alert(1)');
-    const refuse = await page.evaluate((id) => {
+    await page.evaluate((id) => {
         document.querySelectorAll('#toast-container > *').forEach(t => t.remove());
-        const avant = getObjectById('rectangle', id).lien;
-        const fait = poserUnLienSurLObjet({ type: 'rectangle', id });
-        return { fait, avant, apres: getObjectById('rectangle', id).lien,
-                 message: [...document.querySelectorAll('#toast-container *')]
-                     .map(t => t.textContent).join(' ') };
+        poserUnLienSurLObjet({ type: 'rectangle', id });
     }, id);
+    const questionRechange = await repondre('javascript:alert(1)');
+    const refuse = await page.evaluate((id) => ({
+        apres: getObjectById('rectangle', id).lien,
+        message: [...document.querySelectorAll('#toast-container *')]
+            .map(t => t.textContent).join(' ')
+    }), id);
     r.egal('une adresse « javascript: » est refusée, et le lien d\'avant reste',
-        { fait: refuse.fait, apres: refuse.apres },
-        { fait: false, apres: 'https://www.geogebra.org/calculator' });
+        refuse.apres, 'https://www.geogebra.org/calculator');
     r.verifie('et l\'on dit ce qu\'on attend', /https/.test(refuse.message), refuse.message);
+    r.egal('rouvrir sur un objet qui porte déjà un lien le rappelle, et le dit',
+        { titre: questionRechange.titre, propose: questionRechange.propose },
+        { titre: 'Changer le lien de cet objet', propose: 'https://www.geogebra.org/calculator' });
 
     // Annuler la demande ne touche à rien.
+    await page.evaluate((id) => poserUnLienSurLObjet({ type: 'rectangle', id }), id);
     await repondre(null);
-    const annule = await page.evaluate((id) => {
-        const fait = poserUnLienSurLObjet({ type: 'rectangle', id });
-        return { fait, lien: getObjectById('rectangle', id).lien };
-    }, id);
-    r.egal('annuler la demande ne change rien',
-        annule, { fait: false, lien: 'https://www.geogebra.org/calculator' });
+    const annule = await page.evaluate((id) => ({
+        lien: getObjectById('rectangle', id).lien,
+        boite: getComputedStyle(document.getElementById('custom-prompt-modal')).display
+    }), id);
+    r.egal('annuler la demande referme la fenêtre sans rien changer',
+        annule, { lien: 'https://www.geogebra.org/calculator', boite: 'none' });
 
     // Un champ vide retire le lien.
+    await page.evaluate((id) => poserUnLienSurLObjet({ type: 'rectangle', id }), id);
     await repondre('   ');
     const retire = await page.evaluate((id) => {
-        const fait = poserUnLienSurLObjet({ type: 'rectangle', id });
         const o = getObjectById('rectangle', id);
-        return { fait, aUnLien: 'lien' in o,
+        return { aUnLien: 'lien' in o,
                  sousLePoint: !!nImporteQuelLienSousLePoint({ x: 350, y: 300 }) };
     }, id);
     r.egal('un champ vide retire le lien, pour de bon',
-        retire, { fait: true, aUnLien: false, sousLePoint: false });
+        retire, { aUnLien: false, sousLePoint: false });
+
+    // ET CE QU'ON RÉPOND SE JUGE À PART. La fenêtre est une fenêtre ; ce
+    // qu'on fait de la réponse s'éprouve sans attendre personne.
+    const reponses = await page.evaluate((id) => {
+        const p = (v) => appliquerLeLienSurLObjet({ type: 'rectangle', id }, v);
+        const lire = () => getObjectById('rectangle', id).lien;
+        return {
+            // RENONCER S'ÉPROUVE SUR UN OBJET QUI PORTE DÉJÀ UNE ADRESSE :
+            // sur un objet nu, ne rien faire et tout effacer se ressemblent,
+            // et le test ne verrait pas la différence.
+            videSansLien: [p(''), lire()],
+            pose: [p('https://eduscol.education.fr'), lire()],
+            renonce: [p(null), lire()],
+            renonceAussi: [p(undefined), lire()],
+            espaces: [p('  https://Exemple.fr/Truc  '), lire()],
+            refusee: [p('ftp://exemple.fr/x'), lire()],
+            retiree: [p('   '), lire()]
+        };
+    }, id);
+    r.egal('un champ vide sur un objet sans lien ne fait rien',
+        reponses.videSansLien, [false, undefined]);
+    r.egal('une adresse valable se pose',
+        reponses.pose, [true, 'https://eduscol.education.fr']);
+    r.egal('renoncer laisse l\'adresse en place — et ne l\'efface surtout pas',
+        [reponses.renonce, reponses.renonceAussi],
+        [[false, 'https://eduscol.education.fr'], [false, 'https://eduscol.education.fr']]);
+    // LES ESPACES PARTENT, LA CASSE RESTE. Un chemin d'adresse distingue les
+    // majuscules — « /Truc » et « /truc » ne sont pas la même page —, et l'on
+    // ne récrit donc pas ce que l'enseignant a collé.
+    r.egal('les espaces autour ne gênent pas, et la casse est gardée telle quelle',
+        reponses.espaces, [true, 'https://Exemple.fr/Truc']);
+    r.egal('« ftp:// » n\'est pas le web : refusé, et le lien d\'avant reste',
+        reponses.refusee, [false, 'https://Exemple.fr/Truc']);
+    r.egal('et un champ vide le retire', reponses.retiree, [true, undefined]);
 
     // ------------------------------------------------------------------
     // 4. LA MARQUE : UNE FORME QUI PORTE UN LIEN LE DIT
