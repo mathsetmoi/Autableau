@@ -78,6 +78,15 @@ async function ouvrirApp(browser, options = {}) {
             try { localStorage.setItem('auTableau_demo_vue', 'true'); } catch (e) { /* refusé */ }
         });
     }
+    // LE PREMIER ÉCRAN couvre l'écran au tout premier démarrage pour dire où
+    // va ce qu'on écrit. Sur un navigateur neuf — c'est-à-dire dans CHAQUE
+    // suite — il intercepterait tous les clics. On fait comme s'il avait déjà
+    // été vu ; celle qui l'éprouve le rouvre elle-même.
+    if (!options.premierEcran) {
+        await context.addInitScript(() => {
+            try { localStorage.setItem('auTableau_premier_ecran_vu', 'true'); } catch (e) { /* refusé */ }
+        });
+    }
     const erreurs = [];
     page.on('pageerror', e => { if (!BRUIT.test(e.message)) erreurs.push(e.message.slice(0, 160)); });
     await page.goto(APP_URL);

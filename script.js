@@ -1584,6 +1584,65 @@ function sauvegardeAvecDuContenu(saved) {
 }
 window.sauvegardeAvecDuContenu = sauvegardeAvecDuContenu;
 
+// ==============================================================================
+// LE PREMIER ÉCRAN
+//
+// On ouvrait l'application sur un tableau blanc, sans un mot. Un collègue qui
+// découvre ne sait ni par où commencer, ni où ira ce qu'il écrit — et c'est
+// justement la question qu'on nous posait : « la gestion n'est pas hyper
+// intuitive pour un novice ». Trois portes, une phrase, et il ne revient plus.
+//
+// Il ne paraît QUE s'il n'y a rien à reprendre : celui qui retrouve sa séance
+// d'hier a déjà sa réponse, et lui poser une question de plus serait une porte
+// de trop entre lui et son cours.
+// ==============================================================================
+const CLE_PREMIER_ECRAN = 'auTableau_premier_ecran_vu';
+
+function premierEcranDejaVu() {
+    try { return localStorage.getItem(CLE_PREMIER_ECRAN) === 'true'; }
+    catch (e) { return true; }        // stockage refusé : on ne s'impose pas
+}
+
+function fermerLePremierEcran(pourquoi) {
+    const el = document.getElementById('premier-ecran');
+    if (el) el.style.display = 'none';
+    try { localStorage.setItem(CLE_PREMIER_ECRAN, 'true'); } catch (e) { /* refusé */ }
+    if (typeof initPages === 'function') initPages();
+    if (pourquoi === 'ouvrir') {
+        const tiroir = document.getElementById('right-drawer');
+        if (tiroir && !tiroir.classList.contains('open') && typeof toggleRightDrawer === 'function') {
+            toggleRightDrawer();
+        }
+        if (typeof switchDrawerTab === 'function') switchDrawerTab('tableaux');
+    }
+    if (pourquoi === 'demo') {
+        // La visite se lance une fois le tableau prêt : elle désigne des
+        // boutons, et ils doivent être en place.
+        setTimeout(() => {
+            const b = document.getElementById('btn-start-tour');
+            if (b) b.click();
+            else if (typeof lancerLaDemonstration === 'function') lancerLaDemonstration();
+        }, 400);
+    }
+    if (typeof updateUnsavedIndicator === 'function') updateUnsavedIndicator();
+}
+window.fermerLePremierEcran = fermerLePremierEcran;
+
+function montrerLePremierEcran() {
+    const el = document.getElementById('premier-ecran');
+    if (!el) { if (typeof initPages === 'function') initPages(); return false; }
+    el.style.display = 'flex';
+    const brancher = (id, pourquoi) => {
+        const b = document.getElementById(id);
+        if (b) b.addEventListener('click', () => fermerLePremierEcran(pourquoi), { once: true });
+    };
+    brancher('premier-ecrire', 'ecrire');
+    brancher('premier-ouvrir', 'ouvrir');
+    brancher('premier-demo', 'demo');
+    return true;
+}
+window.montrerLePremierEcran = montrerLePremierEcran;
+
 window.addEventListener('load', () => {
     // On essaie de charger la sauvegarde locale de manière asynchrone
     localforage.getItem(AUTO_SAVE_KEY).then((saved) => {
@@ -1591,8 +1650,17 @@ window.addEventListener('load', () => {
             try {
                 const hasContent = sauvegardeAvecDuContenu(saved);
                 if (hasContent) {
+                    // La fenêtre de reprise dit D'OÙ vient ce qu'elle propose,
+                    // et de quand : « une session précédente » ne disait ni
+                    // l'un ni l'autre.
+                    const quand = document.getElementById('restore-quand');
+                    if (quand) {
+                        const t = saved.enregistreLe || saved.quand || null;
+                        quand.textContent = t ? ' Dernière écriture ' + ilYACombien(t) + '.' : '';
+                    }
                     document.getElementById('restore-modal').style.display = 'flex';
-                } else { initPages(); }
+                } else if (!premierEcranDejaVu()) { montrerLePremierEcran(); }
+                else { initPages(); }
             } catch (e) { initPages(); }
         } else {
             // Système de migration intelligent : S'il y a un vieux localStorage, on le transfert dans IndexedDB
@@ -1601,6 +1669,12 @@ window.addEventListener('load', () => {
                 localforage.setItem(AUTO_SAVE_KEY, JSON.parse(oldSave));
                 localStorage.removeItem(AUTO_SAVE_KEY); // On nettoie
                 document.getElementById('restore-modal').style.display = 'flex';
+            } else if (!premierEcranDejaVu()) {
+                // RIEN À REPRENDRE, ET JAMAIS VENU : c'est la seule fois où le
+                // premier écran a quelque chose à dire. Il passe APRÈS la
+                // migration : un ancien tableau à reprendre est une meilleure
+                // réponse que trois portes.
+                montrerLePremierEcran();
             } else {
                 initPages();
             }
@@ -1715,6 +1789,11 @@ function stateForStorage() {
     const storedPages = pagesForStorage();
     return {
         pages: storedPages, assets: collectAssets(storedPages), nextId, globalZ, currentBgIndex,
+        // L'HEURE DE L'ÉCRITURE PART AVEC LE TABLEAU. Sans elle, la fenêtre de
+        // reprise proposait « une session précédente » sans dire de quand :
+        // celle d'il y a dix minutes et celle du mois dernier se ressemblaient.
+        enregistreLe: Date.now(),
+        nomDuTableau: (typeof currentBoardName !== 'undefined') ? currentBoardName : '',
         // Le fond du tableau ne tient pas qu'à son motif : le repère qu'on y a
         // posé, son pas et l'épaisseur du quadrillage en font partie. Sans eux,
         // on rouvrait sa séance de géométrie sans ses axes.
@@ -1734,6 +1813,12 @@ function writeAppLocal() {
     const cleanedPages = appState.pages;
 
     autoSaveWriting = true;
+    // L'ÉTAT SE DIT PENDANT, PAS SEULEMENT APRÈS. Une écriture de trois
+    // mégaoctets prend un instant : sans ce passage par « Enregistrement… »,
+    // la pastille sautait d'un « il y a 2 min » à un « à l'instant » sans que
+    // rien n'ait paru bouger, et l'on doutait qu'elle serve à quelque chose.
+    if (typeof enregistrementEnCours !== 'undefined') enregistrementEnCours = true;
+    if (typeof updateUnsavedIndicator === 'function') updateUnsavedIndicator();
     return localforage.setItem(AUTO_SAVE_KEY, appState).catch((e) => {
         console.error("Erreur de sauvegarde IndexedDB :", e);
         // Fallback de sécurité extrême au cas où
@@ -1743,6 +1828,9 @@ function writeAppLocal() {
         return localforage.setItem(AUTO_SAVE_KEY, { pages: ultraCleanedPages, assets: appState.assets, nextId, globalZ, currentBgIndex });
     }).finally(() => {
         autoSaveWriting = false;
+        if (typeof enregistrementEnCours !== 'undefined') enregistrementEnCours = false;
+        if (typeof dernierEnregistrementLocal !== 'undefined') dernierEnregistrementLocal = Date.now();
+        if (typeof updateUnsavedIndicator === 'function') updateUnsavedIndicator();
         // Le disque local est écrit ; la copie de sécurité suit, au plus toutes
         // les deux minutes.
         if (typeof signalerUnChangementASauver === 'function') signalerUnChangementASauver();
@@ -26157,7 +26245,184 @@ let currentBoardName = "";
 // sauvegardées » inquiétait à tort puisque tout est écrit localement de toute
 // façon. Le drapeau, lui, reste : c'est lui qui fait poser la question avant
 // de charger un autre tableau.
-function updateUnsavedIndicator() { /* plus de pastille à allumer */ }
+// ==============================================================================
+// OÙ VIT CE QU'ON ÉCRIT
+//
+// « Clarifier la gestion des tableaux et du stockage : je trouve que la
+// gestion n'est pas hyper intuitive pour un novice. »
+//
+// Il y a TROIS endroits, et aucun ne portait de nom sur l'écran :
+//
+//   1. CET ORDINATEUR — la séance en cours, écrite toute seule dans la mémoire
+//      du navigateur à chaque salve de gestes. C'est elle qu'on retrouve en
+//      rouvrant l'onglet, et c'est ce qui fait qu'on ne perd jamais une heure
+//      de cours. Personne ne le savait : on cliquait le disque par précaution.
+//   2. MES TABLEAUX — la liste du tiroir de droite. Un tableau n'y entre que
+//      si on l'y range, et c'est là qu'on va rechercher la séance de mardi.
+//   3. LA SAUVEGARDE DE SÉCURITÉ — un dossier du disque, écrit au plus toutes
+//      les deux minutes, pour le jour où le navigateur perd sa mémoire.
+//
+// Tout ce qui suit ne fait qu'une chose : le DIRE. Un bandeau en tête du
+// tiroir, un état à côté du titre, et un premier écran qui pose la phrase.
+// ==============================================================================
+
+// Quand chaque endroit a été écrit pour la dernière fois. « null » veut dire
+// « jamais depuis l'ouverture », et non « jamais » : au tout premier
+// enregistrement, l'état passe de « — » à une heure.
+let dernierEnregistrementLocal = null;
+let dernierEnregistrementDansLaListe = null;
+let enregistrementEnCours = false;
+
+// « il y a 3 min », « à l'instant ». Les secondes ne servent à rien ici : ce
+// qu'on veut savoir, c'est si l'on a perdu quelque chose, et la réponse se
+// joue en minutes.
+function ilYACombien(quand) {
+    if (!quand) return null;
+    const s = Math.max(0, Math.round((Date.now() - quand) / 1000));
+    if (s < 45) return "à l'instant";
+    const m = Math.round(s / 60);
+    if (m < 60) return 'il y a ' + m + ' min';
+    const h = Math.floor(m / 60);
+    return 'il y a ' + h + ' h' + (m % 60 ? ' ' + (m % 60) : '');
+}
+window.ilYACombien = ilYACombien;
+
+// L'état des trois endroits, en un seul objet. Le bandeau et la pastille en
+// vivent tous les deux : deux lectures séparées, c'est deux vérités qui
+// finissent par diverger.
+function etatDuRangement() {
+    const nom = (currentBoardName && currentBoardName.trim()) || 'Sans titre';
+    const entree = (typeof savedTableaux !== 'undefined' && Array.isArray(savedTableaux))
+        ? savedTableaux.find(t => t.id === selectedBoardId && !t.deleted) : null;
+    return {
+        nom,
+        // CET ORDINATEUR
+        local: { quand: dernierEnregistrementLocal, enCours: enregistrementEnCours },
+        // MES TABLEAUX
+        liste: { dedans: !!entree, nom: entree ? entree.name : null,
+                 quand: dernierEnregistrementDansLaListe },
+        // LA SAUVEGARDE DE SÉCURITÉ
+        securite: {
+            possible: (typeof sauvegardeDeSecuriteDisponible === 'function')
+                ? sauvegardeDeSecuriteDisponible() : false,
+            dossier: (typeof dossierSecurite !== 'undefined' && dossierSecurite)
+                ? (dossierSecurite.name || 'dossier choisi') : null,
+            quand: (typeof securiteDerniereEcriture !== 'undefined' && securiteDerniereEcriture)
+                ? securiteDerniereEcriture : null
+        }
+    };
+}
+window.etatDuRangement = etatDuRangement;
+
+// LE BANDEAU DU TIROIR. Il répond à la seule question qu'on se pose en
+// l'ouvrant : sur quoi je travaille, et est-ce que c'est quelque part ?
+function majBandeauDuRangement() {
+    const boite = document.getElementById('rd-ou-je-suis');
+    if (!boite) return null;
+    const e = etatDuRangement();
+    const nom = document.getElementById('ouje-nom');
+    if (nom) nom.textContent = e.nom;
+
+    const lignes = [];
+    lignes.push({
+        etat: e.local.enCours ? 'encours' : (e.local.quand ? 'bon' : 'attente'),
+        texte: e.local.enCours ? 'Enregistrement sur cet ordinateur…'
+            : (e.local.quand ? 'Sur cet ordinateur, ' + ilYACombien(e.local.quand)
+                             : 'Sur cet ordinateur, dès le premier trait')
+    });
+    lignes.push({
+        etat: e.liste.dedans ? 'bon' : 'attente',
+        texte: e.liste.dedans
+            ? 'Dans Mes tableaux' + (e.liste.quand ? ', ' + ilYACombien(e.liste.quand) : '')
+            : 'Pas encore dans Mes tableaux'
+    });
+    if (e.securite.dossier) {
+        lignes.push({
+            etat: e.securite.quand ? 'bon' : 'attente',
+            texte: 'Copie dans « ' + e.securite.dossier + ' »'
+                + (e.securite.quand ? ', ' + ilYACombien(e.securite.quand) : '')
+        });
+    }
+
+    const liste = document.getElementById('ouje-lignes');
+    if (liste) {
+        liste.textContent = '';
+        lignes.forEach(l => {
+            const li = document.createElement('li');
+            li.className = 'ouje-ligne ouje-' + l.etat;
+            li.textContent = l.texte;
+            liste.appendChild(li);
+        });
+    }
+    // Le bouton ne propose que ce qui manque : ranger un tableau déjà rangé
+    // n'apprend rien, et un bouton qui ne sert jamais s'oublie.
+    const ranger = document.getElementById('ouje-ranger');
+    if (ranger) {
+        ranger.textContent = e.liste.dedans
+            ? 'Enregistrer les changements' : 'Enregistrer dans Mes tableaux';
+    }
+    return lignes;
+}
+window.majBandeauDuRangement = majBandeauDuRangement;
+
+// LA PASTILLE À CÔTÉ DU TITRE. Trois mots au plus : c'est un état, pas un
+// message. Elle remplace une pastille rouge « il y a du non-enregistré » qui
+// s'allumait au premier geste et ne s'éteignait plus — allumée en permanence,
+// elle ne signalait rien.
+function updateUnsavedIndicator() {
+    const bouton = document.getElementById('etat-enregistrement');
+    if (!bouton) { majBandeauDuRangement(); return; }
+    const e = etatDuRangement();
+    const mot = document.getElementById('etat-mot');
+    let etat, texte, aide;
+    if (e.local.enCours) {
+        etat = 'encours'; texte = 'Enregistrement…';
+        aide = 'Enregistrement en cours sur cet ordinateur';
+    } else if (!e.local.quand) {
+        etat = 'attente'; texte = 'Rien à enregistrer';
+        aide = 'Tout ce que vous écrirez sera enregistré tout seul sur cet ordinateur';
+    } else {
+        etat = 'bon';
+        const quand = ilYACombien(e.local.quand);
+        texte = (quand === "à l'instant") ? 'Enregistré' : 'Enregistré ' + quand;
+        aide = 'Enregistré sur cet ordinateur ' + quand
+            + (e.liste.dedans ? ' — et rangé dans Mes tableaux' : ' — pas encore dans Mes tableaux')
+            + '. Cliquez pour ouvrir la liste.';
+    }
+    bouton.dataset.etat = etat;
+    bouton.title = aide;
+    if (mot) mot.textContent = texte;
+    majBandeauDuRangement();
+}
+
+// L'état vieillit tout seul : « à l'instant » devient « il y a 3 min » sans
+// qu'on touche à rien. Une fois par demi-minute suffit — on parle en minutes.
+setInterval(() => {
+    if (typeof updateUnsavedIndicator === 'function') updateUnsavedIndicator();
+}, 30000);
+
+document.addEventListener('DOMContentLoaded', () => {
+    const bouton = document.getElementById('etat-enregistrement');
+    if (bouton) {
+        bouton.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const tiroir = document.getElementById('right-drawer');
+            if (tiroir && !tiroir.classList.contains('open') && typeof toggleRightDrawer === 'function') {
+                toggleRightDrawer();
+            }
+            if (typeof switchDrawerTab === 'function') switchDrawerTab('tableaux');
+            majBandeauDuRangement();
+        });
+    }
+    const ranger = document.getElementById('ouje-ranger');
+    if (ranger) {
+        ranger.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            if (typeof saveCurrentBoard === 'function') saveCurrentBoard();
+        });
+    }
+    updateUnsavedIndicator();
+});
 
 function initProjectName() {
     // Le format vient des réglages de la roue, à côté du titre
@@ -27278,9 +27543,12 @@ function _doSaveBoard(name, id, discret) {
     return localforage.setItem('data_' + id, appState).then(() => {
         selectedBoardId = id;
         hasUnsavedChanges = false;
+        if (typeof dernierEnregistrementDansLaListe !== 'undefined') {
+            dernierEnregistrementDansLaListe = Date.now();
+        }
         updateUnsavedIndicator();
         renderExplorerLists();
-        if (!discret) showToast("Tableau sauvegardé !");
+        if (!discret) showToast("Tableau rangé dans Mes tableaux");
     });
 }
 
@@ -27298,8 +27566,11 @@ function loadBoard(id) {
                 if (typeof ajusterLargeurDuTitre === 'function') ajusterLargeurDuTitre();
             }
             hasUnsavedChanges = false;
+            if (typeof dernierEnregistrementDansLaListe !== 'undefined') {
+                dernierEnregistrementDansLaListe = Date.now();
+            }
             updateUnsavedIndicator();
-            showToast("Tableau chargé !");
+            showToast('« ' + (currentBoardName || 'Tableau') + " » est ouvert");
         }
     });
 }
@@ -27752,6 +28023,7 @@ async function ecrireLaSauvegardeDeSecurite(force) {
         await flux.close();
         securiteDerniereEcriture = Date.now();
         securiteAEcrire = false;
+        if (typeof updateUnsavedIndicator === 'function') updateUnsavedIndicator();
         try { localStorage.setItem(CLE_DERNIERE_SECURITE, String(Date.now())); } catch (e) { /* refusé */ }
         await rangerLesVieillesCopies();
         majLibelleDeLaSecurite();

@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=138">
+    <link rel="stylesheet" href="style.css?v=139">
 </head>
 
 <body>
@@ -568,6 +568,13 @@
     <div class="project-name-wrapper" id="project-name-wrapper">
         <input type="text" id="project-name-input" class="project-name-input" placeholder="Titre du tableau..."
             data-tooltip="Glissez pour la déplacer — double-clic pour ses réglages ; un clic sur l'horloge permet de l'agrandir" />
+        <!-- L'ENREGISTREMENT SE VOIT, IL NE SE DEVINE PAS. Le tableau se sauve
+             tout seul depuis toujours, mais rien ne le disait : on cliquait le
+             disque du tiroir par précaution, sans savoir si c'était utile. Un
+             état, pas un bouton — et un clic dessus ouvre la liste. -->
+        <button id="etat-enregistrement" type="button" title="Où en est l'enregistrement">
+            <span class="etat-point"></span><span class="etat-mot" id="etat-mot">Enregistré</span>
+        </button>
         <!-- L'HORLOGE À AIGUILLES, à la place de la pastille rouge qui occupait
              ce coin. Celle-ci s'allumait au premier geste et ne s'éteignait
              qu'en enregistrant un tableau nommé : allumée en permanence, elle
@@ -1614,14 +1621,46 @@
         </div>
     </div>
 
+    <!-- LE PREMIER ÉCRAN. On ouvrait l'application sur un tableau blanc, sans
+         un mot : un collègue qui découvre ne sait ni par où commencer, ni où
+         ira ce qu'il écrit. Trois portes, et la phrase qui manque. Il ne
+         paraît qu'une fois. -->
+    <div id="premier-ecran" class="modal-backdrop" style="display: none;">
+        <div class="modal-box premier-boite">
+            <h3 class="modal-title premier-titre">Bienvenue au tableau</h3>
+            <div class="premier-texte">
+                Tout ce que vous écrivez est enregistré <b>tout seul, sur cet ordinateur</b>.
+                Rien ne part sur Internet. Quand une séance mérite d'être retrouvée,
+                rangez-la dans <b>Mes tableaux</b> — le tiroir de droite.
+            </div>
+            <div class="premier-portes">
+                <button class="premier-porte" id="premier-ecrire">
+                    <b>Commencer à écrire</b>
+                    <span>Une page blanche, tout de suite</span>
+                </button>
+                <button class="premier-porte" id="premier-ouvrir">
+                    <b>Ouvrir un tableau</b>
+                    <span>Voir ce qui est rangé dans Mes tableaux</span>
+                </button>
+                <button class="premier-porte" id="premier-demo">
+                    <b>Faire le tour du propriétaire</b>
+                    <span>Une démonstration de deux minutes</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="restore-modal" class="modal-backdrop">
         <div class="modal-box">
             <h3 class="modal-title" style="color: #0984e3;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
                     width="24" height="24" class="stroke-icon">
                     <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" />
                 </svg> Sauvegarde trouvée</h3>
-            <div class="modal-text">Une session précédente a été trouvée en mémoire. Voulez-vous la restaurer pour
-                reprendre votre travail ?</div>
+            <div class="modal-text">Votre dernière séance a été retrouvée sur cet ordinateur —
+                elle s'était enregistrée toute seule. La reprendre, ou repartir d'une page blanche ?
+                <b id="restore-quand"></b>
+                <span class="modal-note">Repartir d'une page blanche ne l'efface pas : elle rejoint
+                    « Mes tableaux », dans le tiroir de droite.</span></div>
             <div class="export-actions-grid" style="display:flex;">
                 <button class="btn-action secondary" onclick="cancelRestore()" style="flex:1;">Nouveau tableau</button>
                 <button class="btn-action primary" onclick="confirmRestore()"
@@ -2560,6 +2599,19 @@
                 style="display:none; width:100%; margin-top:8px; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--ink); font-size:12px;"
                 oninput="filterExplorerTree()">
         </div>
+        <!-- OÙ VIT CE QU'ON ÉCRIT. « Je trouve que la gestion n'est pas hyper
+             intuitive pour un novice. » Trois endroits sans nom : la séance en
+             cours, la liste « Mes tableaux », et la copie de sécurité sur le
+             disque. On ne savait pas lequel on modifiait, ni si le travail de
+             l'heure était quelque part. Ce bandeau le dit, en toutes lettres,
+             à l'endroit où l'on vient chercher ses tableaux. -->
+        <div id="rd-ou-je-suis">
+            <div class="ouje-titre">Vous travaillez sur</div>
+            <div class="ouje-nom" id="ouje-nom">—</div>
+            <ul class="ouje-lignes" id="ouje-lignes"></ul>
+            <button class="ouje-action" id="ouje-ranger">Enregistrer dans Mes tableaux</button>
+        </div>
+
         <div id="exp-lot" class="exp-lot" hidden>
             <span id="exp-lot-compte">0 sélectionnés</span>
             <div class="exp-lot-boutons">
@@ -3175,7 +3227,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=248"></script>
+    <script src="script.js?v=249"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=102"></script>
     <script src="./lib/documents/documents.js?v=2"></script>
