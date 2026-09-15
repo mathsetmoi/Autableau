@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=143">
+    <link rel="stylesheet" href="style.css?v=144">
 </head>
 
 <body>
@@ -670,6 +670,23 @@
          commande qui le règle vit dans le tiroir du bas, lequel est
          justement caché. Trois temps — tout, les barres seules, le tableau
          nu — et le plein écran du navigateur à côté. -->
+    <!-- =========================================================
+         LES QUATRE DU COIN, RANGÉS PAR FAMILLE
+         « Je ne comprends pas le fonctionnement des 4. » Ils
+         répondaient à deux questions sans rapport, et l'ordre les
+         mélangeait : affichage, projection, fenêtre, affichage.
+         Deux familles, dans cet ordre, séparées par un trait :
+
+           CE QU'ON VOIT DE L'APPLICATION — le cycle d'affichage,
+           et la croix qui ramène tout d'un coup ;
+           CE QUI PASSE EN GRAND — la page projetée, et la fenêtre
+           du navigateur.
+
+         L'ordre a une seconde raison, mesurable : les deux
+         dernières sont les seules à paraître sur l'écran
+         ordinaire. Rangées à droite, contre le coin, elles ne
+         bougent pas d'un pixel quand les deux autres arrivent.
+         ========================================================= -->
     <div id="barre-ecran">
         <button id="btn-ecran-suite" data-title="Affichage : tout / les barres seules / le tableau nu">
             <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
@@ -679,19 +696,28 @@
                 <line x1="3" y1="9" x2="21" y2="9" />
             </svg>
         </button>
+        <button id="exit-focus-cross" onclick="poserLAffichage(0)" data-title="Tout remettre (Échap)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+        </button>
+        <!-- Le trait ne paraît qu'avec la famille de gauche : seul, il
+             ne séparerait rien. -->
+        <span id="ecran-sep"></span>
         <!-- PRÉSENTER, TOUJOURS AU MÊME PIXEL. « Ce qui me sert le plus, c'est
              quand même le bouton plein écran. » Il vivait dans la barre du
              document, qui paraît et disparaît avec la sélection : on prenait
              le crayon, la barre s'en allait, et il fallait recliquer la page
              pour retrouver le bouton le plus utilisé de l'application. Ici, il
              ne bouge plus — et il agit sur la page qu'on a sous les yeux,
-             qu'on la tienne ou non. -->
-        <!-- SON ICÔNE N'EST PLUS « QUATRE COINS ». « Je crois qu'il y a
-             plusieurs plein écran. » Ce bouton et son voisin « plein écran du
-             navigateur » portaient tous deux les quatre coins de l'agrandi :
-             à quatorze pixels, côte à côte, rien ne les séparait. Celui-ci
-             projette LA PAGE — on dessine donc une page sur un écran ; les
-             quatre coins restent au geste qui agrandit vraiment la fenêtre. -->
+             qu'on la tienne ou non.
+             SON ICÔNE N'EST PLUS « QUATRE COINS » : lui et son voisin
+             portaient tous deux les quatre coins de l'agrandi, et à quatorze
+             pixels rien ne les séparait. Celui-ci projette LA PAGE — une page
+             sur un écran ; les quatre coins restent au geste qui agrandit
+             vraiment la fenêtre. -->
         <button id="btn-ecran-presenter" data-title="Projeter la page en grand (D)">
             <!-- Vide : c'est « ICONES_PLEIN_ECRAN » qui le remplit, et qui
                  l'échange quand on projette. Un dessin écrit ici serait une
@@ -705,13 +731,6 @@
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                 id="icone-ecran-plein">
                 <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-            </svg>
-        </button>
-        <button id="exit-focus-cross" onclick="poserLAffichage(0)" data-title="Tout remettre (Échap)">
-            <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2" stroke-linecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
         </button>
     </div>
@@ -3236,7 +3255,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=258"></script>
+    <script src="script.js?v=260"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

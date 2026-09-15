@@ -386,6 +386,186 @@ module.exports = async function (browser) {
     r.egal('mais dix rafraîchissements sans changement n\'écrivent rien',
         bascule.ecrituresEnTrop, 0);
 
+    // ------------------------------------------------------------------
+    // 6. LES QUATRE DU COIN SE LAISSENT COMPRENDRE
+    //
+    // « Je ne comprends pas le fonctionnement des 4. » Ils répondent à deux
+    // questions sans rapport, et l'ordre les mélangeait — affichage,
+    // projection, fenêtre, affichage. Trois choses ont changé :
+    //
+    //   ils sont rangés par famille, séparées par un trait ;
+    //   les deux qui paraissent sur l'écran ordinaire sont contre le coin, et
+    //   ne bougent donc pas quand les deux autres arrivent ;
+    //   le bouton d'affichage ne récite plus la liste des trois états : il dit
+    //   où l'on est et ce que l'appui suivant fera.
+    // ------------------------------------------------------------------
+    const coin = await page.evaluate(async (px) => {
+        images.length = 0;
+        images.push({ id: 'D1', type: 'image', src: px, x: 100, y: 100, w: 600, h: 800 });
+        selectedItems = []; majBarreDocument();
+        const lire = () => ['btn-ecran-suite', 'exit-focus-cross', 'ecran-sep',
+                            'btn-ecran-presenter', 'btn-ecran-plein'].map(id => {
+            const b = document.getElementById(id);
+            return { id, vu: getComputedStyle(b).display !== 'none',
+                     x: Math.round(b.getBoundingClientRect().x),
+                     nom: b.getAttribute('data-title') || '' };
+        });
+        const par = {};
+        for (const e of [0, 1, 2]) {
+            poserLAffichage(e);
+            await new Promise(ok => setTimeout(ok, 450));
+            par[e] = lire();
+        }
+        poserLAffichage(0);
+        await new Promise(ok => setTimeout(ok, 300));
+        return par;
+    }, PIXEL);
+
+    const place = (etat, id) => (coin[etat].find(b => b.id === id) || {}).x;
+    const vu = (etat, id) => (coin[etat].find(b => b.id === id) || {}).vu;
+
+    r.egal('sur l\'écran ordinaire, le coin ne porte que les deux « en grand »',
+        coin[0].filter(b => b.vu).map(b => b.id),
+        ['btn-ecran-presenter', 'btn-ecran-plein']);
+    r.verifie('en affichage réduit, les deux de l\'affichage arrivent avec leur trait',
+        vu(1, 'btn-ecran-suite') && vu(1, 'exit-focus-cross') && vu(1, 'ecran-sep'),
+        JSON.stringify(coin[1].map(b => b.id + ':' + b.vu)));
+
+    // LE CŒUR : les deux permanents ne bougent pas quand les autres arrivent.
+    r.egal('et les deux permanents ne bougent pas d\'un pixel',
+        [place(1, 'btn-ecran-presenter') - place(0, 'btn-ecran-presenter'),
+         place(2, 'btn-ecran-plein') - place(0, 'btn-ecran-plein')], [0, 0]);
+
+    // Les familles se suivent : affichage, affichage, trait, grand, grand.
+    const ordre = coin[1].filter(b => b.vu).map(b => b.id);
+    r.egal('les deux familles se suivent, le trait entre elles',
+        ordre, ['btn-ecran-suite', 'exit-focus-cross', 'ecran-sep',
+                'btn-ecran-presenter', 'btn-ecran-plein']);
+    r.verifie('et le trait ne paraît pas quand il n\'aurait rien à séparer',
+        !vu(0, 'ecran-sep'), String(vu(0, 'ecran-sep')));
+
+    // LE BOUTON DIT OÙ L'ON EST, ET CE QUE L'APPUI SUIVANT FERA.
+    r.verifie('en « barres seules », il dit où l\'on est et ce qui suit',
+        /tiroirs sont rangés/.test(coin[1].find(b => b.id === 'btn-ecran-suite').nom)
+        && /un appui/.test(coin[1].find(b => b.id === 'btn-ecran-suite').nom),
+        coin[1].find(b => b.id === 'btn-ecran-suite').nom);
+    r.verifie('en « tableau nu », il dit autre chose : l\'état a changé',
+        /tableau nu/.test(coin[2].find(b => b.id === 'btn-ecran-suite').nom)
+        && coin[2].find(b => b.id === 'btn-ecran-suite').nom
+           !== coin[1].find(b => b.id === 'btn-ecran-suite').nom,
+        coin[2].find(b => b.id === 'btn-ecran-suite').nom);
+    r.verifie('et il ne récite plus la liste des trois états',
+        !/tout \/ les barres seules/i.test(coin[1].find(b => b.id === 'btn-ecran-suite').nom),
+        coin[1].find(b => b.id === 'btn-ecran-suite').nom);
+
+    // ------------------------------------------------------------------
+    // 7. UN APPUI DE TROP SUR LE PLEIN ÉCRAN NE COMPTE PAS
+    //
+    // « Quand je clique sur le plein écran plusieurs fois, d'un coup je passe à
+    // un autre navigateur. » « requestFullscreen » est lent — le gestionnaire
+    // de fenêtres redimensionne la fenêtre — mais « fullscreenElement » ne
+    // change qu'à la fin. On lisait cet état au moment du clic : deux appuis
+    // rapprochés voyaient tous deux « pas en plein écran » et demandaient tous
+    // deux d'y entrer. Le second arrive sans geste neuf, le navigateur le
+    // refuse, la fenêtre entre et ressort — et celle de derrière remonte.
+    //
+    // Mesuré avant correction : CINQ appuis rapides envoyaient CINQ demandes.
+    // ------------------------------------------------------------------
+    const rapide = await page.evaluate(async () => {
+        // On compte ce qui part VERS LE NAVIGATEUR, et non ce qu'on voit : le
+        // plein écran réel n'est pas pilotable depuis un test.
+        let demandes = 0, sorties = 0;
+        const vraiDemander = Element.prototype.requestFullscreen;
+        const vraiSortir = document.exitFullscreen && document.exitFullscreen.bind(document);
+        Element.prototype.requestFullscreen = function () { demandes++; return Promise.resolve(); };
+        document.exitFullscreen = function () { sorties++; return Promise.resolve(); };
+
+        // CINQ APPUIS COMME UNE MAIN LES FAIT : espacés de quatre-vingts
+        // millisecondes. Une boucle synchrone ne prouverait rien — le
+        // garde-fou du verrou est un « setTimeout », et aucun délai ne peut
+        // s'écouler entre deux tours d'une boucle serrée ; un garde-fou réglé
+        // à zéro passerait le contrôle tout en laissant le bug entier.
+        const rendus = [];
+        for (let i = 0; i < 5; i++) {
+            rendus.push(basculerPleinEcran());
+            await new Promise(ok => setTimeout(ok, 80));
+        }
+        const pendant = { demandes, rendus: rendus.slice() };
+
+        // Le navigateur répond enfin : le verrou s'ouvre, le bouton reprend.
+        document.dispatchEvent(new Event('fullscreenchange'));
+        await new Promise(ok => setTimeout(ok, 40));
+        const repris = basculerPleinEcran();
+
+        Element.prototype.requestFullscreen = vraiDemander;
+        if (vraiSortir) document.exitFullscreen = vraiSortir;
+        document.dispatchEvent(new Event('fullscreenchange'));
+        await new Promise(ok => setTimeout(ok, 40));
+        return { pendant, repris, enTout: demandes, sorties };
+    });
+    r.egal('cinq appuis rapides n\'envoient qu\'UNE demande au navigateur',
+        rapide.pendant.demandes, 1);
+    r.egal('et seul le premier appui est pris en compte',
+        rapide.pendant.rendus, [true, false, false, false, false]);
+    r.verifie('le navigateur ayant répondu, le bouton reprend aussitôt',
+        rapide.repris === true && rapide.enTout === 2, JSON.stringify(rapide));
+
+    // ET LE VERROU NE RESTE PAS FERMÉ si le navigateur ne répond jamais : sans
+    // ce garde-fou, un refus silencieux condamnait le bouton pour la séance.
+    const bloque = await page.evaluate(async () => {
+        const vrai = Element.prototype.requestFullscreen;
+        Element.prototype.requestFullscreen = function () { return new Promise(() => { }); };
+        basculerPleinEcran();                       // part, et rien ne revient
+        const toutDeSuite = basculerPleinEcran();   // refusé, c'est voulu
+        await new Promise(ok => setTimeout(ok, 1700));
+        const apresLAttente = basculerPleinEcran();
+        Element.prototype.requestFullscreen = vrai;
+        document.dispatchEvent(new Event('fullscreenchange'));
+        return { toutDeSuite, apresLAttente };
+    });
+    r.egal('un navigateur muet ne condamne pas le bouton pour la séance',
+        bloque, { toutDeSuite: false, apresLAttente: true });
+
+    // ET UN REFUS NET ROUVRE LE VERROU TOUT DE SUITE, sans attendre le
+    // garde-fou : le navigateur refuse parfois (page pas au premier plan), et
+    // faire patienter une seconde et demie après un refus n'a aucun sens.
+    const refus = await page.evaluate(async () => {
+        const vrai = Element.prototype.requestFullscreen;
+        Element.prototype.requestFullscreen = function () { return Promise.reject(new Error('refusé')); };
+        basculerPleinEcran();
+        await new Promise(ok => setTimeout(ok, 120));   // bien avant le garde-fou
+        const repris = basculerPleinEcran();
+        Element.prototype.requestFullscreen = vrai;
+        document.dispatchEvent(new Event('fullscreenchange'));
+        await new Promise(ok => setTimeout(ok, 40));
+        return { repris };
+    });
+    r.egal('un refus net rouvre le verrou sans attendre le garde-fou',
+        refus, { repris: true });
+
+    // LE BOUTON DIT OÙ L'ON EST : on appuyait plusieurs fois faute de le savoir.
+    const ditOuOnEst = await page.evaluate(async () => {
+        const b = document.getElementById('btn-ecran-plein');
+        const dehors = { allume: b.classList.contains('actif'), nom: b.getAttribute('data-title') };
+        // On fait comme si le navigateur nous avait mis en plein écran.
+        const vrai = Object.getOwnPropertyDescriptor(Document.prototype, 'fullscreenElement');
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => document.documentElement });
+        majBoutonDuPleinEcran();
+        const dedans = { allume: b.classList.contains('actif'), nom: b.getAttribute('data-title') };
+        delete document.fullscreenElement;
+        if (vrai) Object.defineProperty(Document.prototype, 'fullscreenElement', vrai);
+        majBoutonDuPleinEcran();
+        return { dehors, dedans, revenu: b.getAttribute('data-title') };
+    });
+    r.verifie('dehors, il propose d\'entrer en plein écran',
+        !ditOuOnEst.dehors.allume && !/Quitter/.test(ditOuOnEst.dehors.nom),
+        JSON.stringify(ditOuOnEst.dehors));
+    r.verifie('dedans, il s\'allume et propose d\'en sortir',
+        ditOuOnEst.dedans.allume && /Quitter/.test(ditOuOnEst.dedans.nom),
+        JSON.stringify(ditOuOnEst.dedans));
+    r.verifie('et il reprend sa promesse en sortant',
+        !/Quitter/.test(ditOuOnEst.revenu), ditOuOnEst.revenu);
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

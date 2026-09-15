@@ -10873,6 +10873,22 @@ body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #exit-focus-cross {
     display: none;
 }
 
+/* LE TRAIT QUI DIT « DEUX FAMILLES ». À gauche, ce qu'on voit de
+   l'application ; à droite, ce qui passe en grand. Sans lui, les quatre
+   boutons formaient une file où rien ne groupait rien — « je ne comprends pas
+   le fonctionnement des 4 ». Il ne paraît qu'avec la famille de gauche :
+   seul, il ne séparerait rien. */
+#ecran-sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 4px 3px;
+    background: var(--contour, rgba(0, 0, 0, 0.15));
+}
+
+body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #ecran-sep {
+    display: none;
+}
+
 #barre-ecran button.actif { color: var(--accent); border-color: var(--accent); }
 
 /* ===========================================================

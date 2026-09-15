@@ -1325,14 +1325,20 @@ function majLePointDAffichage() {
     if (mot) mot.textContent = MOTS_DE_LAFFICHAGE[etat];
     // L'allumage est posé par « majInterrupteursBarre », appelé plus bas :
     // l'écrire ici aussi ne faisait que le doubler.
+    const OU_L_ON_EST = [
+        'Tout est là — un appui range les tiroirs',
+        'Les tiroirs sont rangés — un appui efface tout',
+        'Le tableau nu — un appui remet tout'
+    ];
     const pastille = document.getElementById('btn-focus');
-    if (pastille) {
-        pastille.setAttribute('title', [
-            'Tout est là — un appui range les tiroirs',
-            'Les tiroirs sont rangés — un appui efface tout',
-            'Le tableau nu — un appui remet tout'
-        ][etat]);
-    }
+    if (pastille) pastille.setAttribute('title', OU_L_ON_EST[etat]);
+    // ET LE BOUTON DU COIN DIT LA MÊME CHOSE. Il portait la liste des trois
+    // états — « Affichage : tout / les barres seules / le tableau nu » — ce qui
+    // décrit un cycle sans jamais dire où l'on est ni ce que l'appui suivant
+    // fera. « Je ne comprends pas le fonctionnement des 4 » : un bouton dont
+    // l'effet dépend d'un état caché ne s'apprend pas, il se subit.
+    const coin = document.getElementById('btn-ecran-suite');
+    if (coin) coin.setAttribute('data-title', OU_L_ON_EST[etat]);
     if (typeof majInterrupteursBarre === 'function') majInterrupteursBarre();
 }
 window.majLePointDAffichage = majLePointDAffichage;
@@ -20769,20 +20775,81 @@ function couleurParRaccourci(n) {
     return true;
 }
 
+// ==============================================================================
+// UN APPUI DE TROP NE COMPTE PAS
+//
+// « Quand je clique sur le plein écran plusieurs fois, d'un coup je passe à un
+// autre navigateur. »
+//
+// « requestFullscreen » et « exitFullscreen » sont LENTS — le gestionnaire de
+// fenêtres redimensionne la fenêtre, cela prend des dixièmes de seconde — mais
+// « document.fullscreenElement » ne change qu'À LA FIN. On lisait donc cet
+// état-là au moment du clic : deux appuis rapprochés voyaient tous les deux
+// « pas en plein écran » et demandaient tous les deux d'y entrer. Le second
+// arrive sans geste d'utilisateur neuf, le navigateur le refuse, la fenêtre
+// entre et ressort — et le gestionnaire de fenêtres, pendant qu'elle n'est
+// plus au premier plan, remonte celle de derrière. C'est la fenêtre voisine
+// qui apparaît, sans qu'on ait rien demandé.
+//
+// On ne lit donc plus l'état : on tient un verrou, ouvert par l'événement
+// « fullscreenchange » quand le changement a vraiment eu lieu. Les appuis
+// pendant le trajet sont simplement ignorés — c'est ce qu'un bouton fait de
+// mieux quand on le presse trop vite.
+// ==============================================================================
+let pleinEcranEnRoute = false;
+let finDuVerrouPlein = null;
+
+function libererLePleinEcran() {
+    pleinEcranEnRoute = false;
+    clearTimeout(finDuVerrouPlein);
+    finDuVerrouPlein = null;
+}
+
 // Échap sort du plein écran sans passer par nous : la barre doit le voir,
 // sinon elle propose d'en sortir alors qu'on n'y est plus.
 document.addEventListener('fullscreenchange', () => {
+    libererLePleinEcran();
     if (!document.fullscreenElement) pleinEcranDeLaPresentation = false;
+    if (typeof majBoutonDuPleinEcran === 'function') majBoutonDuPleinEcran();
     if (typeof majBarreDocument === 'function') majBarreDocument();
 });
 
+// LE BOUTON DIT OÙ L'ON EST. On appuyait plusieurs fois faute de savoir si le
+// premier appui avait porté : rien, sur le bouton, ne distinguait « dedans »
+// de « dehors ».
+function majBoutonDuPleinEcran() {
+    const b = document.getElementById('btn-ecran-plein');
+    if (!b) return;
+    const dedans = !!document.fullscreenElement;
+    b.classList.toggle('actif', dedans);
+    b.setAttribute('data-title', dedans
+        ? 'Quitter le plein écran du navigateur (Ctrl+Maj+F)'
+        : 'Plein écran du navigateur (Ctrl+Maj+F)');
+}
+window.majBoutonDuPleinEcran = majBoutonDuPleinEcran;
+
 function basculerPleinEcran() {
+    // Un appui pendant le trajet ne compte pas : c'est lui qui faisait passer
+    // à la fenêtre voisine.
+    if (pleinEcranEnRoute) return false;
+    pleinEcranEnRoute = true;
+    // GARDE-FOU. Si le navigateur refuse sans rien dire — cela arrive quand la
+    // page n'est pas au premier plan —, l'événement ne viendra jamais et le
+    // bouton resterait mort pour la séance.
+    finDuVerrouPlein = setTimeout(libererLePleinEcran, 1500);
+
     if (!document.fullscreenElement) {
         const p = document.documentElement.requestFullscreen();
-        if (p && p.catch) p.catch(() => showToast('Plein écran refusé par le navigateur'));
+        if (p && p.catch) {
+            p.catch(() => { libererLePleinEcran(); showToast('Plein écran refusé par le navigateur'); });
+        }
     } else if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => { });
+        const p = document.exitFullscreen();
+        if (p && p.catch) p.catch(() => libererLePleinEcran());
+    } else {
+        libererLePleinEcran();
     }
+    return true;
 }
 
 // Le document à présenter : celui qui est sélectionné, sinon le seul document

@@ -107,11 +107,16 @@ module.exports = async function (browser) {
             .filter(x => x.id !== 'btn-ecran-presenter')
             .map(x => ({ id: x.id, atteignable: x.getBoundingClientRect().width > 10 }));
     });
-    r.egal('trois boutons flottent alors dans le coin, atteignables',
+    // L'ORDRE EST CELUI DES FAMILLES, et non celui d'hier : « je ne comprends
+    // pas le fonctionnement des 4 ». D'abord ce qu'on voit de l'application —
+    // le cycle d'affichage et la croix qui ramène tout —, puis ce qui passe en
+    // grand. Les seconds sont contre le coin et ne bougent donc pas quand les
+    // premiers arrivent.
+    r.egal('trois boutons flottent alors dans le coin, rangés par famille',
         boutonsDeSortie, [
             { id: 'btn-ecran-suite', atteignable: true },
-            { id: 'btn-ecran-plein', atteignable: true },
-            { id: 'exit-focus-cross', atteignable: true }
+            { id: 'exit-focus-cross', atteignable: true },
+            { id: 'btn-ecran-plein', atteignable: true }
         ]);
 
     // ILS NE DOIVENT PAS COUVRIR L'HORLOGE : le cartouche de la date et
