@@ -1338,7 +1338,7 @@ function majLePointDAffichage() {
     // fera. « Je ne comprends pas le fonctionnement des 4 » : un bouton dont
     // l'effet dépend d'un état caché ne s'apprend pas, il se subit.
     const coin = document.getElementById('btn-ecran-suite');
-    if (coin) coin.setAttribute('data-title', OU_L_ON_EST[etat]);
+    if (coin) coin.setAttribute('data-tooltip', OU_L_ON_EST[etat]);
     if (typeof majInterrupteursBarre === 'function') majInterrupteursBarre();
 }
 window.majLePointDAffichage = majLePointDAffichage;
@@ -4923,7 +4923,12 @@ const RACCOURCIS_COMBINES = [
     { touche: 'Ctrl+Maj+1 … 7', nom: 'Couleur de la palette' },
     { touche: 'Ctrl+Maj+F', nom: 'Plein écran', bouton: ['btn-ecran-plein'] },
     { touche: 'Ctrl+K', nom: 'Chercher une commande', bouton: ['plugin-search-btn'] },
-    { touche: 'Ctrl+Maj+L', nom: 'Document en pleine page (aussi : « D »)' }
+    // ELLE SE POSE SUR LE BOUTON DU COIN, comme ses trois voisines. Sans cela
+    // il écrivait sa touche DANS son texte — « Projeter la page en grand (D) » —
+    // et l'infobulle la rendait en prose au milieu de trois boutons qui la
+    // montrent comme une vraie touche.
+    { touche: 'Ctrl+Maj+L', nom: 'Document en pleine page (aussi : « D »)',
+      bouton: ['btn-ecran-presenter'] }
 ];
 
 // Ce qui se transforme tout seul pendant qu'on écrit dans un texte. Passer par
@@ -19355,7 +19360,9 @@ function renderFloatingToolbar(toolbar) {
 
     const head = document.createElement('div');
     head.className = 'cbar-head';
-    head.setAttribute('data-title', 'Déplacer');
+    // « data-tooltip » : c'est le seul attribut que l'infobulle maison lise,
+    // et la seule qui s'ouvre au doigt. « data-title » ne dit rien à personne.
+    head.setAttribute('data-tooltip', 'Déplacer');
 
     const settingsBtn = document.createElement('button');
     settingsBtn.type = 'button';
@@ -20039,6 +20046,10 @@ function placeLaPlusProche(tb) {
 }
 
 function ouvrirLeCompositeurDeBarre(barreId) {
+    // LE MENU QUI L'A OUVERT SE REFERME. « Composer une barre » vit désormais
+    // dans le menu des réglages : laissé ouvert, il resterait posé derrière la
+    // fenêtre du compositeur, et se retrouverait là au retour.
+    document.getElementById('reglages-barre')?.classList.remove('visible');
     const barres = getStoredFloatingToolbars();
     const existante = barreId ? barres.find(t => t.id === barreId) : null;
     const dejaLa = new Set((existante && existante.items) || []);
@@ -20820,11 +20831,21 @@ document.addEventListener('fullscreenchange', () => {
 function majBoutonDuPleinEcran() {
     const b = document.getElementById('btn-ecran-plein');
     if (!b) return;
+    // « data-tooltip » ET NON « data-title ». Les quatre boutons du coin ont
+    // longtemps porté « data-title », que RIEN ne lit : ni le navigateur, qui
+    // ne connaît que « title », ni l'infobulle maison, qui ne s'ouvre que sur
+    // « data-tooltip ». Ils n'avaient donc aucune infobulle — d'où « je ne
+    // comprends pas le fonctionnement des 4 ». Celle de la maison a une
+    // seconde qualité, décisive ici : elle s'ouvre AU DOIGT, là où le survol
+    // n'existe pas. C'est un tableau tactile qui est devant la classe.
     const dedans = !!document.fullscreenElement;
     b.classList.toggle('actif', dedans);
-    b.setAttribute('data-title', dedans
-        ? 'Quitter le plein écran du navigateur (Ctrl+Maj+F)'
-        : 'Plein écran du navigateur (Ctrl+Maj+F)');
+    // SANS LA TOUCHE DANS LE TEXTE : « poserSurUnBouton » l'a rangée dans
+    // « data-raccourci » au démarrage, et l'infobulle l'affiche de là comme une
+    // vraie touche. La réécrire ici la ferait paraître deux fois.
+    b.setAttribute('data-tooltip', dedans
+        ? 'Quitter le plein écran du navigateur'
+        : 'Plein écran du navigateur');
 }
 window.majBoutonDuPleinEcran = majBoutonDuPleinEcran;
 
@@ -21278,9 +21299,11 @@ function majBoutonPresenterDeLEcran() {
     // « Plein écran du navigateur » : deux boutons côte à côte portant le même
     // mot et la même icône, c'était la moitié du « je crois qu'il y a
     // plusieurs plein écran ». Celui-ci projette LA PAGE.
-    b.setAttribute('data-title', enCours
-        ? 'Rendre la page au tableau (Échap)'
-        : 'Projeter la page en grand (D)');
+    // SANS LA TOUCHE DANS LE TEXTE, comme ses voisines : elle est posée dans
+    // « data-raccourci » au démarrage, et l'infobulle la montre à part.
+    b.setAttribute('data-tooltip', enCours
+        ? 'Rendre la page au tableau'
+        : 'Projeter la page en grand');
     // Et son icône dit lequel des deux gestes il fera. ON N'ÉCRIT QUE SI ÇA
     // CHANGE, et ce n'est pas de la coquetterie : cette fonction ne repasse pas
     // seulement à chaque changement de sélection, elle repasse à CHAQUE IMAGE

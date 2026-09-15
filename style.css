@@ -613,7 +613,14 @@ html {
     max-width: 640px;
     /* Adapts to max 15 icons roughly */
     margin: 0 auto;
-    min-height: 56px;
+    /* LA HAUTEUR D'UNE RANGÉE, ET RIEN DE PLUS. « Je trouve que ça prend de
+       l'espace. » Elle était fixée à cinquante-six pixels pour des boutons qui
+       en font trente-deux : vingt-quatre pixels d'air sous les outils, à
+       chaque rubrique qui n'a qu'une rangée — et sur la capture, ce vide
+       faisait la moitié du tiroir. On garde une rangée de haut pour qu'une
+       rubrique vide ne fasse pas sauter le tiroir, et pour que le glisser-
+       déposer ait toujours où viser. */
+    min-height: 32px;
 }
 
 #custom-bars-container {

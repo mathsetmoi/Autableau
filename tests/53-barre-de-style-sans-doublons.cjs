@@ -46,7 +46,7 @@ const RELEVE = () => {
     const noms = [];
     bs.querySelectorAll('button, input, select, .drag-handle').forEach(el => {
         if (!vraimentVu(el)) return;
-        const t = (el.title || el.getAttribute('data-title') || el.dataset.tooltip || el.id || '').trim();
+        const t = (el.title || el.dataset.tooltip || el.id || '').trim();
         if (t) noms.push({ nom: t, forme: el.tagName.toLowerCase() + (el.type ? ':' + el.type : '') });
     });
     return { visible: true, noms, largeur: Math.round(bs.getBoundingClientRect().width) };
@@ -325,7 +325,7 @@ module.exports = async function (browser) {
         majBarreDocument();
         const vus = [];
         document.querySelectorAll('button').forEach(b => {
-            const t = (b.getAttribute('data-title') || b.dataset.tooltip || b.title || '');
+            const t = (b.dataset.tooltip || b.title || '');
             if (!/plein écran|projeter|présenter/i.test(t)) return;
             const svg = b.querySelector('svg');
             vus.push({ id: b.id || '(sans id)', nom: t.split('—')[0].trim(),
@@ -408,7 +408,7 @@ module.exports = async function (browser) {
             const b = document.getElementById(id);
             return { id, vu: getComputedStyle(b).display !== 'none',
                      x: Math.round(b.getBoundingClientRect().x),
-                     nom: b.getAttribute('data-title') || '' };
+                     nom: b.getAttribute('data-tooltip') || '' };
         });
         const par = {};
         for (const e of [0, 1, 2]) {
@@ -546,16 +546,16 @@ module.exports = async function (browser) {
     // LE BOUTON DIT OÙ L'ON EST : on appuyait plusieurs fois faute de le savoir.
     const ditOuOnEst = await page.evaluate(async () => {
         const b = document.getElementById('btn-ecran-plein');
-        const dehors = { allume: b.classList.contains('actif'), nom: b.getAttribute('data-title') };
+        const dehors = { allume: b.classList.contains('actif'), nom: b.getAttribute('data-tooltip') };
         // On fait comme si le navigateur nous avait mis en plein écran.
         const vrai = Object.getOwnPropertyDescriptor(Document.prototype, 'fullscreenElement');
         Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => document.documentElement });
         majBoutonDuPleinEcran();
-        const dedans = { allume: b.classList.contains('actif'), nom: b.getAttribute('data-title') };
+        const dedans = { allume: b.classList.contains('actif'), nom: b.getAttribute('data-tooltip') };
         delete document.fullscreenElement;
         if (vrai) Object.defineProperty(Document.prototype, 'fullscreenElement', vrai);
         majBoutonDuPleinEcran();
-        return { dehors, dedans, revenu: b.getAttribute('data-title') };
+        return { dehors, dedans, revenu: b.getAttribute('data-tooltip') };
     });
     r.verifie('dehors, il propose d\'entrer en plein écran',
         !ditOuOnEst.dehors.allume && !/Quitter/.test(ditOuOnEst.dehors.nom),
@@ -565,6 +565,108 @@ module.exports = async function (browser) {
         JSON.stringify(ditOuOnEst.dedans));
     r.verifie('et il reprend sa promesse en sortant',
         !/Quitter/.test(ditOuOnEst.revenu), ditOuOnEst.revenu);
+
+    // ------------------------------------------------------------------
+    // 8. LES QUATRE DU COIN ONT ENFIN UNE INFOBULLE
+    //
+    // « Tu me mets des tooltips sur les icônes en haut à droite. » Ils n'en
+    // avaient AUCUNE, et c'est la vraie cause du « je ne comprends pas le
+    // fonctionnement des 4 » : ils portaient « data-title », que rien ne lit —
+    // ni le navigateur, qui ne connaît que « title », ni l'infobulle maison,
+    // qui ne s'ouvre que sur « data-tooltip ». Quatre boutons muets.
+    //
+    // On éprouve ici que la bulle S'OUVRE VRAIMENT, et pas seulement que
+    // l'attribut existe : c'était précisément l'erreur d'avant.
+    // ------------------------------------------------------------------
+    await page.evaluate(() => poserLAffichage(1));
+    await page.waitForTimeout(450);
+
+    const bulles = [];
+    for (const id of ['btn-ecran-suite', 'exit-focus-cross', 'btn-ecran-presenter', 'btn-ecran-plein']) {
+        const y = await page.evaluate((i) => {
+            const b = document.getElementById(i);
+            const r = b.getBoundingClientRect();
+            return { vu: getComputedStyle(b).display !== 'none',
+                     x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        }, id);
+        if (!y.vu) { bulles.push({ id, texte: '(bouton caché)' }); continue; }
+        await page.mouse.move(y.x, y.y);
+        await page.waitForTimeout(900);
+        bulles.push(await page.evaluate((i) => {
+            const t = document.querySelector('.dt-tooltip, #dt-tooltip, [class*="dt-tooltip"]');
+            const ouverte = t && t.classList.contains('visible');
+            return { id: i, ouverte: !!ouverte, texte: ouverte ? t.textContent.trim() : '' };
+        }, id));
+        await page.mouse.move(700, 700);
+        await page.waitForTimeout(350);
+    }
+
+    r.verifie('les quatre ouvrent une infobulle au survol',
+        bulles.every(b => b.ouverte), JSON.stringify(bulles));
+    r.verifie('et chacune dit quelque chose de différent',
+        new Set(bulles.map(b => b.texte)).size === 4, JSON.stringify(bulles.map(b => b.texte)));
+    // ET ELLES SUIVENT L'ÉTAT. Deux d'entre elles changent de texte selon ce
+    // qu'un appui fera ; c'est le script qui les écrit, et c'est donc là qu'il
+    // faut regarder — survoler dans un seul état ne prouverait rien.
+    const apresBascule = await page.evaluate(async () => {
+        const avant = {
+            affichage: document.getElementById('btn-ecran-suite').getAttribute('data-tooltip'),
+            projeter: document.getElementById('btn-ecran-presenter').getAttribute('data-tooltip')
+        };
+        poserLAffichage(2);
+        images.length = 0;
+        images.push({ id: 'DP', type: 'image', src: document.querySelector('img') ? '' : '', x: 0, y: 0, w: 10, h: 10 });
+        images.length = 0;
+        await new Promise(ok => setTimeout(ok, 350));
+        const apres = {
+            affichage: document.getElementById('btn-ecran-suite').getAttribute('data-tooltip')
+        };
+        poserLAffichage(1);
+        await new Promise(ok => setTimeout(ok, 350));
+        return { avant, apres };
+    });
+    r.verifie('celui de l\'affichage change de texte avec l\'état',
+        apresBascule.avant.affichage && apresBascule.apres.affichage
+        && apresBascule.avant.affichage !== apresBascule.apres.affichage,
+        JSON.stringify(apresBascule));
+    r.verifie('et celui de la projection dit ce qu\'il fera',
+        /Projeter la page/.test(apresBascule.avant.projeter || ''),
+        String(apresBascule.avant.projeter));
+
+    r.verifie('celle du plein écran montre sa touche',
+        /Ctrl\+Maj\+F/.test((bulles.find(b => b.id === 'btn-ecran-plein') || {}).texte || ''),
+        (bulles.find(b => b.id === 'btn-ecran-plein') || {}).texte);
+    // ET PAS DEUX FOIS : la touche vit dans « data-raccourci », l'infobulle la
+    // pose elle-même. L'écrire aussi dans le texte la ferait paraître double.
+    r.verifie('et une seule fois',
+        ((bulles.find(b => b.id === 'btn-ecran-plein') || {}).texte || '')
+            .split('Ctrl+Maj+F').length === 2,
+        (bulles.find(b => b.id === 'btn-ecran-plein') || {}).texte);
+
+    // ET AUCUNE NE RÉCITE SA TOUCHE EN PROSE. Celui qui projette la page
+    // écrivait la sienne dans son propre texte — « Projeter la page en grand
+    // (D) » — là où ses trois voisins la montrent comme une vraie touche,
+    // posée à part. Quatre boutons mitoyens, deux façons de dire la même
+    // chose : le professeur y lit deux mécaniques au lieu d'une.
+    const enProse = bulles.filter(b => /[(（]\s*(Ctrl|Cmd|Alt|Maj|Shift|Suppr|Échap|Esc|D)\b[^)）]*[)）]/.test(b.texte));
+    r.egal('aucune ne récite sa touche entre parenthèses', enProse.map(b => b.id), []);
+    const touches = await page.evaluate(() =>
+        ['btn-ecran-suite', 'exit-focus-cross', 'btn-ecran-presenter', 'btn-ecran-plein']
+            .map(i => ({ id: i, t: document.getElementById(i).getAttribute('data-raccourci') })));
+    r.egal('et celles qui ont une touche la portent dans l\'attribut prévu',
+        touches.filter(x => x.t).map(x => x.id),
+        ['exit-focus-cross', 'btn-ecran-presenter', 'btn-ecran-plein']);
+
+    // PLUS AUCUN « data-title » ORPHELIN dans la page : c'est l'attribut qui
+    // ne dit rien à personne, et il avait déjà rendu quatre boutons muets.
+    const muets = await page.evaluate(() => [...document.querySelectorAll('[data-title]')]
+        .filter(e => !e.hasAttribute('data-tooltip') && !e.hasAttribute('title')
+                     && !/^(default|blue|green|purple|amber|pink|slate|teal)$/.test(e.getAttribute('data-title')))
+        .map(e => e.id || e.className.toString().slice(0, 30)));
+    r.egal('aucun bouton ne porte plus un nom que rien n\'affiche', muets, []);
+
+    await page.evaluate(() => poserLAffichage(0));
+    await page.waitForTimeout(350);
 
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();

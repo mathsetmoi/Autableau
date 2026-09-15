@@ -141,6 +141,29 @@ module.exports = async function (browser) {
     r.egal('le bouton du coin fait avancer le cycle',
         await page.evaluate(() => etatDeLAffichage()), 0);
 
+    // DEUX BOUTONS POUR LE MÊME CYCLE — ET C'EST VOULU. La pastille « Focus »
+    // vit dans le tiroir du bas, avec les autres interrupteurs ; le bouton du
+    // coin reste sous la main quand, justement, les tiroirs sont rangés. Ce
+    // qu'on ne veut pas, c'est qu'ils ne disent pas la même chose : deux mots
+    // pour un geste, et le professeur croit à deux gestes.
+    const deuxVoix = await page.evaluate(async () => {
+        const p = document.getElementById('btn-focus');
+        const c = document.getElementById('btn-ecran-suite');
+        const lire = () => ({ pastille: p.getAttribute('title'), coin: c.getAttribute('data-tooltip') });
+        poserLAffichage(0); await new Promise(ok => setTimeout(ok, 250));
+        const tout = lire();
+        poserLAffichage(1); await new Promise(ok => setTimeout(ok, 250));
+        const ranges = lire();
+        poserLAffichage(0); await new Promise(ok => setTimeout(ok, 250));
+        return { tout, ranges };
+    });
+    r.egal('la pastille « Focus » et le bouton du coin disent où l\'on en est, du même mot',
+        [deuxVoix.tout.pastille, deuxVoix.ranges.pastille],
+        [deuxVoix.tout.coin, deuxVoix.ranges.coin]);
+    r.verifie('et ce mot suit l\'état : il dit où l\'on EST, non le cycle par cœur',
+        !!deuxVoix.tout.pastille && !!deuxVoix.ranges.pastille
+        && deuxVoix.tout.pastille !== deuxVoix.ranges.pastille, JSON.stringify(deuxVoix));
+
     await page.evaluate(() => poserLAffichage(2));
     await page.waitForTimeout(450);
     await page.evaluate(() => document.getElementById('exit-focus-cross').click());
@@ -239,7 +262,7 @@ module.exports = async function (browser) {
         const b = document.getElementById('btn-ecran-presenter');
         const lire = () => ({ vu: getComputedStyle(b).display,
                               barre: getComputedStyle(document.getElementById('barre-ecran')).opacity,
-                              titre: b.getAttribute('data-title'),
+                              titre: b.getAttribute('data-tooltip'),
                               actif: b.classList.contains('actif') });
         const sansDocument = lire();
 
@@ -267,12 +290,12 @@ module.exports = async function (browser) {
         const b = document.getElementById('btn-ecran-presenter');
         b.click();
         await new Promise(ok => setTimeout(ok, 500));
-        const dedans = { etat: etatDuPleinEcran(), titre: b.getAttribute('data-title'),
+        const dedans = { etat: etatDuPleinEcran(), titre: b.getAttribute('data-tooltip'),
                          actif: b.classList.contains('actif'),
                          focus: document.body.classList.contains('focus-mode') };
         b.click();
         await new Promise(ok => setTimeout(ok, 500));
-        const dehors = { etat: etatDuPleinEcran(), titre: b.getAttribute('data-title'),
+        const dehors = { etat: etatDuPleinEcran(), titre: b.getAttribute('data-tooltip'),
                          actif: b.classList.contains('actif') };
         return { dedans, dehors };
     });

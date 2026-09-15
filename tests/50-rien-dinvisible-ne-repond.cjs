@@ -183,14 +183,18 @@ module.exports = async function (browser) {
         const ss = svg && getComputedStyle(svg);
         const rect = t.getBoundingClientRect();
         return {
-            vue: s.display, nom: t.getAttribute('data-title'),
+            vue: s.display, nom: t.getAttribute('data-tooltip'),
             largeur: rect.width, dansLEcran: rect.right > 0 && rect.right <= innerWidth + 1,
             remplissage: ss && ss.fill, trait: ss && ss.stroke
         };
     });
     r.verifie('la flèche du tiroir de droite est de retour, tiroir fermé',
         languette.vue === 'flex' && languette.largeur > 10, JSON.stringify(languette));
-    r.verifie('elle porte le nom de ce qu\'elle ouvre', /tableau/i.test(languette.nom || ''), languette.nom);
+    // L'ATTRIBUT DOIT ÊTRE CELUI QU'ON LIT. « data-title » ne dit rien à
+    // personne : ni au navigateur, qui ne connaît que « title », ni à
+    // l'infobulle maison, qui ne s'ouvre que sur « data-tooltip ».
+    r.verifie('elle porte le nom de ce qu\'elle ouvre, dans l\'attribut qui s\'affiche',
+        /tableau/i.test(languette.nom || ''), String(languette.nom));
     r.verifie('et c\'est une flèche tracée, pas une forme pleine',
         languette.remplissage === 'none' && /rgb/.test(languette.trait || ''),
         JSON.stringify({ f: languette.remplissage, s: languette.trait }));

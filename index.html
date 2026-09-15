@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=144">
+    <link rel="stylesheet" href="style.css?v=146">
 </head>
 
 <body>
@@ -482,9 +482,10 @@
             <button class="bm-btn bm-mini" id="bm-page-plus" data-tooltip="Nouvelle page de tableau, vierge">＋</button>
         </span>
         <!-- Le libellé suit la page : « Poser à côté » là où il y a déjà
-             quelque chose, « Poser » sur une page vierge. -->
-        <button class="bm-btn" id="bm-ranger"
-            data-tooltip="Poser tous les morceaux côte à côte">⇥ Poser</button>
+             quelque chose, « Poser » sur une page vierge. Son infobulle aussi,
+             et c'est « majLeBoutonPoser » qui la pose : rien d'écrit ici, qui
+             serait effacé au chargement sans avoir jamais paru. -->
+        <button class="bm-btn" id="bm-ranger">⇥ Poser</button>
         <button class="bm-btn bm-vider" id="bm-vider" data-tooltip="Vider le tiroir — les morceaux déjà posés restent">✕</button>
     </div>
 
@@ -572,7 +573,9 @@
              tout seul depuis toujours, mais rien ne le disait : on cliquait le
              disque du tiroir par précaution, sans savoir si c'était utile. Un
              état, pas un bouton — et un clic dessus ouvre la liste. -->
-        <button id="etat-enregistrement" type="button" title="Où en est l'enregistrement">
+        <!-- Sans « title » écrit ici : « updateUnsavedIndicator » dit où en est
+             vraiment l'enregistrement, et l'écrase dès le chargement. -->
+        <button id="etat-enregistrement" type="button">
             <span class="etat-point"></span><span class="etat-mot" id="etat-mot">Enregistré</span>
         </button>
         <!-- L'HORLOGE À AIGUILLES, à la place de la pastille rouge qui occupait
@@ -655,7 +658,9 @@
          tiroir des plugins dès que l'écran se resserre — sur 1100 px, ce
          tiroir commence à 225 px et mange déjà la fin du titre. -->
     <div id="classe-boite">
-        <button type="button" id="classe-pastille" data-tooltip="La classe du moment — cliquez pour en changer">
+        <!-- Sans infobulle écrite ici : « majPastilleDeClasse » y nomme la
+             classe du moment, ou dit qu'aucune n'est choisie. -->
+        <button type="button" id="classe-pastille">
             <span class="cp-ico">👥</span><span class="cp-nom">Classe</span><span class="cp-chevron">▾</span>
         </button>
         <div id="classe-menu" hidden></div>
@@ -688,7 +693,10 @@
          bougent pas d'un pixel quand les deux autres arrivent.
          ========================================================= -->
     <div id="barre-ecran">
-        <button id="btn-ecran-suite" data-title="Affichage : tout / les barres seules / le tableau nu">
+        <!-- Son nom vient de « majLePointDAffichage », qui le change avec l'état :
+             écrit ici, il serait une seconde source de vérité, effacée au
+             chargement. -->
+        <button id="btn-ecran-suite">
             <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                 id="icone-ecran-suite">
@@ -696,7 +704,7 @@
                 <line x1="3" y1="9" x2="21" y2="9" />
             </svg>
         </button>
-        <button id="exit-focus-cross" onclick="poserLAffichage(0)" data-title="Tout remettre (Échap)">
+        <button id="exit-focus-cross" onclick="poserLAffichage(0)" data-tooltip="Tout remettre (Échap)">
             <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2" stroke-linecap="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -718,7 +726,8 @@
              pixels rien ne les séparait. Celui-ci projette LA PAGE — une page
              sur un écran ; les quatre coins restent au geste qui agrandit
              vraiment la fenêtre. -->
-        <button id="btn-ecran-presenter" data-title="Projeter la page en grand (D)">
+        <!-- Son nom vient de « majBoutonPresenterDeLEcran », pour la même raison. -->
+        <button id="btn-ecran-presenter">
             <!-- Vide : c'est « ICONES_PLEIN_ECRAN » qui le remplit, et qui
                  l'échange quand on projette. Un dessin écrit ici serait une
                  seconde source de vérité, effacée dès le chargement. -->
@@ -726,7 +735,7 @@
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                 id="icone-ecran-presenter"></svg>
         </button>
-        <button id="btn-ecran-plein" data-title="Plein écran du navigateur (Ctrl+Maj+F)">
+        <button id="btn-ecran-plein" data-tooltip="Plein écran du navigateur">
             <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                 id="icone-ecran-plein">
@@ -2109,31 +2118,23 @@
                 <div id="plugin-search-results" class="plugin-search-results"></div>
             </div>
 
-            <!-- COMPOSER UNE BARRE SANS LA GLISSER OUTIL PAR OUTIL. « Ce qui
-                 serait au top, pour compléter le glisser-déposer, c'est
-                 d'avoir un menu de création de barres d'outils qui affiche une
-                 liste d'outils cochables et propose une localisation pour la
-                 disposition par défaut. » On n'utilise le plus souvent qu'une
-                 fraction des outils : vingt glissers pour une panoplie, c'est
-                 dix-neuf de trop. -->
-            <button class="btn" id="btn-composer-barre" type="button"
-                data-tooltip="Composer une barre d'outils" onclick="ouvrirLeCompositeurDeBarre()">
-                <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="5" rx="1.5" />
-                    <path d="M7 14h10M12 12v4" />
-                    <path d="M3 20h18" opacity="0.35" />
-                </svg>
-            </button>
-
-            <!-- Réglages d'affichage de la barre : format des icônes, date -->
+            <!-- CE QU'ON OUVRE UNE FOIS PAR TRIMESTRE NE MÉRITE PAS UN BOUTON
+                 À L'ANNÉE. « L'icône paramètre, loupe et composer prennent de
+                 l'espace. » La loupe reste : on cherche un outil en plein
+                 cours, et souvent. Les deux autres — régler l'affichage,
+                 composer une panoplie — se font une fois et ne se refont
+                 plus ; elles passent derrière un seul « ⋯ », et « Composer une
+                 barre » devient la première rubrique du menu des réglages
+                 plutôt qu'un menu dans un menu. -->
             <div id="reglages-barre-wrap">
-                <button class="btn" id="btn-reglages-barre" type="button" data-tooltip="Réglages d'affichage"
+                <button class="btn" id="btn-reglages-barre" type="button"
+                    data-tooltip="Réglages et barres d'outils"
                     onclick="basculerReglagesBarre(event)">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M9.64 6.16L9.77 2.35L14.23 2.35L14.36 6.16A6.3 6.3 0 0 1 15.88 7.04L19.24 5.25L21.47 9.11L18.24 11.12A6.3 6.3 0 0 1 18.24 12.88L21.47 14.89L19.24 18.75L15.88 16.96A6.3 6.3 0 0 1 14.36 17.84L14.23 21.65L9.77 21.65L9.64 17.84A6.3 6.3 0 0 1 8.12 16.96L4.76 18.75L2.53 14.89L5.76 12.88A6.3 6.3 0 0 1 5.76 11.12L2.53 9.11L4.76 5.25L8.12 7.04A6.3 6.3 0 0 1 9.64 6.16Z"></path>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" viewBox="0 0 24 24"
+                        fill="currentColor" stroke="none">
+                        <circle cx="5" cy="12" r="1.8"></circle>
+                        <circle cx="12" cy="12" r="1.8"></circle>
+                        <circle cx="19" cy="12" r="1.8"></circle>
                     </svg>
                 </button>
                 <!-- QUATRE RUBRIQUES, PLUS SEPT. Le menu comptait un titre par
@@ -2173,6 +2174,22 @@
                         title="Les tiroirs du haut et du bas se referment dès qu'on retourne au tableau">Tiroirs refermés tout seuls</button>
                     <button class="rp-choix" id="rp-barre-courte"
                         title="Ne garder que les gestes du quotidien : la géométrie et les instruments s'effacent. La poignée du coin inférieur droit les ramène">Barre d'outils réduite</button>
+                    <!-- COMPOSER UNE BARRE SANS LA GLISSER OUTIL PAR OUTIL.
+                         « Ce qui serait au top, pour compléter le glisser-
+                         déposer, c'est d'avoir un menu de création de barres
+                         d'outils qui affiche une liste d'outils cochables et
+                         propose une localisation pour la disposition par
+                         défaut. » On n'utilise le plus souvent qu'une fraction
+                         des outils : vingt glissers pour une panoplie, c'est
+                         dix-neuf de trop.
+                         ELLE EST RANGÉE DANS « ENCOMBREMENT », et non sous une
+                         cinquième rubrique à elle : choisir ses vingt outils
+                         parmi deux cents, c'est exactement la même décision que
+                         « Barre d'outils réduite », juste prise à la main. Le
+                         menu comptait déjà plus de titres que de choix ; on ne
+                         lui en rend pas un. -->
+                    <button class="rp-choix" id="btn-composer-barre" type="button"
+                        onclick="ouvrirLeCompositeurDeBarre()">Composer une barre d'outils…</button>
 
                     <div class="rp-titre">Découvrir</div>
                     <button class="rp-choix" id="rp-demonstration"
@@ -2525,8 +2542,12 @@
         <div class="drawer-header" style="justify-content: center; width: 100%;">
             <div class="tool-categories" id="categories-bottom" style="justify-content: center;">
                 <!-- Ne restent ici que les interrupteurs : leur témoin dit s'ils sont allumés -->
-                <button class="category-pill interrupteur" onclick="handleWorkspaceFocus()" id="btn-focus"
-                    title="Affichage : tout, puis les barres seules, puis le tableau nu"><i class="temoin"></i><span id="btn-focus-mot">Focus</span></button>
+                <!-- SANS « title » ÉCRIT ICI : « majLePointDAffichage » le pose
+                     dès le chargement, et dit où l'on EST plutôt que de réciter
+                     le cycle. Un texte écrit là serait effacé avant d'avoir
+                     jamais paru — une seconde vérité qui ne sert qu'à mentir à
+                     qui relit la page. -->
+                <button class="category-pill interrupteur" onclick="handleWorkspaceFocus()" id="btn-focus"><i class="temoin"></i><span id="btn-focus-mot">Focus</span></button>
                 <button class="category-pill interrupteur" onclick="basculerLibelles()" id="btn-libelles"
                     title="Afficher le nom des outils sous leur icône"><i class="temoin"></i>Libellés</button>
                 <button class="category-pill interrupteur" onclick="handleWorkspaceDarkMode()" id="btn-nuit"
@@ -2536,7 +2557,7 @@
     </div>
 
     <div id="right-drawer" class="drawer">
-        <div class="drawer-toggle-v" data-title="Mes tableaux" onclick="toggleRightDrawer()">
+        <div class="drawer-toggle-v" data-tooltip="Mes tableaux" onclick="toggleRightDrawer()">
             <svg xmlns="http://www.w3.org/2000/svg" class="ico sm" id="right-chev" viewBox="0 0 24 24">
                 <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -3255,7 +3276,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=260"></script>
+    <script src="script.js?v=262"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

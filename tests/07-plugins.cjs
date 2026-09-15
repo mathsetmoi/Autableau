@@ -799,6 +799,101 @@ module.exports = async function (browser) {
     r.verifie('la rubrique informatique n\'est donc plus un outil solitaire',
         rangement.informatique >= 2, JSON.stringify(rangement));
 
+    // ------------------------------------------------------------------
+    // LE TIROIR NE GARDE PLUS D'AIR SOUS LES OUTILS
+    // « Je trouve que ça prend de l'espace. » La grille des outils était fixée
+    // à cinquante-six pixels de haut pour des boutons qui en font trente-deux :
+    // sur une rubrique d'une seule rangée — la plupart —, c'était vingt-quatre
+    // pixels de blanc, soit la moitié du vide qu'on voyait sur la capture.
+    // ------------------------------------------------------------------
+    const tiroir = await page.evaluate(async () => {
+        const d = document.getElementById('bar-plugins');
+        const g = document.getElementById('plugins-grid');
+        const mesurer = () => {
+            const vus = [...g.children].filter(c => getComputedStyle(c).display !== 'none');
+            const bas = vus.length ? Math.max(...vus.map(c => c.getBoundingClientRect().bottom)) : 0;
+            const r = d.getBoundingClientRect();
+            return { outils: vus.length, haut: Math.round(r.height),
+                     videEnDessous: Math.round(r.bottom - bas),
+                     bouton: vus.length ? Math.round(vus[0].getBoundingClientRect().height) : 0 };
+        };
+        const par = {};
+        for (const cat of ['Informatique', 'Maths - Numérique']) {
+            const b = [...document.querySelectorAll('#plugin-tabs .btn')].find(x => x.dataset.cat === cat);
+            if (b) b.click();
+            await new Promise(ok => setTimeout(ok, 300));
+            par[cat] = mesurer();
+        }
+        return par;
+    });
+
+    // Une rubrique d'une rangée : le tiroir s'arrête juste sous ses outils.
+    r.verifie('sur une rubrique d\'une seule rangée, presque rien ne dépasse',
+        tiroir['Informatique'].videEnDessous <= 8,
+        JSON.stringify(tiroir['Informatique']));
+    // ET C'EST BIEN LA HAUTEUR D'UNE RANGÉE qui reste, pas moins : une rubrique
+    // vide ne doit pas faire sauter le tiroir, et le glisser-déposer doit
+    // toujours avoir où viser.
+    // ON LE MESURE SUR UNE RUBRIQUE VIDE, et non sur la règle CSS : dire
+    // « min-height vaut 32 » ne prouve rien, « min-height: 0 » passerait le
+    // contrôle tout en faisant s'effondrer le tiroir dès qu'une rubrique n'a
+    // aucun outil — les Favoris d'un professeur qui n'en a pas encore choisi.
+    const vide = await page.evaluate(async () => {
+        const g = document.getElementById('plugins-grid');
+        const caches = [...g.children].filter(c => getComputedStyle(c).display !== 'none');
+        caches.forEach(c => { c.dataset.cache = c.style.display; c.style.display = 'none'; });
+        await new Promise(ok => setTimeout(ok, 120));
+        const h = Math.round(g.getBoundingClientRect().height);
+        caches.forEach(c => { c.style.display = c.dataset.cache || ''; });
+        await new Promise(ok => setTimeout(ok, 120));
+        return h;
+    });
+    r.verifie('et une rubrique SANS outil garde la hauteur d\'une rangée',
+        vide >= tiroir['Informatique'].bouton - 2 && vide <= tiroir['Informatique'].bouton + 6,
+        'grille vide : ' + vide + ' px, un bouton : ' + tiroir['Informatique'].bouton + ' px');
+    // Une rubrique chargée, elle, n'a pas rétréci : on n'a retiré que l'air.
+    r.verifie('une rubrique de vingt-quatre outils garde toute sa place',
+        tiroir['Maths - Numérique'].haut > tiroir['Informatique'].haut
+        && tiroir['Maths - Numérique'].videEnDessous <= 8,
+        JSON.stringify(tiroir));
+
+    // ------------------------------------------------------------------
+    // L'EN-TÊTE DU TIROIR N'A PLUS QUE DEUX BOUTONS
+    // « L'icône paramètre, loupe et composer prennent de l'espace. » La loupe
+    // reste — on cherche un outil en plein cours. Régler l'affichage et
+    // composer une panoplie se font une fois : les deux passent derrière un
+    // seul « ⋯ », et « Composer une barre » ouvre le menu des réglages au lieu
+    // d'avoir son bouton à l'année.
+    // ------------------------------------------------------------------
+    const entete = await page.evaluate(() => {
+        const h = document.querySelector('#bar-plugins .drawer-header');
+        const popup = document.getElementById('reglages-barre');
+        // Les commandes de l'en-tête AU REPOS : ce qui se voit sans avoir
+        // encore rien ouvert. On écarte ce qui vit dans le menu déroulant et
+        // les outils favoris et les onglets des rubriques, qui ne sont pas des
+        // commandes de l'en-tête.
+        const vus = [...h.querySelectorAll('button.btn')].filter(b =>
+            !popup.contains(b) && !b.closest('#favorites-toolbar') && !b.closest('#plugin-tabs')
+            && b.getClientRects().length > 0);
+        const large = vus.reduce((n, b) => n + Math.round(b.getBoundingClientRect().width), 0);
+        return {
+            noms: vus.map(b => b.id),
+            large,
+            compo: (() => { const c = document.getElementById('btn-composer-barre');
+                            return { dansLeMenu: !!(c && popup.contains(c)),
+                                     cacheAuRepos: !!c && c.getClientRects().length === 0 }; })()
+        };
+    });
+    r.egal('au repos, l\'en-tête ne porte que la loupe et le « ⋯ »',
+        entete.noms, ['plugin-search-btn', 'btn-reglages-barre']);
+    r.verifie('« Composer une barre » est rangé dans ce menu, et ne se voit plus au repos',
+        entete.compo.dansLeMenu && entete.compo.cacheAuRepos, JSON.stringify(entete.compo));
+    // DEUX BOUTONS DE TRENTE-DEUX, ET PAS TROIS : on mesure la place prise,
+    // car ranger un bouton dans un menu sans le retirer de l'en-tête ne
+    // rendrait aucun pixel.
+    r.verifie('et la rangée de commandes tient en deux boutons',
+        entete.large > 40 && entete.large <= 80, entete.large + ' px');
+
     await context.close();
     return r.bilan();
 };

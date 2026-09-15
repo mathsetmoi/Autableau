@@ -95,15 +95,28 @@ module.exports = async function (browser) {
     // ------------------------------------------------------------------
     // 2. LE BOUTON OUVRE LE MENU
     // ------------------------------------------------------------------
+    // ON PASSE PAR OÙ PASSE LE PROFESSEUR. « Composer une barre » n'a plus son
+    // bouton à l'année dans l'en-tête du tiroir : il est rangé derrière le
+    // « ⋯ », en tête du menu des réglages. On ouvre donc ce menu, et l'on
+    // éprouve que l'entrée s'y VOIT — cliquer par le code un bouton resté
+    // invisible dirait que tout va bien d'une porte murée.
     const ouverture = await page.evaluate(async () => {
         document.querySelectorAll('.compo-fond').forEach(f => f.remove());
+        document.getElementById('reglages-barre').classList.remove('visible');
+        const menu = document.getElementById('btn-reglages-barre');
+        if (!menu) return { bouton: false };
+        menu.click();
+        await new Promise(ok => setTimeout(ok, 120));
         const b = document.getElementById('btn-composer-barre');
         if (!b) return { bouton: false };
+        const vu = b.getClientRects().length > 0 && getComputedStyle(b).visibility !== 'hidden';
         b.click();
         await new Promise(ok => setTimeout(ok, 200));
         const fond = document.getElementById('compositeur-de-barre');
         return {
             bouton: true,
+            vu,
+            menuReferme: !document.getElementById('reglages-barre').classList.contains('visible'),
             ouvert: !!fond,
             titre: fond ? fond.querySelector('.compo-titre').textContent.trim() : '',
             outils: fond ? fond.querySelectorAll('.compo-outil').length : 0,
@@ -112,8 +125,10 @@ module.exports = async function (browser) {
             compte: fond ? fond.querySelector('#compo-compte').textContent : ''
         };
     });
-    r.verifie('le bouton du tiroir ouvre le compositeur',
-        ouverture.bouton && ouverture.ouvert, JSON.stringify(ouverture));
+    r.verifie('l\'entrée se voit dans le menu du « ⋯ », et ouvre le compositeur',
+        ouverture.bouton && ouverture.vu && ouverture.ouvert, JSON.stringify(ouverture));
+    r.verifie('et le menu se referme derrière elle, au lieu d\'attendre sous la fenêtre',
+        ouverture.menuReferme, JSON.stringify(ouverture));
     r.egal('il s\'ouvre sur une barre neuve, rien de coché',
         { titre: ouverture.titre, coches: ouverture.coches, compte: ouverture.compte },
         { titre: 'Composer une barre d\'outils', coches: 0, compte: 'aucun outil choisi' });

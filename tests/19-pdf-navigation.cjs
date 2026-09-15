@@ -1380,13 +1380,35 @@ module.exports = async function (browser) {
     // --- D'UN TROU AU SUIVANT, À LA TABULATION ---
     // C'est à cela que sert l'ordre de lecture : remplir une fiche sans lever
     // la main du clavier pour aller viser la ligne d'après.
+    //
+    // ON DESCEND D'ABORD LA FICHE SOUS LES BARRES. La première ligne à remplir
+    // est tout en haut de la page, et le haut de l'écran appartient aux
+    // barres : celle du document se pose sous le tiroir des plugins, donc à
+    // une hauteur qui dépend de ce que ce tiroir mesure. Elle passait à trois
+    // pixels au-dessus de la première ligne — le jour où le tiroir a maigri de
+    // vingt-quatre pixels, la barre est descendue sur la ligne et c'est ELLE
+    // qui recevait le clic. Le chapitre éprouve la tabulation d'un trou au
+    // suivant, pas l'art de viser entre deux meubles : on écarte donc la
+    // fiche, et l'on VÉRIFIE ensuite que le point visé tombe sur le tableau.
+    await page.evaluate(() => {
+        const zs = images[0].pluginData.zones || [];
+        if (!zs.length) return;
+        const b = zoneSurLeTableau(images[0], zs[0]);
+        const plancher = (typeof plancherDesBarresDuHaut === 'function' ? plancherDesBarresDuHaut() : 0) + 24;
+        const y = panY + b.y * zoom;
+        if (y < plancher) { panY += plancher - y; draw(); }
+    });
+    await page.waitForTimeout(120);
     const premiereZone = await page.evaluate(() => {
         setMode('text');
         const o = images[0];
         const zs = o.pluginData.zones || [];
         const b = zs.length ? zoneSurLeTableau(o, zs[0]) : { x: 0, y: 0, l: 0, h: 0 };
-        return { x: Math.round(panX + (b.x + b.l / 2) * zoom), y: Math.round(panY + (b.y + b.h / 2) * zoom) };
+        const x = Math.round(panX + (b.x + b.l / 2) * zoom), y = Math.round(panY + (b.y + b.h / 2) * zoom);
+        const sous = document.elementFromPoint(x, y);
+        return { x, y, sous: sous ? (sous.id || sous.className || sous.tagName) : null };
     });
+    r.egal('le milieu de la première ligne à remplir est à découvert', premiereZone.sous, 'board');
     await page.mouse.click(premiereZone.x, premiereZone.y);
     await page.waitForTimeout(200);
     r.egal('le clic ouvre la saisie sur la première zone',
