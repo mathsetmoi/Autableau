@@ -36,39 +36,45 @@ module.exports = async function (browser) {
         return c.display !== 'none' && c.visibility !== 'hidden' && c.opacity !== '0';
     }, sel);
 
+    // « sortie » : les boutons qui servent à SORTIR d'un affichage réduit.
+    // « coin » : le plein écran du navigateur, qui lui est là en permanence —
+    // « j'aimerais un tout petit bouton vraiment collé en haut à droite pour
+    // le plein écran ». La barre du coin ne se juge donc plus en bloc : elle
+    // existe toujours, et ce sont ses boutons qui vont et viennent.
     const ecran = async () => ({
         etat: await page.evaluate(() => etatDeLAffichage()),
         mot: await page.evaluate(() => document.getElementById('btn-focus-mot').textContent),
         outils: await vu('.custom-toolbar'),
         tiroirBas: await vu('#bottom-drawer'),
         tiroirHaut: await vu('#bar-plugins'),
-        sortie: await vu('#barre-ecran')
+        sortie: await vu('#btn-ecran-suite'),
+        coin: await vu('#btn-ecran-plein')
     });
 
     // =================================================================
     // 1. TROIS TEMPS, ET LE TEMPS DU MILIEU EXISTE
     // =================================================================
-    r.egal('au départ, tout est là et rien ne flotte dans le coin',
+    r.egal('au départ, tout est là et le coin ne porte que le plein écran',
         await ecran(),
-        { etat: 0, mot: 'Tout', outils: true, tiroirBas: true, tiroirHaut: true, sortie: false });
+        { etat: 0, mot: 'Tout', outils: true, tiroirBas: true, tiroirHaut: true, sortie: false, coin: true });
 
     await page.evaluate(() => cyclerLAffichage());
     await page.waitForTimeout(450);
     r.egal('un appui range les tiroirs et GARDE les outils',
         await ecran(),
-        { etat: 1, mot: 'Barres', outils: true, tiroirBas: false, tiroirHaut: false, sortie: true });
+        { etat: 1, mot: 'Barres', outils: true, tiroirBas: false, tiroirHaut: false, sortie: true, coin: true });
 
     await page.evaluate(() => cyclerLAffichage());
     await page.waitForTimeout(450);
     r.egal('le suivant ne laisse que le tableau',
         await ecran(),
-        { etat: 2, mot: 'Focus', outils: false, tiroirBas: false, tiroirHaut: false, sortie: true });
+        { etat: 2, mot: 'Focus', outils: false, tiroirBas: false, tiroirHaut: false, sortie: true, coin: true });
 
     await page.evaluate(() => cyclerLAffichage());
     await page.waitForTimeout(450);
     r.egal('et le troisième remet tout',
         await ecran(),
-        { etat: 0, mot: 'Tout', outils: true, tiroirBas: true, tiroirHaut: true, sortie: false });
+        { etat: 0, mot: 'Tout', outils: true, tiroirBas: true, tiroirHaut: true, sortie: false, coin: true });
 
     // La pastille du tiroir du bas mène le cycle, et s'allume dès qu'on a
     // quitté « tout ».

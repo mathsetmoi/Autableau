@@ -19453,11 +19453,22 @@ function renderFloatingToolbar(toolbar) {
     // pour déplacer UN outil d'une barre à l'autre ; il est mauvais pour en
     // choisir vingt. La liste cochable montre tout, dit ce qui est déjà là, et
     // se cherche au clavier.
+    // UNE ICÔNE, PAS UN PAVÉ. « Je trouve que choisir le bouton dans les
+    // paramètres fait trop gros. » Le libellé complet partageait la rangée
+    // avec le choix d'icône et deux boutons carrés : il n'avait plus la
+    // largeur d'une ligne et se repliait sur trois, ce qui en faisait le plus
+    // gros objet du panneau pour l'action la moins fréquente. Il prend la
+    // taille de ses voisins — une liste à cocher, qui dit ce qu'elle ouvre —
+    // et garde son nom au survol.
     const composerBtn = document.createElement('button');
     composerBtn.type = 'button';
     composerBtn.className = 'compo-ouvrir';
     composerBtn.title = 'Choisir les outils de cette barre';
-    composerBtn.textContent = 'Choisir les outils…';
+    composerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"'
+        + ' width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"'
+        + ' stroke-linecap="round" stroke-linejoin="round">'
+        + '<polyline points="3 7 5 9 9 5"></polyline><polyline points="3 16 5 18 9 14"></polyline>'
+        + '<line x1="12" y1="7" x2="21" y2="7"></line><line x1="12" y1="17" x2="21" y2="17"></line></svg>';
     composerBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         menu.classList.remove('active');
@@ -21150,12 +21161,10 @@ function majBoutonPresenterDeLEcran() {
     const enCours = etatDuPleinEcran() > 0;
     const possible = enCours || !!documentSousLesYeux();
     b.style.display = possible ? 'flex' : 'none';
-    // La barre d'écran ne paraissait qu'une fois les tiroirs rangés. Elle se
-    // montre aussi pour ce bouton-là — et pour lui SEUL : la feuille de style
-    // garde les trois autres à leur propre condition, sans quoi l'écran
-    // ordinaire gagnerait trois boutons que personne n'a demandés.
-    const barre = document.getElementById('barre-ecran');
-    if (barre) barre.classList.toggle('avec-presenter', possible);
+    // La barre du coin est là en permanence depuis qu'elle porte le plein
+    // écran du navigateur : il n'y a plus à la faire paraître pour ce
+    // bouton-ci. Seuls les deux boutons de SORTIE restent à leur condition,
+    // dans la feuille de style — ils n'ont rien à faire sur l'écran ordinaire.
     b.classList.toggle('actif', enCours);
     b.setAttribute('data-title', enCours
         ? 'Quitter le plein écran (Échap)'

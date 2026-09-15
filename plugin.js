@@ -35548,7 +35548,7 @@ const DEPARTS_PYTHON = {
     }
 };
 
-registerPlugin('pythonTool', 'Outils Profs', {
+registerPlugin('pythonTool', 'Informatique', {
     init: function () {
         const grid = document.getElementById('plugins-grid'); if (!grid) return;
         const btn = document.createElement('button');

@@ -773,6 +773,32 @@ module.exports = async function (browser) {
           distincts: habits.tousDistincts },
         { sombre: true, claire: true, distincts: habits.combien });
 
+    // ------------------------------------------------------------------
+    // CHAQUE OUTIL DANS SA MATIÈRE
+    // « Je pense que le classement des plugins est particulier, Python devrait
+    // aller en informatique. » Il avait été rangé dans « Outils Profs » avec
+    // la fenêtre web dont il sortait, alors qu'une rubrique « Informatique »
+    // existait déjà, où vivait Scratch tout seul.
+    // ------------------------------------------------------------------
+    const rangement = await page.evaluate(() => {
+        const de = (id) => {
+            const b = document.querySelector('[data-plugin-id="' + id + '"]');
+            return b ? b.dataset.category : null;
+        };
+        const parRubrique = {};
+        document.querySelectorAll('#plugins-grid .btn[data-category]').forEach(b => {
+            parRubrique[b.dataset.category] = (parRubrique[b.dataset.category] || 0) + 1;
+        });
+        return { python: de('pythonTool'), scratch: de('scratchBlocksTool'),
+                 informatique: parRubrique['Informatique'] || 0,
+                 rubriques: Object.keys(parRubrique).length };
+    });
+    r.egal('Python est rangé en informatique, avec les algorithmes',
+        { py: rangement.python, scratch: rangement.scratch },
+        { py: 'Informatique', scratch: 'Informatique' });
+    r.verifie('la rubrique informatique n\'est donc plus un outil solitaire',
+        rangement.informatique >= 2, JSON.stringify(rangement));
+
     await context.close();
     return r.bilan();
 };

@@ -337,6 +337,103 @@ module.exports = async function (browser) {
         new Set(Object.values(places.sortie).map(p => p.x + ',' + p.y)).size === 6,
         JSON.stringify(places.sortie));
 
+    // ------------------------------------------------------------------
+    // LE CHROME DE LA BARRE S'EFFACE DEVANT LES OUTILS
+    //
+    // « Les 3 icônes de gauche font inesthétiques… et elles prennent beaucoup
+    // de place. » L'engrenage, le tiret et la poignée du coin : trois
+    // ornements autour d'une barre qu'on s'est faite exprès pour n'avoir que
+    // ce qui sert. Ils ne paraissent qu'au survol — et la barre ne bouge pas
+    // d'un pixel quand ils paraissent, sans quoi les outils descendraient sous
+    // le curseur et l'on cliquerait sur le voisin de celui qu'on visait.
+    // ------------------------------------------------------------------
+    const chrome = await page.evaluate(async () => {
+        const bar = document.getElementById('system-toolbar-main');
+        const tete = bar.querySelector('.cbar-head');
+        const engrenage = bar.querySelector('.c-action.settings');
+        const poignee = bar.querySelector('.custom-resizer');
+        const lire = () => ({
+            barre: Math.round(bar.getBoundingClientRect().height),
+            tete: Math.round(tete.getBoundingClientRect().height),
+            engrenage: getComputedStyle(engrenage).opacity,
+            engrenageCliquable: getComputedStyle(engrenage).pointerEvents,
+            poignee: poignee ? getComputedStyle(poignee).opacity : null,
+            // La prise reste, elle : c'est par là qu'on déplace la barre.
+            prise: getComputedStyle(tete).cursor
+        });
+        return { repos: lire() };
+    });
+    r.egal('au repos, l\'engrenage et la poignée du coin sont effacés',
+        { g: chrome.repos.engrenage, p: chrome.repos.poignee }, { g: '0', p: '0' });
+    r.egal('mais la barre reste attrapable : la prise est là', chrome.repos.prise, 'grab');
+    r.verifie('et le bandeau ne pèse plus que vingt-deux pixels',
+        chrome.repos.tete === 22, String(chrome.repos.tete));
+
+    await page.hover('#system-toolbar-main');
+    await page.waitForTimeout(250);
+    const auSurvol = await page.evaluate(() => {
+        const bar = document.getElementById('system-toolbar-main');
+        const tete = bar.querySelector('.cbar-head');
+        const engrenage = bar.querySelector('.c-action.settings');
+        const poignee = bar.querySelector('.custom-resizer');
+        return { barre: Math.round(bar.getBoundingClientRect().height),
+                 tete: Math.round(tete.getBoundingClientRect().height),
+                 engrenage: getComputedStyle(engrenage).opacity,
+                 cliquable: getComputedStyle(engrenage).pointerEvents,
+                 poignee: poignee ? getComputedStyle(poignee).opacity : null };
+    });
+    r.egal('au survol, ils reviennent et répondent au clic',
+        { g: auSurvol.engrenage, p: auSurvol.poignee, c: auSurvol.cliquable },
+        { g: '1', p: '1', c: 'auto' });
+    r.egal('ET LA BARRE N\'A PAS BOUGÉ : les outils restent sous le curseur',
+        { barre: auSurvol.barre, tete: auSurvol.tete },
+        { barre: chrome.repos.barre, tete: chrome.repos.tete });
+
+    // Le panneau des réglages : le bouton qui mène au choix des outils a la
+    // taille de ses voisins de rangée. « Je trouve que choisir le bouton dans
+    // les paramètres fait trop gros » : replié sur trois lignes faute de
+    // largeur, il était le plus gros objet du panneau pour l'action la moins
+    // fréquente.
+    const tailleDuBouton = await page.evaluate(() => {
+        const bar = document.getElementById('system-toolbar-main');
+        bar.querySelector('.c-action.settings').click();
+        const b = bar.querySelector('.compo-ouvrir').getBoundingClientRect();
+        return { h: Math.round(b.height), l: Math.round(b.width),
+                 nom: bar.querySelector('.compo-ouvrir').title,
+                 texte: bar.querySelector('.compo-ouvrir').textContent.trim(),
+                 icone: !!bar.querySelector('.compo-ouvrir svg') };
+    });
+    r.egal('le bouton « choisir les outils » tient dans un carré de 32',
+        { h: tailleDuBouton.h, l: tailleDuBouton.l }, { h: 32, l: 32 });
+    r.verifie('c\'est une icône, et elle dit son nom au survol',
+        tailleDuBouton.icone && tailleDuBouton.texte === ''
+        && /[Cc]hoisir les outils/.test(tailleDuBouton.nom), JSON.stringify(tailleDuBouton));
+
+    // ------------------------------------------------------------------
+    // LE PLEIN ÉCRAN, DANS LE COIN, TOUT LE TEMPS
+    // « J'aimerais un tout petit bouton vraiment collé en haut à droite pour
+    // le plein écran. » Il n'était joignable que par le tiroir du bas — il
+    // fallait ouvrir un tiroir pour le refermer aussitôt.
+    // ------------------------------------------------------------------
+    const coin = await page.evaluate(() => {
+        const b = document.getElementById('btn-ecran-plein');
+        const r = b.getBoundingClientRect();
+        const horloge = document.querySelector('.project-name-wrapper');
+        const h = horloge ? horloge.getBoundingClientRect() : null;
+        return { vu: getComputedStyle(b).display,
+                 haut: Math.round(r.top), duBord: Math.round(window.innerWidth - r.right),
+                 cote: Math.round(r.width), hauteur: Math.round(r.height),
+                 surLHorloge: h ? !(r.bottom <= h.top || h.bottom <= r.top
+                                    || r.right <= h.left || h.right <= r.left) : false };
+    });
+    r.verifie('il est là sur l\'écran ordinaire, sans ouvrir de tiroir',
+        coin.vu !== 'none', coin.vu);
+    r.verifie('vraiment collé au coin : moins de six pixels des deux bords',
+        coin.haut <= 6 && coin.duBord <= 6, JSON.stringify(coin));
+    r.verifie('et tout petit — vingt-six pixels de côté au plus',
+        coin.cote <= 26 && coin.hauteur <= 26, JSON.stringify(coin));
+    r.egal('sans passer par-dessus l\'horloge', coin.surLHorloge, false);
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

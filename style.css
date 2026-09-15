@@ -684,15 +684,72 @@ html {
     transition: top 0.4s ease, left 0.4s ease;
 }
 
+/* ===========================================================
+   LE CHROME DE LA BARRE S'EFFACE DEVANT LES OUTILS
+   « Les 3 icônes de gauche font inesthétiques… et elles prennent
+   beaucoup de place. » L'engrenage, le tiret et la poignée du
+   coin : trois ornements autour de DEUX outils, sur une barre
+   qu'un professeur s'est faite exprès pour n'avoir que ce qui
+   lui sert. Le bandeau seul — sa marge, son trait de séparation —
+   mangeait vingt-neuf pixels de hauteur, plus que la moitié d'un
+   bouton.
+   Il se replie donc en une barrette de six pixels, qui reste la
+   prise pour déplacer la barre, et rend ses deux boutons dès
+   qu'on passe dessus. Sur écran tactile, où il n'y a pas de
+   survol, ils restent là : voir la règle « hover: none » plus bas.
+   =========================================================== */
 .cbar-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 4px;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-    padding: 8px 8px 6px;
+    /* LA HAUTEUR NE BOUGE JAMAIS — vingt-deux pixels, au repos comme au
+       survol. Les deux boutons sont posés HORS DU FLUX à l'intérieur : sans
+       cela, ou bien ils gardaient leur place en étant invisibles (on ne
+       gagnait que quatre pixels), ou bien la barre grandissait au passage du
+       curseur et tous les outils descendaient de vingt pixels — on cliquait
+       alors sur le voisin de celui qu'on visait. */
+    position: relative;
+    height: 22px;
     border-radius: 10px 10px 0 0;
     cursor: grab;
+}
+
+/* La prise reste lisible sans rien peser : un trait gris au milieu, comme la
+   poignée d'un tiroir. Il s'efface quand les boutons paraissent. */
+.cbar-head::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 9px;
+    transform: translateX(-50%);
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(128, 128, 128, 0.35);
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.cbar-head .c-action {
+    position: absolute;
+    top: 1px;
+    width: 20px;
+    height: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.cbar-head .c-action.settings { left: 4px; }
+.cbar-head .c-action.min { right: 4px; }
+.cbar-head .c-action.close { right: 26px; }
+
+.custom-toolbar:hover .cbar-head .c-action { opacity: 1; pointer-events: auto; }
+.custom-toolbar:hover .cbar-head::after { opacity: 0; }
+
+/* SUR UN TABLEAU TACTILE, IL N'Y A PAS DE SURVOL. Un réglage qui ne se montre
+   qu'au passage du curseur n'existe tout simplement pas là-bas — et c'est
+   précisément l'écran sur lequel cette application est faite pour tourner. */
+@media (hover: none) {
+    .cbar-head .c-action { opacity: 1; pointer-events: auto; }
+    .cbar-head::after { opacity: 0; }
 }
 
 .cbar-head:active {
@@ -939,6 +996,9 @@ html {
     cursor: grabbing;
 }
 
+/* La troisième des « 3 icônes » : elle ne s'annonce qu'au survol, comme les
+   deux autres. Sa zone de saisie, elle, ne rétrécit pas — on ne va pas rendre
+   le geste plus difficile pour le rendre plus discret. */
 .custom-resizer {
     position: absolute;
     bottom: 0;
@@ -952,6 +1012,14 @@ html {
     color: var(--faint);
     padding: 2px;
     z-index: 10;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.custom-toolbar:hover .custom-resizer { opacity: 1; }
+
+@media (hover: none) {
+    .custom-resizer { opacity: 1; }
 }
 
 .custom-resizer svg {
@@ -1757,34 +1825,33 @@ body.focus-mode #right-drawer { transform: translateX(100%) !important; }
    cul-de-sac dont on ne sortait qu'à la touche Échap, pour qui la
    connaissait.
    =========================================================== */
+/* VRAIMENT DANS LE COIN. « J'aimerais un tout petit bouton vraiment collé en
+   haut à droite pour le plein écran. » Elle flottait à huit pixels du haut et
+   quatorze du bord, en trente-six par trente-six, et ne paraissait que dans
+   les affichages réduits : le plein écran du navigateur n'était donc joignable
+   que depuis le tiroir du bas, c'est-à-dire en ouvrant un tiroir pour le
+   refermer aussitôt. Elle est maintenant au pixel du coin, en vingt-six, et le
+   bouton du plein écran y est TOUJOURS.
+
+   AU-DESSUS DE L'HORLOGE, pas par-dessus : le cartouche de la date et
+   l'horloge de classe commencent à cinquante pixels du haut, sur le même
+   bord ; quatre pixels de marge et vingt-six de bouton s'arrêtent à trente. */
 #barre-ecran {
     position: fixed;
-    /* AU-DESSUS DE L'HORLOGE, pas par-dessus. Le cartouche de la date et
-       l'horloge de classe commencent à cinquante pixels du haut, sur le même
-       bord : la croix d'avant leur passait déjà dessus, et trois boutons
-       l'auraient fait trois fois plus. */
-    top: 8px;
-    right: 14px;
+    top: 0;
+    right: 0;
     z-index: 1000;
     display: flex;
-    gap: 5px;
-    opacity: 0;
-    pointer-events: none;
-    transform: scale(0.8);
-    transition: opacity 0.3s, transform 0.3s;
-}
-
-body.focus-mode #barre-ecran,
-body.sans-tiroirs #barre-ecran {
+    gap: 3px;
+    padding: 4px;
     opacity: 1;
     pointer-events: auto;
-    transform: scale(1);
 }
 
 #barre-ecran button {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--arrondi);
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
     background: var(--surface);
     border: 1px solid var(--contour);
     box-shadow: var(--contour-ombre);
@@ -1794,6 +1861,11 @@ body.sans-tiroirs #barre-ecran {
     justify-content: center;
     cursor: pointer;
     padding: 0;
+}
+
+#barre-ecran button .ico.sm {
+    width: 14px;
+    height: 14px;
 }
 
 #barre-ecran button:hover { background: var(--accent-soft); color: var(--accent); }
@@ -10739,15 +10811,20 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
 .compo-valider:hover { filter: brightness(1.08); background: var(--accent, #6c5ce7); }
 
 /* L'entrée du panneau de réglages d'une barre */
+/* La taille de ses voisins de rangée — la corbeille et la coche — et non le
+   pavé de trois lignes qu'un libellé replié en faisait. */
 .compo-ouvrir {
-    font: inherit;
-    font-size: 12.5px;
-    font-weight: 600;
-    padding: 7px 12px;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
     border-radius: 8px;
-    border: 1px solid var(--contour);
-    background: var(--bg, #fff);
-    color: inherit;
+    border: none;
+    background: var(--accent-soft, rgba(108, 92, 231, 0.12));
+    color: var(--accent, #6c5ce7);
     cursor: pointer;
 }
 .compo-ouvrir:hover { background: var(--accent-soft, rgba(108, 92, 231, 0.12)); }
@@ -10758,23 +10835,15 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
 }
 
 /* ===========================================================
-   « PRÉSENTER » A UNE PLACE FIXE
-   « Ce qui me sert le plus, c'est quand même le bouton plein
-   écran. » Il vivait dans la barre du document, qui paraît et
-   disparaît avec la sélection : on prenait le crayon, la barre
-   s'en allait, et il fallait recliquer la page pour retrouver le
-   bouton le plus utilisé de l'application.
+   CE QUE LE COIN PORTE, ET QUAND
+   Deux boutons y vivent en permanence — le plein écran du
+   navigateur, et « Présenter » quand il y a une page à projeter
+   (« ce qui me sert le plus, c'est quand même le bouton plein
+   écran »). Les deux autres ne servent qu'à SORTIR d'un affichage
+   réduit : les montrer sur l'écran ordinaire, c'est trois boutons
+   de plus pour rien.
    =========================================================== */
-#barre-ecran.avec-presenter {
-    opacity: 1;
-    pointer-events: auto;
-    transform: scale(1);
-}
-
-/* Mais elle ne gagne QUE ce bouton-là hors des modes où elle paraît en
-   entier : l'écran ordinaire n'a pas à recevoir trois boutons de plus. */
 body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #btn-ecran-suite,
-body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #btn-ecran-plein,
 body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #exit-focus-cross {
     display: none;
 }
