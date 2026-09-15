@@ -6570,14 +6570,17 @@ const CLE_BARRE_DEBOUT = 'auTableau_barre_debout';
 let barreDebout = false;
 try { barreDebout = localStorage.getItem(CLE_BARRE_DEBOUT) === 'true'; } catch (e) { /* stockage refusé */ }
 
-// LA BARRE À PLAT NE SE POSE PAS TOUJOURS AU MÊME BORD : en haut d'ordinaire,
-// car le bas est la zone où l'on écrit ; EN BAS dès qu'un document occupe
-// l'écran, parce que la page se lit de haut en bas et que la barre ne doit pas
-// manger son début. Le bouton promettait « en haut » dans les deux cas, et
-// l'on cherchait ensuite la barre là où elle n'était pas.
-function placeDeLaBarreAPlat() {
-    return document.body.classList.contains('focus-mode') ? 'en bas' : 'en haut';
-}
+// LA BARRE À PLAT SE POSE TOUJOURS EN HAUT. Elle descendait au bord bas dès
+// qu'un document occupait l'écran, au motif qu'une page se lit de haut en bas
+// et qu'il ne fallait pas en manger le début. À la mesure, ce début-là est la
+// marge du haut : quarante-quatre pixels sur une page projetée, c'est un
+// centimètre et demi de papier blanc. Contre cela, un saut de six cents
+// pixels à chaque fois qu'on montrait ou rangeait les outils — « pourquoi la
+// barre du PDF va une fois en haut, une fois en bas ? ». Le compte n'y était
+// pas. Et pour qui tient vraiment à dégager la page, la barre se met debout
+// au bord droit, sur la bande noire, ou se déplace où l'on veut : ces deux
+// choix-là tiennent d'une séance à l'autre.
+const PLACE_DE_LA_BARRE_A_PLAT = 'en haut';
 
 // LA BARRE DE STYLE SE MET DEBOUT ELLE AUSSI. « Il faut aussi pouvoir la
 // verticaliser. » Elle ne le savait pas faire : seule celle du document en
@@ -6597,7 +6600,7 @@ function majBoutonDOrientationDuStyle() {
     if (!b) return;
     b.classList.toggle('actif', barreStyleDebout);
     b.title = barreStyleDebout
-        ? 'Coucher la barre de style, ' + placeDeLaBarreAPlat()
+        ? 'Coucher la barre de style, ' + PLACE_DE_LA_BARRE_A_PLAT
         : 'Mettre la barre de style debout, au bord droit';
 }
 
@@ -6607,7 +6610,7 @@ function basculerLOrientationDeLaBarreStyle(force) {
     if (typeof updateStyleBarContext === 'function') updateStyleBarContext();
     if (typeof showToast === 'function') {
         showToast(barreStyleDebout ? 'Barre de style debout, au bord droit'
-                                   : 'Barre de style à plat, ' + placeDeLaBarreAPlat());
+                                   : 'Barre de style à plat, ' + PLACE_DE_LA_BARRE_A_PLAT);
     }
     return barreStyleDebout;
 }
@@ -6618,7 +6621,7 @@ function majBoutonDOrientation() {
     if (!b) return;
     b.classList.toggle('actif', barreDebout);
     b.title = barreDebout
-        ? 'Coucher la barre, ' + placeDeLaBarreAPlat()
+        ? 'Coucher la barre, ' + PLACE_DE_LA_BARRE_A_PLAT
         : 'Mettre la barre debout, au bord droit';
 }
 
@@ -6635,16 +6638,33 @@ function basculerLOrientationDeLaBarre(force) {
     // sont à plat : elle doit donc être replacée avec.
     if (typeof updateStyleBarContext === 'function') updateStyleBarContext();
     if (typeof showToast === 'function') {
-        showToast(barreDebout ? 'Barre debout, au bord droit' : 'Barre à plat, ' + placeDeLaBarreAPlat());
+        showToast(barreDebout ? 'Barre debout, au bord droit' : 'Barre à plat, ' + PLACE_DE_LA_BARRE_A_PLAT);
     }
     return barreDebout;
 }
 
 // OÙ SE POSE LA BARRE DU DOCUMENT. Debout au bord droit — le gauche appartient
 // à la barre des outils, deux colonnes du même côté seraient pires que ce
-// qu'on remplace. À plat, EN HAUT d'ordinaire, car le bas est la zone où l'on
-// écrit ; EN BAS dès qu'un document occupe l'écran, parce que la page se lit
-// de haut en bas et que la barre ne doit pas manger son début.
+// qu'on remplace. À plat, EN HAUT, toujours : le bas est la zone où l'on
+// écrit, et une barre qu'on retrouve au même pixel vaut mieux qu'une barre
+// bien placée qu'on cherche.
+//
+// UN TIROIR OUVERT MAIS RANGÉ HORS DE L'ÉCRAN N'OCCUPE PAS LA PLACE. Le mode
+// Focus et l'écran nu le font coulisser dehors sans lui retirer sa classe :
+// qui se fie à « closed » se gare sous un meuble qui n'est plus là.
+function tiroirEnPlace(el) {
+    if (!el || el.classList.contains('closed')) return false;
+    // ON NE LIT NI L'OPACITÉ NI LE RECTANGLE : pendant les trois dixièmes de
+    // seconde du glissement ils valent un entre-deux, et la barre se placerait
+    // selon l'instant où on l'a regardée — haut ou bas selon la vitesse de la
+    // machine. Ce sont les deux modes qui rangent les tiroirs qu'on nomme,
+    // exactement comme la feuille de style les nomme.
+    const b = document.body;
+    if (b.classList.contains('focus-mode') || b.classList.contains('sans-tiroirs')) return false;
+    return getComputedStyle(el).display !== 'none';
+}
+window.tiroirEnPlace = tiroirEnPlace;
+
 function placerLaBarreDuDocument() {
     const barre = document.getElementById('bar-document');
     if (!barre) return;
@@ -6674,18 +6694,28 @@ function placerLaBarreDuDocument() {
         barre.style.transform = 'translateY(-50%)';
         return;
     }
+    // ELLE A UNE PLACE : LE HAUT. « Pourquoi la barre du PDF va une fois en
+    // haut, une fois en bas, selon qu'on mette les toolbars ou non ? »
+    // Parce qu'elle descendait au bas de l'écran dès que le mode Focus
+    // rangeait les barres — un saut de six cents pixels à chaque appui sur
+    // « montrer les outils ». Cette descente venait du temps où cette barre
+    // et celle du style n'en faisaient qu'une ; elle n'évitait rien. La
+    // preuve : le haut est LIBRE précisément parce que les barres sont
+    // rangées, et le seul meuble qui y reste — les boutons d'écran — est
+    // calé contre le bord droit, loin d'une barre centrée.
+    //
+    // Elle ne s'écarte donc plus que pour une raison qu'on voit arriver : le
+    // tiroir du haut, ouvert, occupe sa place. Et l'on regarde s'il est
+    // VISIBLE, pas s'il se dit ouvert — rangé par le mode Focus, il garde sa
+    // classe et faisait descendre la barre de cent pixels pour se garer sous
+    // un meuble absent.
     barre.style.left = '50%';
     barre.style.transform = 'translateX(-50%)';
     barre.style.right = 'auto';
-    if (document.body.classList.contains('focus-mode')) {
-        barre.style.top = 'auto';
-        barre.style.bottom = '16px';
-    } else {
-        const tiroirHaut = document.getElementById('bar-plugins');
-        const ouvert = tiroirHaut && !tiroirHaut.classList.contains('closed');
-        barre.style.bottom = 'auto';
-        barre.style.top = (ouvert ? (tiroirHaut.offsetHeight || 130) + 12 : 20) + 'px';
-    }
+    barre.style.bottom = 'auto';
+    const tiroirHaut = document.getElementById('bar-plugins');
+    barre.style.top = (tiroirHaut && tiroirEnPlace(tiroirHaut)
+        ? (tiroirHaut.offsetHeight || 130) + 12 : 20) + 'px';
     signalerLaBarreDuDocument(barre);
 }
 window.placerLaBarreDuDocument = placerLaBarreDuDocument;
@@ -6721,9 +6751,8 @@ function signalerLaBarreDuDocument(barre) {
 window.signalerLaBarreDuDocument = signalerLaBarreDuDocument;
 
 // LES DEUX BARRES NE SE POSENT PAS L'UNE SUR L'AUTRE. Elles visent la même
-// place — au milieu, en haut, ou en bas en plein écran. Celle du document
-// garde cette place : c'est elle qu'on tient. La barre de style se range
-// juste à côté, du côté où il reste de la place.
+// place — au milieu, en haut. Celle du document la garde : c'est elle qu'on
+// tient. La barre de style se range juste dessous.
 function rangerLesDeuxBarres() {
     const style = document.getElementById('bar-style');
     const doc = document.getElementById('bar-document');
@@ -6735,14 +6764,8 @@ function rangerLesDeuxBarres() {
     if (!deuxAPlat) return;
     const r = doc.getBoundingClientRect();
     if (!r.height) return;
-    if (document.body.classList.contains('focus-mode')) {
-        // En bas : le document occupe le bord, le style se pose au-dessus.
-        style.style.top = 'auto';
-        style.style.bottom = Math.round(window.innerHeight - r.top + 8) + 'px';
-    } else {
-        style.style.bottom = 'auto';
-        style.style.top = Math.round(r.bottom + 8) + 'px';
-    }
+    style.style.bottom = 'auto';
+    style.style.top = Math.round(r.bottom + 8) + 'px';
 }
 window.rangerLesDeuxBarres = rangerLesDeuxBarres;
 window.basculerLOrientationDeLaBarre = basculerLOrientationDeLaBarre;
@@ -15294,6 +15317,8 @@ function majBarreDocument() {
         // c'est justement le cas ou « Modifier » doit paraitre.
         majBoutonRouvrir();
         if (typeof majLeVolet === 'function') majLeVolet();
+        // La place qu'elle occupait en haut est rendue : la visite remonte.
+        if (typeof placerLaBarreDeLaDemo === 'function') placerLaBarreDeLaDemo();
         return;
     }
     // C'est ICI que le contexte s'allume, et non chez l'appelante : on entre
@@ -15430,6 +15455,11 @@ function majBarreDocument() {
     }
     if (typeof majLeVolet === 'function') majLeVolet();
     majReglagesDuVolet();
+    // La visite se range SOUS les barres du haut : celle du document vient de
+    // paraître ou de s'en aller, il faut le lui dire. ICI, et non au début :
+    // c'est quelques lignes plus haut seulement qu'elle devient visible, et la
+    // visite se serait rangée sous une barre encore transparente.
+    if (typeof placerLaBarreDeLaDemo === 'function') placerLaBarreDeLaDemo();
     // Surtout PAS d'appel à updateStyleBarContext ici : c'est elle qui nous
     // appelle maintenant, et l'on tournerait en rond sans fin.
 }
@@ -18399,6 +18429,26 @@ function unMenuEstOuvert() {
 // de la visite, la bande des morceaux — sont un plancher : ce qui se place
 // « en bas faute de mieux » doit s'arrêter au-dessus d'elles, sans quoi deux
 // meubles se recouvrent et l'on clique sur celui qu'on ne visait pas.
+// JUSQU'OÙ LE HAUT DE L'ÉCRAN EST PRIS. Le jumeau de la fonction suivante :
+// les barres à plat se rangent en haut, l'une sous l'autre, et ce qui vient
+// ensuite s'y ajoute plutôt que de se poser dessus. Rend le bas de la
+// dernière barre du haut, ou zéro si le haut est libre.
+function plancherDesBarresDuHaut() {
+    let bas = 0;
+    ['bar-document', 'bar-style'].forEach(id => {
+        const e = document.getElementById(id);
+        if (!e || e.hidden || e.classList.contains('vertical')) return;
+        const s = getComputedStyle(e);
+        if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) < 0.05) return;
+        const r = e.getBoundingClientRect();
+        if (r.height < 4) return;
+        // Seules celles qui sont vraiment dans le haut font plancher.
+        if (r.top < window.innerHeight / 3) bas = Math.max(bas, Math.round(r.bottom));
+    });
+    return bas;
+}
+window.plancherDesBarresDuHaut = plancherDesBarresDuHaut;
+
 function plafondDesBarresDuBas() {
     let bas = window.innerHeight;
     ['bar-document', 'bar-style', 'demo-barre', 'bande-morceaux'].forEach(id => {
@@ -34962,19 +35012,26 @@ function fermerLesLecteursDeLaDemo(d) {
 }
 
 // ELLE MONTE DÈS QU'ELLE RECOUVRE CE QU'ELLE MONTRE. Le bas de l'écran est
-// occupé tour à tour par la page présentée, par le tiroir du bas — celui-là
-// même qu'un chapitre ouvre pour montrer « Exporter » — et par la bande des
-// morceaux découpés. La visite s'expliquait alors PAR-DESSUS ce dont elle
-// parlait.
+// occupé tour à tour par le tiroir du bas — celui-là même qu'un chapitre ouvre
+// pour montrer « Exporter » — et par la bande des morceaux découpés. La visite
+// s'expliquait alors PAR-DESSUS ce dont elle parlait.
+//
+// LE PLEIN ÉCRAN N'EN FAIT PLUS PARTIE : il la faisait monter parce que la
+// barre du document occupait alors le bord bas. Celle-ci se range désormais
+// toujours en haut, et faire monter la visite revenait à l'envoyer se poser
+// pile dessus.
 function placerLaBarreDeLaDemo() {
     const barre = document.getElementById('demo-barre');
     if (!barre) return;
     const bas = document.getElementById('bottom-drawer');
     const bande = document.getElementById('bande-morceaux');
-    const gene = document.body.classList.contains('focus-mode')
-        || (bas && !bas.classList.contains('closed'))
+    const gene = (bas && !bas.classList.contains('closed'))
         || (bande && !bande.hidden);
     barre.classList.toggle('en-haut', !!gene);
+    // EN HAUT, ELLE N'EST PAS SEULE : les barres du document et du style s'y
+    // rangent aussi. Elle se pose sous la dernière d'entre elles.
+    const plancher = gene ? plancherDesBarresDuHaut() : 0;
+    barre.style.top = plancher ? Math.round(plancher + 8) + 'px' : '';
 }
 
 // ------------------------------------------------------------------

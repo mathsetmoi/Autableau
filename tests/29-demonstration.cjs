@@ -451,8 +451,11 @@ module.exports = async function (browser) {
         demarrerLaDemonstration();
         const barre = document.getElementById('demo-barre');
         const enBas = barre.classList.contains('en-haut');
-        toggleFocusMode();
+        // LE TIROIR DU BAS, et non plus le plein écran : la barre du document
+        // est remontée en haut, la visite n'a plus à lui céder le bord bas.
+        toggleBottomDrawer();
         await new Promise(r => setTimeout(r, 60));
+        placerLaBarreDeLaDemo();
         const enHaut = barre.classList.contains('en-haut');
         // Et elles ne se recouvrent pas : on mesure les deux rectangles.
         images.push({ id: nextId++, x: 40, y: 40, w: 300, h: 400, z: globalZ++ });
@@ -462,11 +465,11 @@ module.exports = async function (browser) {
         const a = barre.getBoundingClientRect();
         const b = document.getElementById('bar-document').getBoundingClientRect();
         const chevauche = !(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top);
-        toggleFocusMode();
+        toggleBottomDrawer();
         arreterLaDemonstration();
         return { enBas, enHaut, chevauche, demo: Math.round(a.top), doc: Math.round(b.top) };
     });
-    r.verifie('la barre de la visite monte dès qu\'on passe en plein écran',
+    r.verifie('la barre de la visite monte dès que le tiroir du bas s\'ouvre',
         gestesVus && deuxBarres.enBas === false && deuxBarres.enHaut === true, JSON.stringify(deuxBarres));
     r.verifie('et elle ne recouvre plus la barre du document',
         !deuxBarres.chevauche, JSON.stringify(deuxBarres));

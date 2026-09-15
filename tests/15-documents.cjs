@@ -404,26 +404,32 @@ module.exports = async function (browser) {
     r.verifie('le menu flottant reste court : rien que des gestes, une poignée',
         partage.flottant.length <= 7, JSON.stringify(partage.flottant));
 
-    // EN PLEIN ÉCRAN, elle descend jusqu'au bord : le tiroir du bas s'efface
-    // avec les autres, et la page se lit de haut en bas — la barre n'a rien à
-    // faire dans le début.
+    // ELLE NE CHANGE PAS DE BORD EN PLEIN ÉCRAN. « Pourquoi la barre du PDF va
+    // une fois en haut, une fois en bas, selon qu'on mette les toolbars ou
+    // non ? » Elle descendait au bord bas dès que le mode Focus rangeait les
+    // barres — six cents pixels de saut, pour épargner un centimètre et demi
+    // de marge blanche en haut de la page projetée.
     const enBasEnFocus = await page.evaluate(() => {
         const b2 = document.getElementById('bar-document');
         const tiroir = document.getElementById('bottom-drawer');
+        // Le tiroir du HAUT occupe la place de la barre quand il est ouvert :
+        // on le ferme, sinon on mesurerait ce décalage-là et non le bord.
+        const haut = document.getElementById('bar-plugins');
+        if (!haut.classList.contains('closed')) togglePluginDrawer();
         selectedItems = [{ type: 'image', id: images[0].id }];
         updateStyleBarContext();
         const normal = Math.round(b2.getBoundingClientRect().top);
         toggleFocusMode();
         selectedItems = [{ type: 'image', id: images[0].id }];
         updateStyleBarContext();
-        const focus = Math.round(window.innerHeight - b2.getBoundingClientRect().bottom);
+        const focus = Math.round(b2.getBoundingClientRect().top);
         toggleFocusMode();
         return { normal, focus, tiroirHaut: Math.round(tiroir.offsetHeight) };
     });
     r.verifie('hors plein écran, elle est en haut', enBasEnFocus.normal < 200,
         JSON.stringify(enBasEnFocus));
-    r.verifie('et en plein écran elle descend au bord : la page occupe tout le haut',
-        enBasEnFocus.focus < 30, JSON.stringify(enBasEnFocus));
+    r.egal('et en plein écran elle y reste, au pixel près',
+        enBasEnFocus.focus, enBasEnFocus.normal);
 
     // ELLE SE DÉPLACE ET S'EN SOUVIENT. Fixe ne veut pas dire clouée : sur un
     // document en plein écran elle peut tomber en travers de ce qu'on montre.
@@ -1808,12 +1814,18 @@ module.exports = async function (browser) {
         selectedItems = [{ type: 'image', id: images[0].id }];
         majBarreDocument();
         await new Promise(r => setTimeout(r, 60));
+        const haut = document.getElementById('bar-plugins');
+        if (!haut.classList.contains('closed')) togglePluginDrawer();
+        majBarreDocument();
+        await new Promise(r => setTimeout(r, 60));
         barre.classList.remove('se-signale');
         const auRepos = barre.classList.contains('se-signale');
         const placeAvant = barre.style.top;
 
-        // Le plein écran la fait descendre en bas : c'est là qu'on la perd.
-        toggleFocusMode();
+        // LE TIROIR DU HAUT est désormais la seule chose qui la déplace : il
+        // vient occuper sa place, elle se gare dessous. C'est là qu'on la perd.
+        togglePluginDrawer();
+        majBarreDocument();
         await new Promise(r => setTimeout(r, 60));
         const apresLeSaut = { signale: barre.classList.contains('se-signale'),
                               bougee: barre.style.top !== placeAvant };
@@ -1824,7 +1836,7 @@ module.exports = async function (browser) {
         await new Promise(r => setTimeout(r, 60));
         const surPlace = barre.classList.contains('se-signale');
 
-        toggleFocusMode();
+        togglePluginDrawer();
         await new Promise(r => setTimeout(r, 60));
         // On laisse le document en place : le bloc suivant compte dessus.
         majBarreDocument(); draw();
@@ -2879,17 +2891,17 @@ module.exports = async function (browser) {
         setMode('freehand');
         updateStyleBarContext();
         const aPlat = mesure();
-        // En plein écran, le document prend le bas : l'autre se range dessus.
+        // En plein écran, rien ne change : le document garde le haut, l'autre
+        // se range dessous, exactement comme sur le tableau ordinaire.
         document.body.classList.add('focus-mode');
         updateStyleBarContext();
         const d2 = doc.getBoundingClientRect(), s2 = style.getBoundingClientRect();
         const enFocus = {
             chevauche: !(d2.bottom <= s2.top || s2.bottom <= d2.top
                          || d2.right <= s2.left || s2.right <= d2.left),
-            // Et elle est AU-DESSUS, dans l'écran : posée en dessous elle
-            // sortirait par le bas, ce qui ne chevauche rien mais ne se voit
-            // pas non plus.
-            auDessus: Math.round(d2.top - s2.bottom),
+            // Et elle est DESSOUS, dans l'écran : posée ailleurs elle sortirait
+            // du cadre, ce qui ne chevauche rien mais ne se voit pas non plus.
+            auDessous: Math.round(s2.top - d2.bottom),
             dansLEcran: s2.top >= 0 && s2.bottom <= window.innerHeight + 1
         };
         document.body.classList.remove('focus-mode');
@@ -2901,16 +2913,16 @@ module.exports = async function (browser) {
         { deux: cote.aPlat.deuxVisibles, chevauche: cote.aPlat.chevauche,
           dessous: cote.aPlat.styleSousLeDoc >= 0 && cote.aPlat.styleSousLeDoc <= 20 },
         { deux: true, chevauche: false, dessous: true });
-    r.egal('et pas davantage en plein écran, où le document prend le bas',
+    r.egal('et pas davantage en plein écran, où rien n\'a changé de bord',
         { chevauche: cote.enFocus.chevauche, dansLEcran: cote.enFocus.dansLEcran,
-          auDessus: cote.enFocus.auDessus >= 0 && cote.enFocus.auDessus <= 20 },
-        { chevauche: false, dansLEcran: true, auDessus: true });
+          auDessous: cote.enFocus.auDessous >= 0 && cote.enFocus.auDessous <= 20 },
+        { chevauche: false, dansLEcran: true, auDessous: true });
 
-    r.egal('le bouton promet le bord où la barre se posera VRAIMENT',
+    r.egal('le bouton promet le même bord dans les deux cas, et le tient',
         { promis: [promesse.surLeTableau, promesse.enPleinEcran],
           tenu: [promesse.vraimentSurLeTableau, promesse.vraimentEnPleinEcran] },
-        { promis: ['Coucher la barre, en haut', 'Coucher la barre, en bas'],
-          tenu: ['en haut', 'en bas'] });
+        { promis: ['Coucher la barre, en haut', 'Coucher la barre, en haut'],
+          tenu: ['en haut', 'en haut'] });
 
     // =====================================================================
     // ON NE POSE PAS À CÔTÉ D'UNE PAGE QU'ON PROJETTE

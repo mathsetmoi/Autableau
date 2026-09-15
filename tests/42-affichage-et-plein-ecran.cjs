@@ -300,6 +300,70 @@ module.exports = async function (browser) {
     r.verifie('et l\'on demande laquelle',
         /[Cc]hoisissez/.test(deuxPages.message), deuxPages.message);
 
+    // ------------------------------------------------------------------
+    // LA BARRE DU DOCUMENT A UNE PLACE, ET ELLE Y RESTE
+    //
+    // « Pourquoi la barre du PDF va une fois en haut, une fois en bas, selon
+    // qu'on mette les toolbars ou non ? » Elle descendait au bas de l'écran
+    // dès que le mode Focus rangeait les barres : six cents pixels de saut à
+    // chaque appui. Elle ne s'écarte plus que pour une raison qu'on voit
+    // arriver — le tiroir du haut, ouvert, occupe sa place.
+    // ------------------------------------------------------------------
+    const place = await page.evaluate(async (px) => {
+        const attendre = (ms) => new Promise(ok => setTimeout(ok, ms));
+        const tiroir = document.getElementById('bar-plugins');
+        const ou = () => Math.round(document.getElementById('bar-document').getBoundingClientRect().top);
+
+        images.length = 0; selectedItems = [];
+        images.push({ id: 'doc-place', type: 'image', src: px, x: 100, y: 50, w: 600, h: 850 });
+        selectedItems = [{ type: 'image', id: 'doc-place' }];
+        majBarreDocument();
+        await attendre(450);
+
+        // a) Le tiroir du haut fermé : la barre ne bouge pas d'un pixel.
+        if (!tiroir.classList.contains('closed')) togglePluginDrawer();
+        await attendre(450);
+        majBarreDocument();
+        const ferme = { avant: ou() };
+        basculerLePleinEcranDuDocument();
+        await attendre(450);
+        ferme.projete = ou();
+        basculerLesBarresDeLaPresentation();
+        await attendre(450);
+        ferme.avecBarres = ou();
+        quitterLaPresentation(); majBarreDocument();
+        await attendre(450);
+
+        // b) Le tiroir du haut ouvert : elle se gare dessous, et remonte
+        //    quand il s'en va — une place libérée, pas un saut inexpliqué.
+        if (tiroir.classList.contains('closed')) togglePluginDrawer();
+        await attendre(450);
+        majBarreDocument();
+        const ouvert = { avant: ou(), hauteurDuTiroir: Math.round(tiroir.getBoundingClientRect().bottom) };
+        basculerLePleinEcranDuDocument();
+        await attendre(450);
+        ouvert.projete = ou();
+        quitterLaPresentation(); majBarreDocument();
+        await attendre(450);
+        ouvert.apres = ou();
+        if (!tiroir.classList.contains('closed')) togglePluginDrawer();
+        images.length = 0; selectedItems = []; majBarreDocument();
+        return { ferme, ouvert };
+    }, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+
+    r.verifie('tiroir du haut fermé, la barre du document reste en haut',
+        place.ferme.avant === 20, JSON.stringify(place.ferme));
+    r.egal('et projeter la page, avec ou sans les outils, ne la déplace pas',
+        [place.ferme.projete, place.ferme.avecBarres],
+        [place.ferme.avant, place.ferme.avant]);
+    r.verifie('tiroir du haut ouvert, elle se gare juste dessous',
+        place.ouvert.avant > 20 && place.ouvert.avant >= place.ouvert.hauteurDuTiroir,
+        JSON.stringify(place.ouvert));
+    r.verifie('la place libérée, elle remonte en haut — elle ne descend jamais',
+        place.ouvert.projete === 20, JSON.stringify(place.ouvert));
+    r.egal('et elle retrouve sa place sous le tiroir au retour',
+        place.ouvert.apres, place.ouvert.avant);
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();
