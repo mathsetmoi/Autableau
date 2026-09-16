@@ -3982,6 +3982,31 @@ body.dark-mode {
 /* =====================================
    MENU FLOTTANT & ROTATION
    ===================================== */
+/* LE NOM DE CE QUE LA BARRE COMMANDE.
+   « Les toolbars, elles ne font pas doublon ? » Elles ne partagent aucun
+   bouton — c'est vérifié —, mais une sélection en fait paraître deux, l'une
+   au-dessus et l'autre en dessous, et rien ne disait pourquoi « rogner » est
+   en haut et « tourner » en bas. Deux mots le disent, en petit : on les lit la
+   première fois, et on ne les voit plus ensuite.
+   ELLE NE REÇOIT PAS LE CLIC : ce n'est pas une commande, et la barre du
+   document se déplace en la saisissant n'importe où. */
+.barre-nom {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--faint, #b2bec3);
+    white-space: nowrap;
+    align-self: center;
+    user-select: none;
+    pointer-events: none;
+    padding-right: 2px;
+}
+
+/* DEBOUT, ELLE DISPARAÎT : un mot couché dans une colonne de trente pixels la
+   ferait tripler de large pour ne rien apprendre de plus. */
+#bar-document.vertical .barre-nom { display: none; }
+
 #quick-edit-menu {
     position: absolute;
     display: none;

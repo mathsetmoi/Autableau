@@ -497,6 +497,77 @@ module.exports = async function (browser) {
     r.egal('et sur aucune de celles qui ne se rouvrent pas', barres.modifierEnTrop, []);
 
     // =====================================================================
+    // DEUX BARRES POUR UNE SÉLECTION : CHACUNE DIT CE QU'ELLE COMMANDE
+    //
+    // « Les toolbars, elles ne font pas doublon ? » Non — et c'est la première
+    // chose qu'on établit ici, parce que les deux mots qu'on ajoute ensuite ne
+    // valent que si elle est vraie : la barre du document et celle de l'objet
+    // ne partagent AUCUN bouton. Mais une sélection les faisait paraître
+    // toutes les deux, l'une au-dessus et l'autre en dessous, sans que rien
+    // dise pourquoi « rogner » est en haut et « tourner » en bas. Le partage
+    // existait dans le code, pas à l'écran.
+    // =====================================================================
+    const deuxBarres = await page.evaluate(async () => {
+        images.length = 0; texts.length = 0; selectedItems = [];
+        images.push({ id: nextId++, x: 300, y: 250, w: 320, h: 240, cx: 0, cy: 0, cw: 320, ch: 240,
+                      src: 'x', z: globalZ++, nomFichier: 'doc.pdf' });
+        selectedItems = [{ type: 'image', id: images[0].id }];
+        updateStyleBarContext(); majBarreDocument();
+        if (typeof updateQuickMenu === 'function') updateQuickMenu();
+        draw();
+        await new Promise(ok => setTimeout(ok, 500));
+
+        const boutons = (id) => [...document.getElementById(id).querySelectorAll('button')]
+            .filter(x => x.getClientRects().length)
+            .map(x => (x.id || '').replace(/^(btn-quick-|doc-|btn-)/, '')).filter(Boolean);
+        const haut = new Set(boutons('bar-document'));
+        const partages = boutons('quick-edit-menu').filter(x => haut.has(x));
+
+        const lu = (sel) => {
+            const e = document.querySelector(sel);
+            if (!e) return null;
+            const r = e.getBoundingClientRect();
+            // LE MOT NE PREND PAS LE CLIC : ce n'est pas une commande, et la
+            // barre se saisit n'importe où pour la déplacer.
+            // ON LIT TOUTE LA PILE sous le point, et non le seul élément du
+            // dessus : les chapitres précédents laissent parfois un calque
+            // par-dessus la page, et « qui est tout en haut ? » ne parlerait
+            // alors plus du mot. Un élément qui ne reçoit pas le clic est
+            // absent de cette pile — c'est exactement ce qu'on veut vérifier.
+            const pile = document.elementsFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+            return { vu: getComputedStyle(e).display !== 'none' && r.width > 1,
+                     texte: e.textContent.trim(),
+                     dansLaPile: pile.includes(e),
+                     barreDansLaPile: pile.some(x => x.id === 'bar-document' || x.id === 'quick-edit-menu') };
+        };
+        const doc = lu('#bar-document .barre-nom');
+        const objet = lu('#quick-edit-menu .barre-nom');
+
+        // DEBOUT, LE MOT S'EFFACE : couché dans une colonne de trente pixels,
+        // il la ferait tripler de large pour ne rien apprendre de plus.
+        const avant = document.getElementById('bar-document').classList.contains('vertical');
+        document.getElementById('bar-document').classList.add('vertical');
+        await new Promise(ok => setTimeout(ok, 120));
+        const debout = getComputedStyle(document.querySelector('#bar-document .barre-nom')).display;
+        if (!avant) document.getElementById('bar-document').classList.remove('vertical');
+
+        images.length = 0; selectedItems = []; updateStyleBarContext(); draw();
+        return { partages, doc, objet, debout };
+    });
+    r.egal('la barre du document et celle de l\'objet ne partagent aucun bouton',
+        deuxBarres.partages, []);
+    // NUL-SÛR : un nom absent doit se dire, pas faire tomber la suite. C'est
+    // justement le cas qu'on veut voir signalé si quelqu'un retire la ligne.
+    const d = deuxBarres.doc || {}, o = deuxBarres.objet || {};
+    r.egal('et chacune porte le nom de ce qu\'elle commande',
+        [d.texte || null, o.texte || null], ['Le document', "L'objet"]);
+    r.verifie('on les voit toutes les deux', !!(d.vu && o.vu), JSON.stringify(deuxBarres));
+    r.egal('le mot ne prend pas le clic : la barre reste saisissable par là',
+        { mot: [d.dansLaPile, o.dansLaPile], barre: [d.barreDansLaPile, o.barreDansLaPile] },
+        { mot: [false, false], barre: [true, true] });
+    r.egal('et debout, il s\'efface', deuxBarres.debout, 'none');
+
+    // =====================================================================
     // LE TABLEAU DE NUMÉRATION : CHAQUE CLASSE SE RETIRE
     // Il s'arrêtait aux millions et n'offrait que deux formats. On coche
     // maintenant les classes qu'on veut — mais un tableau de numération n'a

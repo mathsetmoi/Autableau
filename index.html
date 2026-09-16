@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=150">
+    <link rel="stylesheet" href="style.css?v=151">
 </head>
 
 <body>
@@ -332,6 +332,9 @@
              couleur des traits — au lieu de rouvrir une fenêtre plein écran
              pour changer une seule chose, devant la classe. Rempli à la
              sélection, vide le reste du temps. -->
+        <!-- Son pendant : voir la barre du document. Celle-ci agit sur l'objet
+             en tant qu'objet, quel qu'il soit. -->
+        <span class="barre-nom">L'objet</span>
         <div id="quick-plugin-actions"></div>
         <button class="btn-quick" id="btn-quick-lock" title="Verrouiller la position et l'édition">
             <svg xmlns="http://www.w3.org/2000/svg" id="icon-quick-lock" viewBox="0 0 24 24" fill="none"
@@ -2886,6 +2889,17 @@
                     fill="currentColor" />
             </svg>
         </div>
+        <!-- CE QUE CETTE BARRE COMMANDE, ÉCRIT DESSUS.
+             « Les toolbars, elles ne font pas doublon ? » Non — vérifié bouton
+             par bouton, elles n'en partagent aucun : celle-ci agit sur l'objet
+             EN TANT QUE DOCUMENT (les pages, le cadre, les proportions,
+             rogner), celle du bas sur l'objet EN TANT QU'OBJET posé sur le
+             tableau (verrouiller, dupliquer, tourner, retourner, supprimer).
+             Mais une sélection faisait paraître deux barres, l'une au-dessus
+             et l'autre en dessous, sans que rien dise pourquoi « rogner » est
+             en haut et « tourner » en bas : le partage existait dans le code,
+             pas à l'écran. Deux mots suffisent à le dire. -->
+        <span class="barre-nom">Le document</span>
         <div class="style-group group-document">
         <!-- LE PLEIN ÉCRAN N'AVAIT PAS DE BOUTON. La présentation existait
              depuis longtemps — tout s'efface, la page prend l'écran — mais on
