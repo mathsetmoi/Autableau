@@ -822,6 +822,85 @@ module.exports = async function (browser) {
     r.egal('et la barre du texte sait revenir se ranger en haut',
         remiseEnHaut, { parent: 'bar-style', ancree: true });
 
+    // ==================================================================
+    // CE QU'ON TAPE EST LÀ OÙ ÇA SE POSE
+    //
+    // « Quand on édite ou valide du texte, il y a un décalage entre le texte
+    // tapé et validé, ou quand on revient dans la zone d'édition ; c'est très
+    // léger. » Quatre pixels. Trois conventions se mélangeaient : la mise en
+    // page centre la ligne d'après la BOÎTE DE POLICE — c'est ce que fait le
+    // navigateur —, le canevas peignait avec « textBaseline: top », qui vise
+    // le haut de l'EM SQUARE, et l'export SVG visait encore ailleurs avec
+    // « dominant-baseline: hanging ». Le code mesurait juste, puis peignait
+    // selon une autre règle que celle qu'il venait de mesurer.
+    //
+    // ON NE COMPARE PAS DES BOÎTES, ON COMPARE DE L'ENCRE. La boîte de ligne
+    // du DOM déborde les lettres par le haut ; la mesurer contre l'empreinte
+    // du canevas ferait apparaître un écart là où il n'y en a pas, et
+    // l'inverse. On photographie donc l'écran aux trois moments et l'on
+    // regarde où sont les pixels sombres.
+    // ==================================================================
+    const CLIP = { x: 440, y: 330, width: 260, height: 140 };
+    const encreDe = async (b64) => page.evaluate(({ src, clip }) => (async () => {
+        const im = new Image();
+        im.src = 'data:image/png;base64,' + src;
+        await im.decode();
+        const c = document.createElement('canvas');
+        c.width = im.naturalWidth; c.height = im.naturalHeight;
+        const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        const fond = [d[0], d[1], d[2]];   // le coin haut-gauche : pas de lettre là
+        let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+        for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+            const i = (y * c.width + x) * 4;
+            if (Math.abs(d[i] - fond[0]) + Math.abs(d[i + 1] - fond[1]) + Math.abs(d[i + 2] - fond[2]) > 60) {
+                if (x < x0) x0 = x; if (x > x1) x1 = x;
+                if (y < y0) y0 = y; if (y > y1) y1 = y;
+            }
+        }
+        return x1 < 0 ? null : { g: x0 + clip.x, h: y0 + clip.y, d: x1 + clip.x, b: y1 + clip.y };
+    })(), { src: b64, clip: CLIP });
+
+    await page.evaluate(() => {
+        texts.length = 0; images.length = 0; selectedItems = [];
+        panX = 0; panY = 0; zoom = 1; editingTextId = null;
+        if (wysiwygText) wysiwygText.style.display = 'none';
+        setMode('text'); draw();
+    });
+    await page.mouse.click(500, 400);
+    await page.waitForTimeout(250);
+    await page.keyboard.type('Hamburg');
+    await page.waitForTimeout(300);
+    const enSaisie = await encreDe((await page.screenshot({ clip: CLIP })).toString('base64'));
+
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+    const auRendu = await encreDe((await page.screenshot({ clip: CLIP })).toString('base64'));
+
+    await page.evaluate(() => setMode('pointer'));
+    await page.mouse.dblclick(540, 400);
+    await page.waitForTimeout(500);
+    const auRetour = await encreDe((await page.screenshot({ clip: CLIP })).toString('base64'));
+    const rouvert = await page.evaluate(() => !!editingTextId);
+
+    r.verifie('les trois moments laissent bien une trace à mesurer',
+        !!(enSaisie && auRendu && auRetour) && rouvert,
+        JSON.stringify({ enSaisie, auRendu, auRetour, rouvert }));
+    // UN PIXEL DE TOLÉRANCE, pas plus : c'est ce que l'anticrénelage peut
+    // faire varier. Quatre, c'était le défaut.
+    r.verifie('le texte validé se pose là où on l\'a tapé',
+        Math.abs(auRendu.h - enSaisie.h) <= 1 && Math.abs(auRendu.g - enSaisie.g) <= 1,
+        'écart dx=' + (auRendu.g - enSaisie.g) + ' dy=' + (auRendu.h - enSaisie.h));
+    r.verifie('et rouvrir la zone d\'édition ne le déplace pas non plus',
+        Math.abs(auRetour.h - auRendu.h) <= 1 && Math.abs(auRetour.g - auRendu.g) <= 1,
+        'écart dx=' + (auRetour.g - auRendu.g) + ' dy=' + (auRetour.h - auRendu.h));
+
+    await page.evaluate(() => {
+        editingTextId = null;
+        if (wysiwygText) wysiwygText.style.display = 'none';
+        texts.length = 0; selectedItems = []; setMode('pointer'); draw();
+    });
+
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

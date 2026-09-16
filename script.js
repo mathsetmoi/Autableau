@@ -4126,6 +4126,11 @@ function generateSVGString(rect, keepBg) {
                         const lineY = obj.y + L.y + (L.demiInterligne !== undefined
                             ? L.demiInterligne
                             : (L.size * 0.1) + (L.lineHeight - L.size * 1.2) / 2);
+                        // MÊME CONVENTION QU'À L'ÉCRAN : la ligne de base. Un
+                        // « dominant-baseline: hanging » visait encore ailleurs,
+                        // et une page exportée ne retombait pas sur celle qu'on
+                        // avait sous les yeux.
+                        const baseSvg = lineY + (L.ascendante !== undefined ? L.ascendante : L.size * 0.9);
                         const alignL = L.align || align;
                         let curX = exX + L.indent;
                         if (alignL === 'center') curX = exX + (maxW - L.contentW) / 2;
@@ -4138,11 +4143,11 @@ function generateSVGString(rect, keepBg) {
                         let apresUnEspace = false;
 
                         if (L.marker) {
-                            svg += `<text x="${curX}" y="${lineY}" font-family="${fontFamily}" font-size="${L.size}px" font-weight="${L.bold ? 'bold' : 'normal'}" fill="${color}" dominant-baseline="hanging" xml:space="preserve">${L.marker}</text>`;
+                            svg += `<text x="${curX}" y="${baseSvg}" font-family="${fontFamily}" font-size="${L.size}px" font-weight="${L.bold ? 'bold' : 'normal'}" fill="${color}" xml:space="preserve">${L.marker}</text>`;
                         }
                         curX += L.markerW;
 
-                        svg += `<text x="${curX}" y="${lineY}" font-family="${fontFamily}" font-size="${L.size}px" dominant-baseline="hanging" xml:space="preserve">`;
+                        svg += `<text x="${curX}" y="${baseSvg}" font-family="${fontFamily}" font-size="${L.size}px" xml:space="preserve">`;
                         L.segs.forEach(seg => {
                             const fw = (seg.style.bold || L.bold) ? 'bold' : 'normal';
                             const fs = seg.style.italic ? 'italic' : 'normal';
@@ -7842,6 +7847,28 @@ function layoutTextObject(obj, measureCtx) {
         return h > 0 ? h : size * 1.15;
     };
 
+    // ET L'ASCENDANTE, MESURÉE AU MÊME ENDROIT.
+    //
+    // « Quand on édite ou valide du texte, il y a un décalage entre le texte
+    //   tapé et validé. » Quatre pixels, mesurés. Trois conventions se
+    //   mélangeaient : la mise en page centrait la ligne d'après la BOÎTE DE
+    //   POLICE (c'est ce que fait le navigateur), le canevas dessinait avec
+    //   « textBaseline = top », qui vise le haut de l'EM SQUARE — trois pixels
+    //   plus bas sur du vingt-quatre —, et l'export SVG visait encore
+    //   ailleurs, avec « dominant-baseline: hanging ». Le code calculait juste,
+    //   puis peignait selon une autre règle que celle qu'il venait de calculer.
+    //
+    // On mesure donc ici la seule grandeur qui met tout le monde d'accord — la
+    // distance du haut de la boîte de police à la LIGNE DE BASE —, et les deux
+    // peintres s'y posent. Une convention, mesurée une fois, au même endroit
+    // que la hauteur.
+    const ascendante = (size, style) => {
+        if (!measureCtx) return size * 0.9;
+        measureCtx.font = `${style && style.italic ? 'italic ' : ''}${(style && style.bold) ? 'bold ' : ''}${size}px ${policeSeg(style)}`;
+        const m = measureCtx.measureText('Mg');
+        return m.fontBoundingBoxAscent || size * 0.9;
+    };
+
     const measure = (text, style, size) => {
         if (!text) return 0;
         const s = tailleSeg(style, size);
@@ -8031,6 +8058,7 @@ function layoutTextObject(obj, measureCtx) {
                 segs, size, lineHeight: lhLigne, y,
                 indent: indentPx, marker: i === 0 ? p.marker : null, markerW,
                 bold: p.bold, contentW, align: p.align || null, tailleMax, demiInterligne,
+                ascendante: ascendante(tailleMax, { bold: p.bold }),
                 // La justification ne tire QUE les lignes qui se replient : la
                 // dernière d'un paragraphe reste ferrée à gauche, comme dans
                 // un livre. Sans cela, un paragraphe d'une seule ligne se
@@ -11824,8 +11852,13 @@ function draw() {
                         // la bulle vient de poser autour de sa forme ne doit pas
                         // déborder sur elles.
                         ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
-                        ctx.textBaseline = 'top';
-                        ctx.textAlign = 'left'; // 🌟 C'EST CECI QUI RÉPARE LE DÉCALAGE !
+                        // SUR LA LIGNE DE BASE, ET NON SUR LE HAUT.
+                        // « top » vise le haut de l'em square, pas celui de la
+                        // boîte de police que la mise en page vient de mesurer :
+                        // trois pixels d'écart par ligne, et le texte sautait
+                        // entre ce qu'on tapait et ce qu'on validait.
+                        ctx.textBaseline = 'alphabetic';
+                        ctx.textAlign = 'left';
 
                         // LES LIENS SE RELÈVENT EN MÊME TEMPS QU'ON PEINT. C'est
                         // le seul endroit où l'on connaît la place exacte de
@@ -11851,7 +11884,22 @@ function draw() {
                                 ctx.font = `${st.italic ? 'italic ' : ''}${(st.bold || L.bold) ? 'bold ' : ''}${tailleDe(st)}px ${(st && st.fontFamily) || fontFamily}`;
                             };
                             // Les segments de tailles différentes partagent la même ligne de base
-                            const basY = (st) => lineY + (grande - tailleDe(st));
+                            // La ligne de base, une pour toute la ligne : c'est
+                            // ce que « les segments partagent la même ligne de
+                            // base » veut dire, et l'ancienne formule ne faisait
+                            // que l'approcher en alignant les hauts.
+                            const asc = (L.ascendante !== undefined) ? L.ascendante : grande * 0.9;
+                            const baseLigne = lineY + asc;
+                            const basY = () => baseLigne;
+                            // Le haut du segment, pour ce qui se mesure depuis
+                            // le haut : la zone cliquable d'un lien.
+                            const hautDe = (st) => baseLigne - asc * (tailleDe(st) / grande);
+                            // LE SOULIGNÉ RESTE OÙ IL ÉTAIT. Il se posait à
+                            // « 1,1 fois la taille » sous le haut de l'em square,
+                            // soit 0,31 sous la ligne de base : on le dit
+                            // désormais depuis la base, pour qu'il suive les
+                            // lettres au lieu de les quitter.
+                            const SOUS_LA_BASE = 0.31;
 
                             const alignL = L.align || align;
                             let curX = startX + L.indent;
@@ -11885,14 +11933,14 @@ function draw() {
                                         ctx.fillText(part.texte, curX + dx, ty);
                                         if (part.url || seg.style.underline) {
                                             ctx.beginPath();
-                                            ctx.moveTo(curX + dx, ty + ts * 1.1);
-                                            ctx.lineTo(curX + dx + pw, ty + ts * 1.1);
+                                            ctx.moveTo(curX + dx, ty + ts * SOUS_LA_BASE);
+                                            ctx.lineTo(curX + dx + pw, ty + ts * SOUS_LA_BASE);
                                             ctx.strokeStyle = ctx.fillStyle;
                                             ctx.lineWidth = Math.max(1, ts * 0.08); ctx.stroke();
                                         }
                                         if (part.url) {
                                             porteurDesLiens.__liens.push({
-                                                url: part.url, x: curX + dx, y: ty,
+                                                url: part.url, x: curX + dx, y: hautDe(seg.style),
                                                 w: pw, h: Math.max(ts * 1.25, 10)
                                             });
                                         }
@@ -11903,7 +11951,7 @@ function draw() {
                                     ctx.fillText(seg.text, curX, ty);
                                     if (seg.style.underline) {
                                         ctx.beginPath();
-                                        ctx.moveTo(curX, ty + ts * 1.1); ctx.lineTo(curX + sw, ty + ts * 1.1);
+                                        ctx.moveTo(curX, ty + ts * SOUS_LA_BASE); ctx.lineTo(curX + sw, ty + ts * SOUS_LA_BASE);
                                         ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = Math.max(1, ts * 0.08); ctx.stroke();
                                     }
                                 }
