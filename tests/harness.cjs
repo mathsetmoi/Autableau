@@ -98,6 +98,34 @@ async function ouvrirApp(browser, options = {}) {
     return { context, page, erreurs };
 }
 
+// RECHARGER, PUIS ATTENDRE QUE L'APPLICATION SOIT LÀ — et non attendre un
+// temps.
+//
+// Plusieurs chapitres éprouvent qu'un réglage « traverse le rechargement » :
+// on recharge, et l'on regarde. Ils dormaient une seconde et demie, deux
+// secondes et demie — des durées choisies sur une machine au repos. Lancés
+// derrière cinquante-trois autres fichiers, le démarrage prend plus longtemps
+// que cela, et le test lisait l'état D'AVANT le rétablissement : le réglage
+// paraissait perdu alors qu'il arrivait une demi-seconde plus tard.
+//
+// ATTENDRE LES OUTILS NE SUFFIT PAS, et c'est la deuxième leçon. Les plugins
+// s'enregistrent pendant que les scripts s'exécutent, donc AVANT que les
+// gestionnaires « DOMContentLoaded » ne tournent — et c'est là que les
+// réglages reprennent leur place. À quarante fois plus lent, cette attente-là
+// rendait encore l'état d'avant : elle visait un jalon trop tôt dans le
+// démarrage. On attend donc que le document soit COMPLET, ce qui garantit que
+// ces gestionnaires ont eu lieu. Le plafond est large — une attente longue ne
+// coûte rien tant qu'elle aboutit.
+async function rechargerApp(page) {
+    await page.reload();
+    await page.waitForFunction(
+        () => document.readyState === 'complete'
+            && window.PluginManager && Object.keys(PluginManager.plugins).length > 50,
+        { timeout: 60000 }
+    );
+    await page.waitForTimeout(400);
+}
+
 // Vide le tableau entre deux cas de test
 async function tableauVierge(page) {
     await page.evaluate(() => {
@@ -362,4 +390,4 @@ function polyEnCouleur(taille) {
     return Buffer.from(out, 'latin1');
 }
 
-module.exports = { APP_URL, CHROMIUM, creerRapport, ouvrirApp, tableauVierge, petitPdf, pdfA4, fichePdf, polyDense, polyEnCases, polyEnCouleur };
+module.exports = { APP_URL, CHROMIUM, creerRapport, ouvrirApp, tableauVierge, petitPdf, pdfA4, fichePdf, polyDense, polyEnCases, polyEnCouleur, rechargerApp};

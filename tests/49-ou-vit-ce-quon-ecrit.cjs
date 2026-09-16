@@ -28,7 +28,7 @@
 //     cours d'hier a déjà sa réponse ;
 //   — la fenêtre de reprise dit d'où vient ce qu'elle propose, et de quand ;
 //   — rien de tout cela ne paraît quand on projette.
-const { creerRapport, ouvrirApp } = require('./harness.cjs');
+const { creerRapport, ouvrirApp, rechargerApp } = require('./harness.cjs');
 
 module.exports = async function (browser) {
     const r = creerRapport('Où vit ce qu\'on écrit');
@@ -310,8 +310,7 @@ module.exports = async function (browser) {
         try { localStorage.removeItem('auTableau_premier_ecran_vu'); } catch (e) { /* refusé */ }
         return true;
     });
-    await neuf.page.reload();
-    await neuf.page.waitForTimeout(2500);
+    await rechargerApp(neuf.page);
     const apresRedemarrage = await neuf.page.evaluate(() => ({
         premier: getComputedStyle(document.getElementById('premier-ecran')).display,
         reprise: getComputedStyle(document.getElementById('restore-modal')).display,

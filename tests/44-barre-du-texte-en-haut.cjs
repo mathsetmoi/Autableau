@@ -28,7 +28,7 @@
 //   — la barre de style se met debout au bord droit, sans recouvrir celle du
 //     document quand les deux y sont ;
 //   — la languette du tiroir des tableaux ne traîne plus au bord droit.
-const { creerRapport, ouvrirApp } = require('./harness.cjs');
+const { creerRapport, ouvrirApp, rechargerApp } = require('./harness.cjs');
 
 // Le texte de démonstration : assez long pour se replier en trois lignes dans
 // une colonne de 400, ce qui donne deux lignes à justifier et une dernière à
@@ -279,8 +279,7 @@ module.exports = async function (browser) {
         suit.place && (suit.auDessus || suit.auDessous), JSON.stringify(suit));
 
     // Le choix traverse le rechargement : c'est ce qu'on attend d'un réglage.
-    await page.reload();
-    await page.waitForTimeout(1200);
+    await rechargerApp(page);
     const apresRechargement = await page.evaluate(() => {
         const tb = document.getElementById('text-toolbar');
         return { parent: tb.parentNode === document.body ? 'body' : tb.parentNode.id,
