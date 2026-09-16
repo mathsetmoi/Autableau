@@ -126,11 +126,40 @@ module.exports = async function (browser) {
                 const i = savedInterfaces.find(x => x.id === 'iface_fournie_minimale');
                 const b = i && i.data.toolbars && i.data.toolbars[0];
                 return b ? b.id + ':' + b.items.length : 'introuvable';
-            })()
+            })(),
+            // CE QUE LE PROCHAIN ÉCHEC DEVRA DIRE.
+            //
+            // Ce contrôle est tombé deux fois en neuf suites complètes,
+            // toujours sous la charge des autres fichiers, jamais seul — ni
+            // même sous un processeur bridé vingt fois. Le symptôme est celui
+            // que « poserLesBarresParDefaut » dit déjà craindre en toutes
+            // lettres : « le collègue à qui l'on prépare une panoplie de cinq
+            // outils retrouvait les vingt-deux par défaut ». Son garde-fou est
+            // pourtant en place. Il reste donc deux explications, qui se
+            // ressemblent à l'écran et n'ont rien à voir :
+            //
+            //   — le stockage porte les bonnes barres et c'est l'AFFICHAGE qui
+            //     est en retard : « brut » dira cinq ;
+            //   — le stockage lui-même a été réécrit par-dessus, avant ou
+            //     après le redémarrage : « brut » dira vingt-deux, et
+            //     « migre » dira si la réparation d'après démarrage est
+            //     passée par là.
+            //
+            // Sans cela on relit le même mystère à chaque fois.
+            brut: (() => {
+                try {
+                    const t = JSON.parse(localStorage.getItem('board_floating_toolbars') || '[]');
+                    return t.map(x => x.id + ':' + ((x.items || []).length)).join(',');
+                } catch (e) { return 'illisible'; }
+            })(),
+            migre: (() => {
+                try { return localStorage.getItem('board_toolbars_migrated_v2'); } catch (e) { return 'refusé'; }
+            })(),
         };
     });
     r.egal('« Minimale » ne pose qu\'une barre', minimale.nbBarres, 1);
-    r.verifie('« Minimale » : cinq outils seulement', minimale.outils === 5, JSON.stringify(minimale));
+    r.verifie('« Minimale » : cinq outils seulement', minimale.outils === 5,
+        JSON.stringify(minimale) + ' | attentes expirées : ' + (CHARGEMENTS_EXPIRES.join(' ; ') || 'aucune'));
     r.egal('la barre principale n\'est pas reconstruite', minimale.idPrincipale, 'system-toolbar-main');
     r.egal('« Minimale » : aucun favori imposé', minimale.favoris, 0);
     r.verifie('la barre est bien affichée', minimale.rendues >= 1, `${minimale.rendues} barre(s) rendue(s)`);
