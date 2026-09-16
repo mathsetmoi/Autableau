@@ -36,7 +36,11 @@ module.exports = async function (browser) {
         return c.display !== 'none' && c.visibility !== 'hidden' && c.opacity !== '0';
     }, sel);
 
-    // « sortie » : les boutons qui servent à SORTIR d'un affichage réduit.
+    // « sortie » : LA CROIX, celle qui ramène tout. C'était le bouton du cycle
+    // qu'on mesurait ici — mais lui n'est pas une sortie : les tiroirs rangés,
+    // il va PLUS LOIN. Et au tableau nu, où il ne pouvait plus que revenir, il
+    // s'efface désormais pour ne pas faire double emploi avec la croix. La
+    // croix, elle, est la sortie aux deux états réduits, et à eux seuls.
     // « coin » : le plein écran du navigateur, qui lui est là en permanence —
     // « j'aimerais un tout petit bouton vraiment collé en haut à droite pour
     // le plein écran ». La barre du coin ne se juge donc plus en bloc : elle
@@ -47,7 +51,7 @@ module.exports = async function (browser) {
         outils: await vu('.custom-toolbar'),
         tiroirBas: await vu('#bottom-drawer'),
         tiroirHaut: await vu('#bar-plugins'),
-        sortie: await vu('#btn-ecran-suite'),
+        sortie: await vu('#exit-focus-cross'),
         coin: await vu('#btn-ecran-plein')
     });
 
@@ -118,6 +122,38 @@ module.exports = async function (browser) {
             { id: 'exit-focus-cross', atteignable: true },
             { id: 'btn-ecran-plein', atteignable: true }
         ]);
+
+    // AU TABLEAU NU, LE CYCLE S'EFFACE — ET C'EST TOUT LE PROPOS.
+    //
+    // « Je ne comprends pas la différence entre Tout remettre et Tout est là. »
+    // Il n'y en avait pas, au dernier état. Les tiroirs rangés, les deux
+    // boutons s'opposent : l'un va plus loin, l'autre revient. Le tableau nu,
+    // le cycle n'a plus qu'une destination — celle de la croix. Deux boutons
+    // voisins, deux icônes, un seul effet.
+    //
+    // ON ÉPROUVE LES DEUX ÉTATS, et pas seulement celui qu'on corrige : dire
+    // « le cycle est caché » sans montrer qu'il est LÀ juste avant ne
+    // distinguerait pas la correction d'un bouton disparu pour de bon.
+    const auTableauNu = await page.evaluate(async () => {
+        const vu = (id) => {
+            const e = document.getElementById(id);
+            const r = e.getBoundingClientRect();
+            return getComputedStyle(e).display !== 'none' && r.width > 4;
+        };
+        poserLAffichage(1); await new Promise(ok => setTimeout(ok, 450));
+        const ranges = { cycle: vu('btn-ecran-suite'), croix: vu('exit-focus-cross') };
+        poserLAffichage(2); await new Promise(ok => setTimeout(ok, 450));
+        const nu = { cycle: vu('btn-ecran-suite'), croix: vu('exit-focus-cross') };
+        // Et la croix, seule, ramène bien tout.
+        document.getElementById('exit-focus-cross').click();
+        await new Promise(ok => setTimeout(ok, 450));
+        return { ranges, nu, apres: etatDeLAffichage() };
+    });
+    r.egal('tiroirs rangés, les deux boutons sont là : ils font deux choses opposées',
+        auTableauNu.ranges, { cycle: true, croix: true });
+    r.egal('mais au tableau nu, le cycle s\'efface : il ferait double emploi',
+        auTableauNu.nu, { cycle: false, croix: true });
+    r.egal('et la croix, seule, remet tout', auTableauNu.apres, 0);
 
     // ILS NE DOIVENT PAS COUVRIR L'HORLOGE : le cartouche de la date et
     // l'horloge de classe vivent sur le même bord.

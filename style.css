@@ -10961,6 +10961,22 @@ body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #exit-focus-cross {
     display: none;
 }
 
+/* ET AU TABLEAU NU, LE CYCLE S'EFFACE.
+   « Je ne comprends pas la différence entre Tout remettre et Tout est là. » Il
+   n'y en avait pas — à ce moment-là. Les tiroirs rangés, les deux boutons font
+   deux choses opposées : le cycle va PLUS LOIN (« un appui efface tout »), la
+   croix REVIENT. Mais une fois le tableau nu, le cycle n'a plus qu'une
+   destination, et c'est celle de la croix : deux boutons voisins, deux icônes
+   différentes, un seul effet — vérifié en cliquant, tous deux ramènent à
+   « tout est là ».
+   Il ne reste donc que la croix, qui se comprend sans infobulle, et le cycle
+   revient dès qu'il a de nouveau quelque chose à proposer. « focus-mode » EST
+   la définition du tableau nu — « etatDeLAffichage » ne lit rien d'autre —,
+   donc rien de nouveau à tenir à jour ici. */
+body.focus-mode #barre-ecran #btn-ecran-suite {
+    display: none;
+}
+
 /* LE TRAIT QUI DIT « DEUX FAMILLES ». À gauche, ce qu'on voit de
    l'application ; à droite, ce qui passe en grand. Sans lui, les quatre
    boutons formaient une file où rien ne groupait rien — « je ne comprends pas
