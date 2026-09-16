@@ -33155,8 +33155,24 @@ function equilibrerGrillePlugins() {
 
     // Largeur disponible : celle du parent, jamais celle de l'écran entier
     const parent = grille.parentElement ? grille.parentElement.getBoundingClientRect().width : 0;
+
+    // MOINS LA PLACE DE LA COLONNE DU BORD. « Les pointillés se superposent. »
+    // La loupe et le « ⋯ » vivent hors du flux, au bord gauche du tiroir :
+    // rien ne les pousse, c'est à la grille de ne pas venir dessous. En icônes
+    // seules elle ne les atteignait jamais — cinquante pixels de reste — et
+    // l'on s'en était contenté ; avec les NOMS sous les icônes un outil est
+    // trois fois plus large, la rangée gagne le bord, et elle passait sous le
+    // bouton.
+    // ON MESURE LA COLONNE, on ne récite pas sa largeur : elle change avec la
+    // taille des boutons, et un nombre écrit ici se tromperait le jour où ils
+    // changent. On réserve des DEUX CÔTÉS, car la grille est centrée : ne
+    // réserver qu'à gauche la décalerait vers la droite.
+    const colonne = document.getElementById('tiroir-commandes');
+    const reserve = colonne ? (colonne.getBoundingClientRect().width + 12) * 2 : 0;
+
     // Barre encore repliée ou pas encore mesurée : on ne décide rien
-    const plafond = Math.min(parent > 200 ? parent : window.innerWidth - 40, window.innerWidth - 40);
+    const utile = Math.max(120, (parent > 200 ? parent : window.innerWidth - 40) - reserve);
+    const plafond = Math.min(utile, window.innerWidth - 40);
     const maxParRangee = Math.max(1, Math.floor(plafond / large));
     const rangees = Math.max(1, Math.ceil(visibles.length / maxParRangee));
     const parRangee = Math.ceil(visibles.length / rangees);

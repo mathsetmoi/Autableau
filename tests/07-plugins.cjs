@@ -986,17 +986,29 @@ module.exports = async function (browser) {
         // colonne, donc c'est elle qui décide.
         const cats = [...document.querySelectorAll('#plugin-tabs .btn')].map(x => x.dataset.cat);
         let marge = 9999, pire = '';
-        for (const cat of cats) {
-            const t = [...document.querySelectorAll('#plugin-tabs .btn')].find(x => x.dataset.cat === cat);
-            if (t) t.click();
-            await new Promise(ok => setTimeout(ok, 220));
-            const cr = c.getBoundingClientRect();
-            const vus = [...g.children].filter(x => getComputedStyle(x).display !== 'none')
-                .map(x => x.getBoundingClientRect());
-            if (!vus.length) continue;
-            const m = Math.round(Math.min(...vus.map(x => x.left)) - cr.right);
-            if (m < marge) { marge = m; pire = cat; }
+        // LES TROIS AFFICHAGES, ET NON LE SEUL PAR DÉFAUT. C'est le trou par
+        // lequel « les pointillés se superposent » est passé : on avait balayé
+        // toutes les rubriques, mais en icônes seules. Avec les NOMS sous les
+        // icônes un outil est trois fois plus large, la rangée gagne le bord du
+        // tiroir, et elle passait sous le bouton. Une garde qui n'éprouve
+        // qu'un réglage ne garde que ce réglage.
+        for (const format of ['non', 'oui', 'couleur']) {
+            choisirFormatIcones(format, true);
+            await new Promise(ok => setTimeout(ok, 350));
+            for (const cat of cats) {
+                const t = [...document.querySelectorAll('#plugin-tabs .btn')].find(x => x.dataset.cat === cat);
+                if (t) t.click();
+                await new Promise(ok => setTimeout(ok, 220));
+                const cr = c.getBoundingClientRect();
+                const vus = [...g.children].filter(x => getComputedStyle(x).display !== 'none')
+                    .map(x => x.getBoundingClientRect());
+                if (!vus.length) continue;
+                const m = Math.round(Math.min(...vus.map(x => x.left)) - cr.right);
+                if (m < marge) { marge = m; pire = format + ' / ' + cat; }
+            }
         }
+        choisirFormatIcones('non', true);
+        await new Promise(ok => setTimeout(ok, 350));
         // Les rubriques des onglets, elles, doivent retrouver le centre du
         // tiroir : c'est ce que la gouttière des deux côtés leur rend.
         const onglets = [...document.querySelectorAll('#plugin-tabs .btn')].map(x => x.getBoundingClientRect());

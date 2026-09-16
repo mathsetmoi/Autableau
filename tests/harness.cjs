@@ -28,9 +28,15 @@ function creerRapport(titre) {
         verifie(nom, condition, detail) {
             resultats.push({ nom, ok: !!condition, detail });
         },
-        egal(nom, obtenu, attendu) {
+        // « plus » : ce qu'on veut lire EN CAS D'ÉCHEC, et seulement alors.
+        // Un contrôle qui tombe rarement ne se laisse pas reproduire à la
+        // demande : la seule chance de comprendre est que sa plainte porte
+        // déjà de quoi trancher. Rien n'est affiché quand tout va bien.
+        egal(nom, obtenu, attendu, plus) {
             const ok = JSON.stringify(obtenu) === JSON.stringify(attendu);
-            resultats.push({ nom, ok, detail: ok ? undefined : `obtenu ${JSON.stringify(obtenu)}, attendu ${JSON.stringify(attendu)}` });
+            resultats.push({ nom, ok, detail: ok ? undefined
+                : `obtenu ${JSON.stringify(obtenu)}, attendu ${JSON.stringify(attendu)}`
+                  + (plus ? ` — ${plus}` : '') });
         },
         resultats,
         bilan() {

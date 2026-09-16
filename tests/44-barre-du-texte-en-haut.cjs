@@ -285,8 +285,21 @@ module.exports = async function (browser) {
         return { parent: tb.parentNode === document.body ? 'body' : tb.parentNode.id,
                  ancree: tb.classList.contains('tt-ancree') };
     });
+    // CE QUE LE PROCHAIN ÉCHEC DEVRA DIRE. Ce contrôle est tombé deux fois en
+    // suite complète, jamais seul, et une première correction — attendre que
+    // l'application soit là plutôt qu'une durée — ne l'a pas fait cesser. On
+    // relève donc, à côté du verdict, de quoi trancher la question qui reste :
+    // le réglage a-t-il été MAL ÉCRIT avant le rechargement, ou bien écrit
+    // correctement puis REMIS À L'ENDROIT par quelque chose qui passe après ?
+    // Les deux pannes se ressemblent à l'écran et n'ont rien à voir.
+    const pourquoi = await page.evaluate(() => {
+        let garde = null;
+        try { garde = localStorage.getItem('auTableau_barre_texte_en_haut'); } catch (e) { garde = 'refusé'; }
+        return { garde, enMemoire: typeof barreDuTexteEnHaut !== 'undefined' ? barreDuTexteEnHaut : 'inconnu',
+                 pret: document.readyState };
+    });
     r.egal('et il traverse le rechargement',
-        apresRechargement, { parent: 'body', ancree: false });
+        apresRechargement, { parent: 'body', ancree: false }, JSON.stringify(pourquoi));
 
     // On la remet en haut pour la suite, et l'on vérifie que le retour est
     // aussi propre que l'aller.
