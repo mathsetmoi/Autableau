@@ -401,6 +401,29 @@ html {
     justify-content: flex-start;
     gap: 12px;
     padding-bottom: 2px;
+    /* LA GOUTTIÈRE DES DEUX COMMANDES, RÉSERVÉE DES DEUX CÔTÉS. La colonne de
+       gauche sort du flux : sans cette marge, la première rubrique se
+       glisserait dessous sur un écran étroit. Et comme la marge est la même à
+       droite, la rangée des rubriques retrouve le centre du tiroir — elle
+       était poussée de cinquante pixels par les deux boutons côte à côte. */
+    padding-left: 48px;
+    padding-right: 48px;
+}
+
+/* « Je mettrais plutôt les pointillés sous la loupe. » Deux boutons de
+   trente-six empilés font soixante-seize pixels de haut : ils tiennent dans
+   les quatre-vingt-sept du tiroir sans rien lui ajouter, parce que la colonne
+   se loge à gauche de la grille, dans du blanc qui existait déjà. */
+#tiroir-commandes {
+    position: absolute;
+    left: 13px;
+    top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    /* Au-dessus des rubriques : la loupe ouverte s'étale sur cent-quatre-vingts
+       pixels et doit les couvrir, non se glisser dessous. */
+    z-index: 3;
 }
 
 #plugin-search-wrap {
@@ -414,7 +437,14 @@ html {
 }
 
 #plugin-search-wrap.open {
-    background: var(--accent-soft);
+    /* OPAQUE, et non juste teintée : ouverte, la loupe passe par-dessus la
+       rangée des rubriques. « accent-soft » est translucide, et « surface »
+       aussi — elle vaut du blanc à quatre-vingt-douze pour cent, si bien que
+       les icônes des rubriques transparaissaient sous le champ. On pose donc
+       la teinte d'accent sur « bg », qui est PLEIN, et qui est déjà la couleur
+       d'un champ en creux : ouvert, le champ se lit comme un champ. */
+    background-color: var(--bg, #f5f6fa);
+    background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
     box-shadow: inset 0 0 0 1px var(--accent-hover);
 }
 
@@ -6171,6 +6201,14 @@ body.libelles-couleur #plugins-grid .btn[data-category="Détente"] { background:
 
 .reglages-popup.visible { display: block; }
 
+/* CELUI DU TIROIR S'OUVRE VERS LA DROITE. Son bouton a rejoint la colonne du
+   bord gauche : accroché par la droite, comme celui de la date qui vit au coin
+   opposé, le panneau partait vers l'extérieur de l'écran. */
+#reglages-barre {
+    right: auto;
+    left: 0;
+}
+
 .reglages-popup .rp-titre {
     font-size: 10px;
     font-weight: 700;
@@ -10560,6 +10598,21 @@ body.focus-mode #bar-document.vertical.visible { transform: translateY(-50%); }
    et le bouton se montrait sur tous les post-its. */
 .html-postit .btn-onglet-postit { display: none; }
 .html-postit.en-web .btn-onglet-postit { display: flex; }
+
+/* LE PLEIN ÉCRAN, LUI AUSSI, N'A DE SENS QUE LÀ : une note jaune en grand
+   n'apporte rien, un GeoGebra ou une console Python devant la classe, si. */
+.html-postit .btn-plein-postit { display: none; }
+.html-postit.en-web .btn-plein-postit { display: flex; }
+
+/* RIEN À ÉCRIRE POUR LE PLEIN ÉCRAN DE LA FENÊTRE, ET C'EST VÉRIFIÉ. On avait
+   commencé par annuler ici sa place sur le tableau, sa taille et la
+   transformation du zoom — « au cas où ». Débranchée règle par règle, puis en
+   bloc, la feuille n'a rien changé au résultat : le navigateur sort la fenêtre
+   du flux et la pose lui-même sur tout l'écran, et sa place sur le tableau
+   vient du conteneur — qu'elle vient justement de quitter —, non d'un style
+   écrit sur elle. Cinq lignes qui ne faisaient rien, et qui auraient fait
+   croire le contraire à qui les relit. */
+
 
 /* ===========================================================
    LA FENÊTRE PYTHON

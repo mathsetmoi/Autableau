@@ -20849,7 +20849,12 @@ function majBoutonDuPleinEcran() {
 }
 window.majBoutonDuPleinEcran = majBoutonDuPleinEcran;
 
-function basculerPleinEcran() {
+// ON PEUT METTRE EN GRAND AUTRE CHOSE QUE LA PAGE ENTIÈRE. Sans argument,
+// c'est le geste du coin : toute l'application. Avec un élément, c'est LUI qui
+// prend l'écran — une fenêtre web, par exemple. Le verrou, le garde-fou et le
+// message de refus sont les mêmes : il n'y a qu'une manière d'entrer en plein
+// écran dans cette application, et donc qu'un seul endroit où elle peut rater.
+function basculerPleinEcran(cible) {
     // Un appui pendant le trajet ne compte pas : c'est lui qui faisait passer
     // à la fenêtre voisine.
     if (pleinEcranEnRoute) return false;
@@ -20859,10 +20864,19 @@ function basculerPleinEcran() {
     // bouton resterait mort pour la séance.
     finDuVerrouPlein = setTimeout(libererLePleinEcran, 1500);
 
-    if (!document.fullscreenElement) {
-        const p = document.documentElement.requestFullscreen();
+    const voulu = cible || document.documentElement;
+    // SANS CIBLE, LA RÈGLE D'AVANT, MOT POUR MOT : quoi qu'il y ait en grand,
+    // le geste du coin en sort. Avec une cible, on ne sort que si c'est ELLE
+    // qui est déjà en grand — sinon on y va, et le navigateur remplace de
+    // lui-même le plein écran en cours.
+    const sortir = cible ? (document.fullscreenElement === voulu) : !!document.fullscreenElement;
+
+    if (!sortir) {
+        const p = voulu.requestFullscreen ? voulu.requestFullscreen() : null;
         if (p && p.catch) {
             p.catch(() => { libererLePleinEcran(); showToast('Plein écran refusé par le navigateur'); });
+        } else if (!p) {
+            libererLePleinEcran();
         }
     } else if (document.exitFullscreen) {
         const p = document.exitFullscreen();
@@ -29752,6 +29766,7 @@ function renderHtmlPostits() {
                         <button class="btn-copier-postit" title="Copier le contenu"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path></svg></button>
                         <button class="btn-coller-postit" title="Coller à la fin"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg></button>
                         <button class="btn-onglet-postit" title="Ouvrir dans un onglet du navigateur">↗</button>
+                        <button class="btn-plein-postit" title="Plein écran"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg></button>
                         <button class="btn-liste-postit" title="Transformer en liste à cocher"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 7 5 9 9 5"></polyline><polyline points="3 16 5 18 9 14"></polyline><line x1="12" y1="7" x2="21" y2="7"></line><line x1="12" y1="17" x2="21" y2="17"></line></svg></button>
                         <button class="btn-min-postit" title="Minimiser"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
                         <button class="btn-close-postit" title="Fermer"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
@@ -30042,6 +30057,24 @@ function renderHtmlPostits() {
                 const o = htmlPostits.find(hp => hp.id === p.id);
                 if (!o || !o.url) return;
                 window.open(o.url, '_blank', 'noopener,noreferrer');
+            });
+
+            // LE PLEIN ÉCRAN DE LA FENÊTRE WEB. « Pour les iframe, on pourrait
+            // pas autoriser le plein écran ? » Il l'est déjà, côté cadre :
+            // « allow="fullscreen" » y est posé, et le bouton du site encadré
+            // marche — EN LIGNE. Depuis un fichier ouvert à la main, l'origine
+            // de la page n'a pas de nom, et le navigateur refuse de déléguer
+            // quoi que ce soit à un cadre : « Disallowed by permissions
+            // policy », quel que soit l'attribut qu'on écrive. Rien, dans
+            // cette page, ne peut lever ce refus.
+            //
+            // CE QU'ON PEUT FAIRE, EN REVANCHE, c'est mettre en grand NOTRE
+            // PROPRE fenêtre — elle, elle nous appartient, et le navigateur
+            // l'accepte partout, y compris depuis un fichier. Le cadre suit et
+            // prend l'écran entier : le résultat est celui qu'on voulait, et
+            // il ne dépend plus de l'endroit d'où l'on a ouvert le tableau.
+            el.querySelector('.btn-plein-postit').addEventListener('click', () => {
+                if (typeof basculerPleinEcran === 'function') basculerPleinEcran(el);
             });
 
             // ---- Le titre --------------------------------------------------

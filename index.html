@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=146">
+    <link rel="stylesheet" href="style.css?v=148">
 </head>
 
 <body>
@@ -2103,6 +2103,14 @@
 
     <div class="drawer drawer-h drawer-top" id="bar-plugins">
         <div class="drawer-header">
+            <!-- LES DEUX COMMANDES DU TIROIR, L'UNE SOUS L'AUTRE. Côte à
+                 côte elles prenaient deux colonnes au bord gauche, et
+                 poussaient la rangée des rubriques à cinquante pixels de son
+                 centre. Empilées, elles n'en prennent qu'une — et comme la
+                 colonne sort du flux, elle se loge dans le blanc qui existe
+                 déjà à gauche de la grille : le tiroir ne gagne pas un pixel
+                 de haut. -->
+            <div id="tiroir-commandes">
             <div id="plugin-search-wrap">
                 <button class="btn" id="plugin-search-btn" type="button" data-tooltip="Rechercher un outil"
                     onclick="togglePluginSearch()">
@@ -2124,7 +2132,8 @@
                  cours, et souvent. Les deux autres — régler l'affichage,
                  composer une panoplie — se font une fois et ne se refont
                  plus ; elles passent derrière un seul « ⋯ », et « Composer une
-                 barre » devient la première rubrique du menu des réglages
+                 barre » devient une entrée du menu — rangée sous
+                 « Encombrement », auprès de « Barre d'outils réduite » —
                  plutôt qu'un menu dans un menu. -->
             <div id="reglages-barre-wrap">
                 <button class="btn" id="btn-reglages-barre" type="button"
@@ -2197,6 +2206,7 @@
                     <button class="rp-choix" id="rp-astuces">Astuce au démarrage</button>
                     <button class="rp-choix" onclick="montrerAstuce(true)">Voir une astuce</button>
                 </div>
+            </div>
             </div>
             <div class="drawer-header-main">
                 <div style="display: none;">
@@ -3276,7 +3286,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=262"></script>
+    <script src="script.js?v=263"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

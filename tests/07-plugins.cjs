@@ -894,6 +894,114 @@ module.exports = async function (browser) {
     r.verifie('et la rangée de commandes tient en deux boutons',
         entete.large > 40 && entete.large <= 80, entete.large + ' px');
 
+    // ------------------------------------------------------------------
+    // ET ELLES SONT L'UNE SOUS L'AUTRE
+    // « Je mettrais plutôt les pointillés sous la loupe. » Côte à côte, elles
+    // prenaient deux colonnes au bord gauche et poussaient la rangée des
+    // rubriques loin de son centre. Empilées, elles n'en prennent qu'une.
+    // CE QUI SE VÉRIFIE ICI, c'est que l'empilement NE COÛTE RIEN EN HAUTEUR :
+    // une colonne posée dans la rangée aurait rendu au tiroir les vingt-quatre
+    // pixels qu'on venait de lui retirer. Elle sort donc du flux et se loge
+    // dans le blanc qui existait déjà à gauche de la grille — encore faut-il
+    // que ce blanc existe vraiment, et pour toutes les rubriques.
+    // ------------------------------------------------------------------
+    const colonne = await page.evaluate(async () => {
+        const c = document.getElementById('tiroir-commandes');
+        const l = document.getElementById('plugin-search-btn').getBoundingClientRect();
+        const p = document.getElementById('btn-reglages-barre').getBoundingClientRect();
+        const tiroir = document.getElementById('bar-plugins').getBoundingClientRect();
+        const g = document.getElementById('plugins-grid');
+        // La rubrique la plus fournie : c'est elle qui approche le plus la
+        // colonne, donc c'est elle qui décide.
+        const cats = [...document.querySelectorAll('#plugin-tabs .btn')].map(x => x.dataset.cat);
+        let marge = 9999, pire = '';
+        for (const cat of cats) {
+            const t = [...document.querySelectorAll('#plugin-tabs .btn')].find(x => x.dataset.cat === cat);
+            if (t) t.click();
+            await new Promise(ok => setTimeout(ok, 220));
+            const cr = c.getBoundingClientRect();
+            const vus = [...g.children].filter(x => getComputedStyle(x).display !== 'none')
+                .map(x => x.getBoundingClientRect());
+            if (!vus.length) continue;
+            const m = Math.round(Math.min(...vus.map(x => x.left)) - cr.right);
+            if (m < marge) { marge = m; pire = cat; }
+        }
+        // Les rubriques des onglets, elles, doivent retrouver le centre du
+        // tiroir : c'est ce que la gouttière des deux côtés leur rend.
+        const onglets = [...document.querySelectorAll('#plugin-tabs .btn')].map(x => x.getBoundingClientRect());
+        const centreOnglets = (onglets[0].left + onglets[onglets.length - 1].right) / 2;
+        return {
+            memeColonne: Math.abs(l.x - p.x) <= 1,
+            lunSousLautre: p.top >= l.bottom - 1,
+            hautTiroir: Math.round(tiroir.height),
+            basColonne: Math.round(c.getBoundingClientRect().bottom - tiroir.top),
+            marge, pire,
+            ecartAuCentre: Math.round(Math.abs(centreOnglets - (tiroir.left + tiroir.width / 2)))
+        };
+    });
+    r.verifie('la loupe et le « ⋯ » sont dans la même colonne, l\'un sous l\'autre',
+        colonne.memeColonne && colonne.lunSousLautre, JSON.stringify(colonne));
+    // LA MESURE QUI COMPTE : le tiroir n'a pas grandi. Une rubrique d'une
+    // rangée le laissait à quatre-vingt-sept pixels ; l'empilement doit
+    // tenir DEDANS, sinon il rend d'une main ce qu'il prend de l'autre.
+    r.verifie('et la colonne tient dans la hauteur du tiroir, sans l\'allonger',
+        colonne.basColonne <= colonne.hautTiroir,
+        JSON.stringify({ bas: colonne.basColonne, tiroir: colonne.hautTiroir }));
+    r.verifie('aucun outil ne vient se glisser sous la colonne, quelle que soit la rubrique',
+        colonne.marge > 0, 'au plus près : ' + colonne.marge + ' px (' + colonne.pire + ')');
+    r.verifie('et la rangée des rubriques a retrouvé le centre du tiroir',
+        colonne.ecartAuCentre <= 12, colonne.ecartAuCentre + ' px du centre');
+
+    // LE MENU DU « ⋯ » S'OUVRE VERS LA DROITE, et reste sur l'écran : accroché
+    // par la droite comme du temps où son bouton vivait au milieu de la barre,
+    // il partait vers l'extérieur depuis le bord gauche.
+    const menuOuvert = await page.evaluate(async () => {
+        document.getElementById('btn-reglages-barre').click();
+        await new Promise(ok => setTimeout(ok, 150));
+        const m = document.getElementById('reglages-barre').getBoundingClientRect();
+        document.getElementById('reglages-barre').classList.remove('visible');
+        return { g: Math.round(m.left), d: Math.round(m.right), l: Math.round(m.width) };
+    });
+    r.verifie('le menu du « ⋯ » s\'ouvre entièrement dans l\'écran',
+        menuOuvert.l > 100 && menuOuvert.g >= 0 && menuOuvert.d <= 1280,
+        JSON.stringify(menuOuvert));
+
+    // LA LOUPE OUVERTE COUVRE LES RUBRIQUES, elle ne se glisse pas dessous :
+    // le champ s'étale sur cent-quatre-vingts pixels par-dessus la rangée, et
+    // son fond doit être PLEIN — teinté seulement, les icônes transparaissaient.
+    const loupeOuverte = await page.evaluate(async () => {
+        document.getElementById('plugin-search-btn').click();
+        await new Promise(ok => setTimeout(ok, 400));
+        const w = document.getElementById('plugin-search-wrap');
+        const r = w.getBoundingClientRect();
+        // ON VISE LÀ OÙ ÇA SE CHEVAUCHE VRAIMENT : la rubrique que le champ
+        // recouvre. Viser le bord du champ ne dirait rien — il n'y a peut-être
+        // aucune rubrique dessous.
+        const onglet = [...document.querySelectorAll('#plugin-tabs .btn')]
+            .find(t => { const b = t.getBoundingClientRect();
+                         return b.left < r.right - 6 && b.right > r.left + 6; });
+        const b = onglet && onglet.getBoundingClientRect();
+        const x = b ? (Math.max(r.left, b.left) + Math.min(r.right, b.right)) / 2 : r.right - 20;
+        // ON COMPARE LES DEUX, on ne demande pas qui est tout en haut : une
+        // bulle d'astuce ou un toast de passage se pose par-dessus toute la
+        // page, et ferait échouer un contrôle qui ne parle pas d'eux.
+        const pile = document.elementsFromPoint(x, r.top + r.height / 2);
+        const rangChamp = pile.findIndex(e => w.contains(e));
+        const rangOnglet = onglet ? pile.indexOf(onglet) : -1;
+        const fond = getComputedStyle(w).backgroundColor;
+        document.getElementById('plugin-search-btn').click();
+        await new Promise(ok => setTimeout(ok, 400));
+        return { large: Math.round(r.width), recouvre: !!onglet,
+                 devant: rangChamp >= 0 && rangOnglet >= 0 && rangChamp < rangOnglet,
+                 rangs: [rangChamp, rangOnglet],
+                 opaque: !/rgba\([^)]*,\s*0?\.\d+\)\s*$/.test(fond), fond };
+    });
+    r.verifie('ouverte, la loupe s\'étale et reçoit le clic par-dessus les rubriques',
+        loupeOuverte.large > 150 && loupeOuverte.recouvre && loupeOuverte.devant,
+        JSON.stringify(loupeOuverte));
+    r.verifie('et son fond est plein : rien ne transparaît dessous',
+        loupeOuverte.opaque, loupeOuverte.fond);
+
     await context.close();
     return r.bilan();
 };

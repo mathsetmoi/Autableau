@@ -287,6 +287,101 @@ module.exports = async function (browser) {
     r.verifie('et le message dit quoi coller',
         /https/.test(refus.message) && /iframe/.test(refus.message), refus.message);
 
+    // ==================================================================
+    // LE PLEIN ÉCRAN DE LA FENÊTRE WEB
+    //
+    // « Pour les iframe, on pourrait pas autoriser le plein écran ? » Il l'est
+    // déjà côté cadre — « allow="fullscreen" » y est posé, et le bouton du
+    // site encadré marche EN LIGNE. Depuis un fichier ouvert à la main,
+    // l'origine de la page n'a pas de nom et le navigateur refuse de déléguer
+    // quoi que ce soit à un cadre : « Disallowed by permissions policy », quel
+    // que soit l'attribut. Aucune ligne de cette page ne peut lever ce refus.
+    //
+    // Ce qu'on peut faire, c'est mettre en grand NOTRE PROPRE fenêtre : elle
+    // nous appartient, le navigateur l'accepte partout — y compris depuis un
+    // fichier —, et le cadre suit. C'est donc ce qui est éprouvé ici, et cette
+    // suite tourne justement en « file:// » : si le geste y passe, il passera
+    // partout.
+    // ==================================================================
+    const plein = await page.evaluate(async () => {
+        htmlPostits.length = 0;
+        // ON REPART D'UNE VUE CONNUE. La fenêtre s'ouvre au milieu de ce qu'on
+        // REGARDE : après les chapitres précédents, le tableau est déplacé et
+        // elle se posait sous le tiroir du haut, qui lui prenait le clic. Ce
+        // chapitre parle du plein écran, pas de la place des fenêtres.
+        panX = 0; panY = 0; zoom = 1;
+        const f = ouvrirUneFenetreWeb('https://www.geogebra.org/calculator');
+        await new Promise(ok => setTimeout(ok, 400));
+        const el = document.querySelector('.html-postit[data-id="' + f.id + '"]');
+        const btn = el && el.querySelector('.btn-plein-postit');
+        // LE BOUTON N'APPARTIENT QU'AUX FENÊTRES WEB : une note jaune en
+        // grand n'apporte rien, et le bouton ferait du bruit sur toutes les
+        // autres. On pose donc une note à côté, et l'on regarde.
+        htmlPostits.push({ id: nextId++, x: 40, y: 40, w: 220, h: 160, mode: 'texte',
+                           content: 'une note', bg: '#fdfd96', minimized: false,
+                           ancre: 'tableau', z: globalZ++ });
+        renderHtmlPostits();
+        await new Promise(ok => setTimeout(ok, 300));
+        const note = document.querySelector('.html-postit:not(.en-web) .btn-plein-postit');
+        return { bouton: !!btn, vu: btn ? getComputedStyle(btn).display : null,
+                 noteLa: !!note, surUneNote: note ? getComputedStyle(note).display : null };
+    });
+    r.verifie('la fenêtre web porte un bouton « plein écran »',
+        plein.bouton && plein.vu === 'flex', JSON.stringify(plein));
+    r.verifie('et une note ordinaire ne le porte pas : elle n\'aurait rien à en faire',
+        plein.noteLa && plein.surUneNote === 'none', JSON.stringify(plein));
+
+    await page.click('.html-postit.en-web .btn-plein-postit');
+    await page.waitForTimeout(600);
+    const dedans = await page.evaluate(() => {
+        const e = document.fullscreenElement;
+        if (!e) return { plein: false };
+        const r = e.getBoundingClientRect();
+        const c = e.querySelector('iframe');
+        const cr = c && c.getBoundingClientRect();
+        return { plein: true, fenetre: e.classList.contains('html-postit'),
+                 couvre: Math.round(r.width) >= innerWidth - 2 && Math.round(r.height) >= innerHeight - 2,
+                 // LE CADRE DOIT SUIVRE : c'est pour lui qu'on fait tout cela.
+                 // Une fenêtre en grand dont le cadre reste à sa taille d'avant
+                 // n'aurait rien donné de plus qu'un grand cadre blanc.
+                 cadreLarge: cr ? Math.round(cr.width) : 0,
+                 cadreHaut: cr ? Math.round(cr.height) : 0,
+                 ecran: [innerWidth, innerHeight] };
+    });
+    r.verifie('un appui la met en grand, et elle couvre l\'écran',
+        dedans.plein && dedans.fenetre && dedans.couvre, JSON.stringify(dedans));
+    r.verifie('et le cadre du site prend toute la place — c\'est pour lui qu\'on la prend',
+        dedans.cadreLarge >= dedans.ecran[0] - 8 && dedans.cadreHaut >= dedans.ecran[1] - 60,
+        JSON.stringify(dedans));
+
+    // LE MÊME BOUTON EN SORT. Un plein écran dont on ne sort que par la touche
+    // du navigateur laisse le professeur coincé devant sa classe.
+    await page.click('.html-postit.en-web .btn-plein-postit');
+    await page.waitForTimeout(600);
+    r.verifie('et le même appui en ressort',
+        await page.evaluate(() => !document.fullscreenElement), '');
+
+    // LE VERROU VAUT ICI AUSSI. « Quand je clique sur le plein écran plusieurs
+    // fois, d'un coup je passe à un autre navigateur » : cinq appuis pressés
+    // partaient en cinq demandes. Le geste de la fenêtre passe par la même
+    // porte que celui du coin, donc par le même verrou — on le vérifie, sinon
+    // « la même porte » n'est qu'une intention écrite en commentaire.
+    const presse = await page.evaluate(() => {
+        let n = 0;
+        const vrai = Element.prototype.requestFullscreen;
+        Element.prototype.requestFullscreen = function (...a) { n++; return vrai.apply(this, a); };
+        const b = document.querySelector('.html-postit.en-web .btn-plein-postit');
+        for (let i = 0; i < 5; i++) b.click();
+        Element.prototype.requestFullscreen = vrai;
+        return n;
+    });
+    r.egal('cinq appuis pressés ne font qu\'une demande de plein écran', presse, 1);
+    await page.evaluate(async () => {
+        if (document.fullscreenElement) { document.exitFullscreen(); await new Promise(ok => setTimeout(ok, 400)); }
+        htmlPostits.length = 0; renderHtmlPostits();
+    });
+    await page.waitForTimeout(400);
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();
