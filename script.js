@@ -34339,13 +34339,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    const bDemo = document.getElementById('rp-demonstration');
-    if (bDemo) bDemo.addEventListener('click', () => {
-        const popup = document.getElementById('reglages-barre');
-        if (popup) popup.classList.remove('visible');
-        if (typeof demarrerLaDemonstration === 'function') demarrerLaDemonstration();
-    });
-
     const bZones = document.getElementById('rp-zones');
     if (bZones) bZones.addEventListener('click', () => {
         const actif = basculerLesZones();

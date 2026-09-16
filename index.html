@@ -2202,12 +2202,22 @@
                          lui en rend pas un. -->
                     <button class="rp-choix" id="btn-composer-barre" type="button"
                         onclick="ouvrirLeCompositeurDeBarre()">Composer une barre d'outils…</button>
-
-                    <div class="rp-titre">Découvrir</div>
-                    <button class="rp-choix" id="rp-demonstration"
-                        title="Neuf chapitres joués sur ce tableau : la main appuie sur les vraies icônes, et le tableau fait vraiment ce qu'elle raconte">▶ La démonstration</button>
+                    <!-- L'ASTUCE DU DÉMARRAGE EST UN ENCOMBREMENT, elle aussi :
+                         c'est ce que l'application s'autorise à mettre devant
+                         vous sans qu'on le lui demande, comme un tiroir qui se
+                         referme tout seul. Elle rejoint donc ses semblables,
+                         et la rubrique « Découvrir » disparaît. -->
                     <button class="rp-choix" id="rp-astuces">Astuce au démarrage</button>
-                    <button class="rp-choix" onclick="montrerAstuce(true)">Voir une astuce</button>
+
+                    <!-- PLUS DE RUBRIQUE « DÉCOUVRIR » ICI. Elle portait trois
+                         entrées, dont DEUX QUI EXISTAIENT DÉJÀ DANS L'AIDE —
+                         « ▶ Démonstration » en tête de la fenêtre, et « 💡 Voir
+                         les astuces » plus bas. Ce n'étaient donc pas des
+                         réglages mal rangés, c'étaient des doublons : on les
+                         retire d'ici, où ils allongeaient un menu qui débordait
+                         déjà de l'écran, et on ne perd rien. La troisième,
+                         « Astuce au démarrage », est le seul vrai réglage des
+                         trois : elle est passée sous « Encombrement ». -->
                 </div>
             </div>
             </div>
@@ -3300,7 +3310,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=266"></script>
+    <script src="script.js?v=267"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

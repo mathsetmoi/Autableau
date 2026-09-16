@@ -776,17 +776,56 @@ module.exports = async function (browser) {
     };
 
     const grand = await mesurerLeMenu(1280, 800);
-    const petit = await mesurerLeMenu(900, 600);
+    const moyen = await mesurerLeMenu(900, 600);
+    const petit = await mesurerLeMenu(800, 500);
 
     r.verifie('sur un grand écran, le menu tient et ne défile pas',
         grand.deborde < 0 && !grand.defile && grand.derniereAtteignable, JSON.stringify(grand));
-    r.egal('et il n\'a pas grandi au passage', grand.hauteur, 538);
+    // QUATRE CENT CINQUANTE-SEPT, ET NON CINQ CENT TRENTE-HUIT. La rubrique
+    // « Découvrir » portait trois entrées dont DEUX EXISTAIENT DÉJÀ DANS
+    // L'AIDE : elles allongeaient un menu qui débordait de l'écran sans rien
+    // offrir de neuf. Le chiffre est écrit ici pour qu'on s'aperçoive du jour
+    // où le menu se remet à grandir.
+    r.egal('et il fait la hauteur qu\'on lui connaît', grand.hauteur, 457);
+    r.verifie('sur un écran de six cents, il tient désormais sans défiler',
+        moyen.deborde < 0 && !moyen.defile, JSON.stringify(moyen));
     r.verifie('sur un écran court, il ne dépasse plus le bord bas',
         petit.deborde < 0, JSON.stringify(petit));
     r.verifie('il se fait alors défiler, et la dernière entrée s\'atteint',
         petit.defile && petit.derniereAtteignable, JSON.stringify(petit));
-    r.egal('des deux côtés, le menu offre les mêmes choix',
-        [grand.nChoix, petit.nChoix], [13, 13]);
+    r.egal('et le menu offre partout les mêmes choix',
+        [grand.nChoix, moyen.nChoix, petit.nChoix], [11, 11, 11]);
+
+    // ON N'A RIEN PERDU : les deux entrées retirées du menu vivaient DÉJÀ dans
+    // l'Aide. C'est ce qui autorisait à les retirer — et c'est donc cela qu'il
+    // faut tenir. Les effacer de l'Aide aussi ferait disparaître pour de bon
+    // la démonstration et les astuces, sans que personne s'en aperçoive.
+    const dansLAide = await page.evaluate(async () => {
+        const m = document.getElementById('help-modal');
+        m.style.display = 'flex';
+        await new Promise(ok => setTimeout(ok, 150));
+        const vu = (e) => !!e && e.getClientRects().length > 0;
+        const demo = document.getElementById('btn-start-tour');
+        const astuces = [...m.querySelectorAll('button')]
+            .find(b => /astuce/i.test(b.textContent) || /montrerAstuce/.test(b.getAttribute('onclick') || ''));
+        const etat = { demo: vu(demo), demoDit: demo ? demo.textContent.trim() : null,
+                       astuces: vu(astuces), astucesDit: astuces ? astuces.textContent.trim() : null };
+        m.style.display = 'none';
+        return etat;
+    });
+    r.verifie('la démonstration reste offerte dans l\'Aide',
+        dansLAide.demo && /démonstration/i.test(dansLAide.demoDit || ''), JSON.stringify(dansLAide));
+    r.verifie('et les astuces aussi',
+        dansLAide.astuces && /astuce/i.test(dansLAide.astucesDit || ''), JSON.stringify(dansLAide));
+    // ET LE RÉGLAGE, LUI, EST RESTÉ : des trois entrées, c'était le seul vrai.
+    r.verifie('« Astuce au démarrage » est toujours réglable, sous « Encombrement »',
+        await page.evaluate(() => {
+            const b = document.getElementById('rp-astuces');
+            if (!b) return false;
+            const titres = [...document.querySelectorAll('#reglages-barre .rp-titre')];
+            const sien = titres.filter(t => t.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).pop();
+            return !!sien && sien.textContent.trim() === 'Encombrement';
+        }), '');
 
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
