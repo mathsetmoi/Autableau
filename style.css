@@ -6254,6 +6254,19 @@ body.libelles-couleur #plugins-grid .btn[data-category="Détente"] { background:
 
 .reglages-popup.visible { display: block; }
 
+/* CE QUI DÉPASSE SE FAIT DÉFILER, il ne se perd pas. Le plafond lui-même est
+   posé à l'ouverture par « poserLeMenuDesReglages » : lui seul sait où le
+   bouton se trouve, donc combien de place il reste dessous.
+   « overscroll-behavior » : le geste qui arrive au bout de la liste s'arrête
+   là, au lieu de partir faire défiler le tableau derrière. */
+#reglages-barre.defile {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Le plafond porte sur la boîte ENTIÈRE, rembourrage compris : sans cela
+       les seize pixels de marge intérieure repassaient sous le bord bas. */
+    box-sizing: border-box;
+}
+
 /* CELUI DU TIROIR S'OUVRE VERS LA DROITE. Son bouton a rejoint la colonne du
    bord gauche : accroché par la droite, comme celui de la date qui vit au coin
    opposé, le panneau partait vers l'extérieur de l'écran. */

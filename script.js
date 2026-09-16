@@ -34229,13 +34229,48 @@ document.addEventListener('DOMContentLoaded', () => {
     brancherLaPoigneeDesOutils();
 });
 
+// LE MENU NE DÉBORDE PLUS DE L'ÉCRAN.
+//
+// « Un peu grand, les paramètres. » Il fait cinq cent trente-huit pixels, quoi
+// qu'il arrive, et il n'avait ni plafond ni défilement : sur un écran de six
+// cents pixels de haut — un petit portable, une tablette en paysage — les
+// dernières entrées ne débordaient pas seulement, elles devenaient
+// INATTEIGNABLES. On lui donne donc la place qui reste sous son bouton, et de
+// quoi défiler à l'intérieur.
+//
+// LE CALCUL SE FAIT ICI ET NON DANS LA FEUILLE DE STYLE : la place disponible
+// dépend de l'endroit où le bouton se trouve, que seul le moment de
+// l'ouverture connaît. Une hauteur écrite en dur se tromperait dès que le
+// tiroir change de taille — et il change, selon la rubrique ouverte.
+function poserLeMenuDesReglages() {
+    const popup = document.getElementById('reglages-barre');
+    if (!popup || !popup.classList.contains('visible')) return;
+    // ON MESURE SA TAILLE NATURELLE D'ABORD : plafond retiré, défilement
+    // retiré. Faire défiler un menu qui tient déjà le ferait GRANDIR de trente
+    // pixels — « overflow » ouvre un contexte de formatage, et les marges de
+    // ses enfants cessent de s'échapper. C'est l'inverse de ce qu'on cherche.
+    popup.style.maxHeight = '';
+    popup.classList.remove('defile');
+    const r = popup.getBoundingClientRect();
+    const dispo = Math.max(160, Math.round(window.innerHeight - r.top - 12));
+    if (r.height > dispo) {
+        popup.style.maxHeight = dispo + 'px';
+        popup.classList.add('defile');
+    }
+}
+window.poserLeMenuDesReglages = poserLeMenuDesReglages;
+
 function basculerReglagesBarre(e) {
     if (e) e.stopPropagation();
     const popup = document.getElementById('reglages-barre');
     if (!popup) return;
     const ouvert = popup.classList.toggle('visible');
-    if (ouvert) majReglagesBarre();
+    if (ouvert) { majReglagesBarre(); poserLeMenuDesReglages(); }
 }
+
+// Et s'il est ouvert quand la fenêtre change de taille, il se replace : un
+// vidéoprojecteur qu'on branche redimensionne l'écran sous les doigts.
+window.addEventListener('resize', () => poserLeMenuDesReglages());
 
 document.addEventListener('click', (e) => {
     const popup = document.getElementById('reglages-barre');

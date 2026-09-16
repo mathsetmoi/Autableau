@@ -734,6 +734,60 @@ module.exports = async function (browser) {
     r.verifie('le panneau d\'une barre passe devant les barres voisines',
         dessus.marquee && dessus.auDessus, JSON.stringify(dessus));
 
+    // ==================================================================
+    // LE MENU NE DÉBORDE PLUS DE L'ÉCRAN
+    //
+    // « Un peu grand, les paramètres. » Il fait cinq cent trente-huit pixels,
+    // quoi qu'il arrive, et il n'avait ni plafond ni défilement : sur un écran
+    // de six cents pixels de haut — un petit portable, une tablette en
+    // paysage — les dernières entrées ne débordaient pas seulement, elles
+    // devenaient INATTEIGNABLES. On ne les voyait pas, et rien ne permettait
+    // d'y aller.
+    //
+    // ON ÉPROUVE LES DEUX CÔTÉS. Sur un grand écran, le menu ne doit RIEN
+    // gagner : faire défiler ce qui tient déjà le ferait grandir de trente
+    // pixels — « overflow » ouvre un contexte de formatage et les marges des
+    // enfants cessent de s'échapper —, c'est-à-dire l'inverse de ce qui est
+    // demandé.
+    // ==================================================================
+    const mesurerLeMenu = async (largeur, hauteur) => {
+        const { context: ctx, page: pg } = await ouvrirApp(browser, { viewport: { width: largeur, height: hauteur } });
+        const m = await pg.evaluate(async () => {
+            document.getElementById('btn-reglages-barre').click();
+            await new Promise(ok => setTimeout(ok, 250));
+            const p = document.getElementById('reglages-barre');
+            const r = p.getBoundingClientRect();
+            const choix = [...p.querySelectorAll('.rp-choix')];
+            const dernier = choix[choix.length - 1];
+            // ATTEIGNABLE, et non « visible d'emblée » : dans une liste qui
+            // défile, la dernière entrée est en bas du CONTENU, pas de l'écran.
+            dernier.scrollIntoView({ block: 'nearest' });
+            const d = dernier.getBoundingClientRect();
+            return {
+                hauteur: Math.round(r.height),
+                deborde: Math.round(r.bottom - window.innerHeight),
+                defile: p.classList.contains('defile'),
+                derniereAtteignable: d.bottom <= window.innerHeight + 1 && d.top >= -1,
+                nChoix: choix.length
+            };
+        });
+        await ctx.close();
+        return m;
+    };
+
+    const grand = await mesurerLeMenu(1280, 800);
+    const petit = await mesurerLeMenu(900, 600);
+
+    r.verifie('sur un grand écran, le menu tient et ne défile pas',
+        grand.deborde < 0 && !grand.defile && grand.derniereAtteignable, JSON.stringify(grand));
+    r.egal('et il n\'a pas grandi au passage', grand.hauteur, 538);
+    r.verifie('sur un écran court, il ne dépasse plus le bord bas',
+        petit.deborde < 0, JSON.stringify(petit));
+    r.verifie('il se fait alors défiler, et la dernière entrée s\'atteint',
+        petit.defile && petit.derniereAtteignable, JSON.stringify(petit));
+    r.egal('des deux côtés, le menu offre les mêmes choix',
+        [grand.nChoix, petit.nChoix], [13, 13]);
+
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();
