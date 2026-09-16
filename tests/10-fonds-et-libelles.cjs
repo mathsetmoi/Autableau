@@ -349,7 +349,21 @@ module.exports = async function (browser) {
         // Quelques images plus tard : le zoom est en chemin, pas arrivé.
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         const justeApres = zoom;
-        await new Promise(r => setTimeout(r, 900));    // le temps d'y glisser
+        // ON ATTEND QUE LE GLISSEMENT SOIT FINI, et non neuf dixièmes de
+        // seconde. L'animation avance par images ; sous la charge des autres
+        // chapitres elle en reçoit moins, et neuf dixièmes la laissaient à
+        // 3,975 au lieu de 4 — le curseur suivait à un pixel près, et deux
+        // contrôles tombaient pour une lenteur, non pour un défaut. Le
+        // glissement pose « zoomVise » à null en arrivant : c'est ce qu'on
+        // guette, avec un plafond pour ne jamais rester pendu.
+        await new Promise(res => {
+            const t0 = Date.now();
+            const voir = () => {
+                if (zoomVise === null || Date.now() - t0 > 8000) return res();
+                setTimeout(voir, 30);
+            };
+            voir();
+        });
         return {
             justeApres: Math.round(justeApres * 1000) / 1000,
             arrive: Math.round(zoom * 1000) / 1000,
