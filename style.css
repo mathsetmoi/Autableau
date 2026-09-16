@@ -2700,6 +2700,34 @@ input[type=range]::-moz-range-thumb {
     transform: translateY(0);
 }
 
+/* UNE PASTILLE PEUT PORTER PLUSIEURS LIGNES. Un geste en déclenche souvent un
+   autre, chacun avec son message : ils tiennent maintenant dans la même
+   pastille, l'un sous l'autre, au lieu d'en empiler deux ou trois. */
+.toast-ligne {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    justify-content: space-between;
+}
+
+.toast-ligne + .toast-ligne {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* CE QUI SE RÉPÈTE SE COMPTE. Le même message trois fois ne fait pas trois
+   pastilles : il en fait une, qui dit « ×3 ». Le compte reste discret — c'est
+   une précision, pas la nouvelle. */
+.toast-compte {
+    font-size: 12px;
+    font-weight: 700;
+    opacity: 0.62;
+    flex-shrink: 0;
+}
+
+.toast-compte:empty { display: none; }
+
 #drop-overlay {
     position: fixed;
     top: 0;

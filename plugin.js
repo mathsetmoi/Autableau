@@ -1637,7 +1637,7 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
                 const nombre = GrilleDeChiffres.lireLeNombre(texte);
                 if (!nombre) {
                     if (texte.trim() && typeof showToast === 'function') {
-                        showToast('« ' + texte.trim() + " » n'est pas un nombre.", '#e17055', '📏');
+                        showToast('« ' + texte.trim() + " » n'est pas un nombre.");
                     }
                     return;
                 }
@@ -1653,7 +1653,7 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
                             ? this.FAMILLES[cible.autreFamille].tableau : null;
                         showToast('« ' + nombre.unite + ' » '
                             + (la ? 'appartient au ' + la : "n'est pas une unité de ce tableau")
-                            + ' : celui-ci porte ' + ici + '.', '#e17055', '📏');
+                            + ' : celui-ci porte ' + ici + '.');
                     }
                     return;
                 }
@@ -1727,7 +1727,7 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
             const colonnes = Math.ceil(chiffres / m.plan.subCols);
             showToast('Le tableau ne va pas assez loin à ' + cote + ' : '
                 + chiffres + ' chiffre(s) de côté, soit ' + colonnes
-                + ' colonne(s) qui manquent.', '#e17055', '📏');
+                + ' colonne(s) qui manquent.');
         }
         return true;
     },
@@ -1755,7 +1755,7 @@ registerPlugin('conversionTool', 'Maths - Numérique', {
         });
         this.refaireLeTampon(imgObj, { contenu: aPasser, rallonges: voulu });
         if (typeof showToast === 'function') {
-            showToast('Le tableau s\'est allongé : ' + cote + '.', '#00b894', '📏');
+            showToast('Le tableau s\'est allongé : ' + cote + '.');
         }
         return true;
     },
@@ -4444,7 +4444,7 @@ registerPlugin('circuitTool', 'Physique-Chimie', {
             } else {
                 this.currentStamp = stamp;
                 this.currentState = JSON.parse(JSON.stringify(this.state));
-                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le circuit (Persistant)", "#0984e3", "⚡");
+                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le circuit (Persistant)");
             }
         });
     },
@@ -4718,7 +4718,7 @@ registerPlugin('soundMeterTool', 'Outils Profs', {
                 btn.innerHTML = "🛑 Désactiver"; btn.style.background = "#d63031";
                 dot.style.background = "#00b894";
 
-                if (typeof showToast === 'function') showToast("Sonomètre activé !", "#00b894");
+                if (typeof showToast === 'function') showToast("Sonomètre activé !");
                 this.loop();
             } catch (e) {
                 if (typeof showToast === 'function') showToast('Micro inaccessible : autorisez-le dans la barre d\'adresse du navigateur');
@@ -9290,7 +9290,7 @@ registerPlugin('mapTool', 'Histoire-Géographie', {
 
     ouvrir: function (etat, imageEnEdition) {
         if (!this.monde().length) {
-            if (typeof showToast === 'function') showToast('Le fond de carte n\'est pas chargé', '#e17055', '🗺️');
+            if (typeof showToast === 'function') showToast('Le fond de carte n\'est pas chargé');
             return;
         }
         this.etat = etat ? JSON.parse(JSON.stringify(etat)) : this.etatNeuf();
@@ -13472,7 +13472,7 @@ registerPlugin('cduGeneratorTool', 'Maths - Numérique', {
                 const nombre = GrilleDeChiffres.lireLeNombre(texte);
                 if (!nombre) {
                     if (texte.trim() && typeof showToast === 'function') {
-                        showToast('« ' + texte.trim() + " » n'est pas un nombre.", '#e17055', '🧮');
+                        showToast('« ' + texte.trim() + " » n'est pas un nombre.");
                     }
                     return;
                 }
@@ -13487,8 +13487,7 @@ registerPlugin('cduGeneratorTool', 'Maths - Numérique', {
                 if (!mis.complet && typeof showToast === 'function') {
                     showToast(mis.perdus.gauche
                         ? 'Le tableau ne va pas assez loin à gauche : ' + mis.perdus.gauche + ' chiffre(s) de côté.'
-                        : 'Il manque ' + mis.perdus.droite + ' rang(s) décimal(aux) : ajoutez-les dans les réglages.',
-                        '#e17055', '🧮');
+                        : 'Il manque ' + mis.perdus.droite + ' rang(s) décimal(aux) : ajoutez-les dans les réglages.');
                 }
             }
         });
@@ -15483,7 +15482,7 @@ registerPlugin('moleculeStudioTool', 'Physique-Chimie', {
             } else {
                 this.currentStamp = stamp;
                 this.currentState = JSON.parse(JSON.stringify(this.state));
-                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller la molécule", "#0984e3", "🎯");
+                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller la molécule");
             }
         });
     },
@@ -17455,7 +17454,7 @@ registerPlugin('randomDrawTool', 'Outils Profs', {
             this.savedClasses[name] = students; this.saveClassesToStorage();
             document.getElementById('dw-manage-name').value = ""; document.getElementById('dw-manage-list').value = "";
             this.updateClassSelect(); this.updateSavedClassesList();
-            if (typeof showToast === 'function') showToast(`Classe "${name}" enregistrée !`, "#00b894", "💾");
+            if (typeof showToast === 'function') showToast(`Classe "${name}" enregistrée !`);
         };
 
         document.getElementById('dw-class-select').onchange = (e) => {
@@ -17522,7 +17521,7 @@ registerPlugin('randomDrawTool', 'Outils Profs', {
         const pool = this.isQuizMode() ? this.sessionList.filter(s => s.active) : this.sessionList;
 
         if (pool.length === 0) {
-            if (typeof showToast === 'function') showToast("Plus aucun élève disponible !", "#d63031", "⚠️");
+            if (typeof showToast === 'function') showToast("Plus aucun élève disponible !");
             return;
         }
 
@@ -17684,7 +17683,7 @@ registerPlugin('randomDrawTool', 'Outils Profs', {
     // ATELIER ÎLOTS (DRAG & DROP + TAMPONS SVG)
     // ==========================================
     openAtelier: function () {
-        if (this.sessionList.length === 0) { if (typeof showToast === 'function') showToast("Liste vide !", "#d63031", "⚠️"); return; }
+        if (this.sessionList.length === 0) { if (typeof showToast === 'function') showToast("Liste vide !"); return; }
         const isRandom = document.querySelector('input[name="dw-group-mode"]:checked').value === 'random';
         const type = document.getElementById('dw-group-type').value;
         const val = parseInt(document.getElementById('dw-group-val').value) || 2;
@@ -17886,7 +17885,7 @@ registerPlugin('randomDrawTool', 'Outils Profs', {
         const group = this.groupState.groups.find(g => g.id === imgObj.pluginData.groupId);
         if (!group) {
             if (typeof showToast === 'function') {
-                showToast("Cet îlot n'existe plus : rouvrez l'atelier pour en refaire un.", "#e17055", "🎯");
+                showToast("Cet îlot n'existe plus : rouvrez l'atelier pour en refaire un.");
             }
             this.toggleWidget();
             return;
@@ -17925,7 +17924,7 @@ registerPlugin('randomDrawTool', 'Outils Profs', {
 
             if (typeof setMode === 'function') {
                 setMode('randomdraw');
-                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour poser l'îlot", "#0984e3", "🎯");
+                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour poser l'îlot");
             }
         };
         img.src = dataUrl;
@@ -17947,7 +17946,7 @@ registerPlugin('randomDrawTool', 'Outils Profs', {
             div.innerHTML = `<span><b>${className}</b> (${this.savedClasses[className].length} él.)</span> 
                              <div style="display:flex; gap:10px;"><span class="dw-edit-btn" style="cursor:pointer; color:#0984e3;">✏️</span><span class="dw-del-btn" style="cursor:pointer; color:#d63031; font-weight:bold;">✕</span></div>`;
             div.querySelector('.dw-edit-btn').onclick = () => { document.getElementById('dw-manage-name').value = className; document.getElementById('dw-manage-list').value = this.savedClasses[className].join(', '); };
-            div.querySelector('.dw-del-btn').onclick = () => { delete this.savedClasses[className]; this.saveClassesToStorage(); this.updateClassSelect(); this.updateSavedClassesList(); if (typeof showToast === 'function') showToast(`Classe supprimée.`, "#636e72", "🗑️"); };
+            div.querySelector('.dw-del-btn').onclick = () => { delete this.savedClasses[className]; this.saveClassesToStorage(); this.updateClassSelect(); this.updateSavedClassesList(); if (typeof showToast === 'function') showToast(`Classe supprimée.`); };
             container.appendChild(div);
         });
     },
@@ -17966,9 +17965,9 @@ registerPlugin('randomDrawTool', 'Outils Profs', {
                 this.saveClassesToStorage();
                 this.updateClassSelect();
                 this.updateSavedClassesList();
-                if (typeof showToast === 'function') showToast("Importation réussie !", "#00b894", "📥");
+                if (typeof showToast === 'function') showToast("Importation réussie !");
             } catch (err) {
-                if (typeof showToast === 'function') showToast("Fichier invalide.", "#d63031", "⚠️");
+                if (typeof showToast === 'function') showToast("Fichier invalide.");
             }
         };
         reader.readAsText(file); event.target.value = "";
@@ -20651,7 +20650,7 @@ registerPlugin('spreadsheetTool', 'Maths - Numérique', {
             } else {
                 this.currentStamp = stamp;
                 if (typeof setMode === 'function') setMode('spreadsheetTool');
-                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le tableau", "#0984e3", "📊");
+                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le tableau");
             }
         });
     },
@@ -21982,7 +21981,7 @@ registerPlugin('flashMathTool', 'Exercices', {
                 this.currentStamp = ajusterTampon(stamp);
                 this.currentAnswerZones = answerZones;
                 if (typeof setMode === 'function') setMode('flashMathTool');
-                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour poser la série. Cliquez sur chaque cache gris pour révéler une réponse !", "#0984e3", "📚");
+                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour poser la série. Cliquez sur chaque cache gris pour révéler une réponse !");
             }
         });
     },
@@ -22448,7 +22447,7 @@ registerPlugin('binaroTool', 'Jeux', {
             this.currentState = JSON.parse(JSON.stringify(this.state));
 
             if (typeof setMode === 'function') setMode('binaroTool');
-            if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour poser le Binaro", "#0984e3", "🧠");
+            if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour poser le Binaro");
         });
     },
 
@@ -22961,7 +22960,7 @@ registerPlugin('pythagoreTool', 'Maths - Numérique', {
                 this.currentState = JSON.parse(JSON.stringify(this.state));
                 this.currentGameData = gameData;
                 if (typeof setMode === 'function') setMode('pythagoreTool');
-                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour poser la table", "#0984e3", "📐");
+                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour poser la table");
             }
         });
     },
@@ -24169,7 +24168,7 @@ registerPlugin('randomLabPro', 'Maths - Numérique', {
 
     exportVisualToBoard: function () {
         if (!this.lastFinalRes) {
-            if (typeof showToast === 'function') showToast("Lancez d'abord un tirage pour exporter le visuel", "#e17055", "🎲");
+            if (typeof showToast === 'function') showToast("Lancez d'abord un tirage pour exporter le visuel");
             return;
         }
         let svg = this.generateSVG(this.lastFinalRes);
@@ -24242,7 +24241,7 @@ registerPlugin('randomLabPro', 'Maths - Numérique', {
         createStampFromSVG(svg, (stamp) => {
             this.currentStamp = stamp;
             if (typeof setMode === 'function') setMode('randomLabPro');
-            if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le graphique", "#0984e3", "📊");
+            if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le graphique");
         });
     },
 
@@ -25162,7 +25161,7 @@ class ScratchInterpreter {
         // une seule fois, à l'entrée dans les images qui le portent.
         if (this.sprite.son && this.sprite.son !== this.dernierSon
             && typeof showToast === 'function') {
-            showToast('🎵 Son joué : ' + this.sprite.son, '#0984e3', '🎵');
+            showToast('🎵 Son joué : ' + this.sprite.son);
         }
         this.dernierSon = this.sprite.son || null;
 
@@ -27294,7 +27293,7 @@ registerPlugin('scratchBlocksTool', 'Informatique', {
                 } else {
                     this.currentStamp = stamp;
                     if (typeof setMode === 'function') setMode('scratchBlocksTool');
-                    if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller l'algorithme", "#0984e3", "🤖");
+                    if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller l'algorithme");
                 }
             });
         }
@@ -27977,7 +27976,7 @@ registerPlugin('tamaMathTool', 'Détente', {
             document.querySelectorAll('#bar-tools .btn, #bar-plugins .btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             if (typeof setMode === 'function') setMode('tamaMathTool');
-            if (typeof showToast === 'function') showToast("📌 Cliquez n'importe où : un insecte apparaît !", "#1abc9c", "👾");
+            if (typeof showToast === 'function') showToast("📌 Cliquez n'importe où : un insecte apparaît !");
         });
 
         const loop = () => {
@@ -28021,7 +28020,7 @@ registerPlugin('tamaMathTool', 'Détente', {
 
                     if (t.clicks >= 5) {
                         this.tamagotchis.splice(i, 1);
-                        if (typeof showToast === 'function') showToast("L'insecte a fui !", "#e84393", "💨");
+                        if (typeof showToast === 'function') showToast("L'insecte a fui !");
                     }
 
                     if (typeof draw === 'function') draw();
@@ -30649,7 +30648,7 @@ registerPlugin('funcPlotter', 'Maths - Algèbre', {
                     } else {
                         this.currentStamp = stamp;
                         if (typeof setMode === 'function') setMode('funcPlotter');
-                        if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le graphique", "#0984e3", "📈");
+                        if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le graphique");
                     }
                 });
             }
@@ -30767,7 +30766,7 @@ registerPlugin('funcPlotter', 'Maths - Algèbre', {
                     } else {
                         this.currentStamp = stamp;
                         if (typeof setMode === 'function') setMode('funcPlotter');
-                        if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le tableau", "#00b894", "📊");
+                        if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller le tableau");
                     }
                 });
             }
@@ -31623,7 +31622,7 @@ registerPlugin('superFractal', 'Maths - Géométrie', {
                     pluginData: { type: 'superFractal', mode: this.state.mode }
                 };
                 if (typeof setMode === 'function') setMode('funcPlotter');
-                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller la fractale", "#0abde3", "🌀");
+                if (typeof showToast === 'function') showToast("📌 Cliquez sur le tableau pour coller la fractale");
                 if (this.widgetEl) this.widgetEl.style.display = 'none';
             }
         };
@@ -32489,7 +32488,7 @@ registerPlugin('playingCardsTool', 'Maths - Numérique', {
 
     exportToBoard: function () {
         const self = this, res = this.generateSVG();
-        if (!res) { if (typeof showToast === 'function') showToast("Choisissez au moins une carte", "#e17055", "🃏"); return; }
+        if (!res) { if (typeof showToast === 'function') showToast("Choisissez au moins une carte"); return; }
         const snapshot = JSON.parse(JSON.stringify(this.state));
         this.widgetEl.style.display = 'none';
         createStampFromSVG(res.svg, (stamp) => {

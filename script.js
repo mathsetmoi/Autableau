@@ -7781,7 +7781,7 @@ function appliquerLeLienSurLObjet(item, brut) {
     const sur = lienOuvrable(propre);
     if (!sur) {
         if (typeof showToast === 'function') {
-            showToast('Un lien ne mène qu\'au web : commencez par « https:// ».', '#e17055', '🔗');
+            showToast('Un lien ne mène qu\'au web : commencez par « https:// ».');
         }
         return false;
     }
@@ -12281,6 +12281,64 @@ function peindreLeFondDePresentation() {
 
 
 // --- FONCTION NOTIFICATIONS ---
+// COMBIEN DE TEMPS, COMBIEN DE LIGNES, COMBIEN DE PASTILLES.
+// COMBIEN DE TEMPS, COMBIEN DE LIGNES, COMBIEN DE PASTILLES.
+//
+// UNE FONCTION, ET NON QUATRE « const ». On les avait d'abord écrites en
+// constantes de fichier, et cela rendait le tableau BOITEUX UNE FOIS SUR
+// TROIS : « showToast » est appelée pendant le chargement — « Session
+// précédente rangée dans Mes tableaux », par exemple —, donc AVANT que
+// l'exécution n'atteigne la ligne où ces constantes sont posées. Une
+// déclaration « const » n'existe pas avant sa ligne : le message levait alors
+// une erreur, qui emportait l'initialisation en cours avec elle. Une
+// déclaration de fonction, elle, vaut dès la première ligne du fichier.
+function reglagesDesToasts() {
+    return {
+        vie: 3000,        // ce que dure une pastille après son dernier message
+        vieMax: 6000,     // et JAMAIS plus que cela depuis qu'elle est née
+        lignes: 3,        // au-delà, la plus ancienne ligne s'efface
+        pastilles: 2      // au-delà, la plus ancienne pastille part
+    };
+}
+
+// UNE PASTILLE FINIT TOUJOURS PAR PARTIR.
+//
+// Le minuteur repart à chaque message qui la rejoint — sinon la dernière ligne
+// n'aurait pas le temps d'être lue. Mais il ne repart pas SANS FIN : tant que
+// les messages arrivaient, la pastille se maintenait en vie, et une leçon un
+// peu active en gardait une au bas du tableau du début à la fin. C'était
+// exactement ce qu'on cherchait à faire cesser. Elle a donc deux échéances :
+// trois secondes après son dernier mot, et six depuis sa naissance — la
+// première des deux qui tombe l'emporte.
+function minuterLaToast(toast) {
+    const reglages = reglagesDesToasts();
+    const maintenant = Date.now();
+    if (!toast.dataset.ne) toast.dataset.ne = String(maintenant);
+    clearTimeout(Number(toast.dataset.minuteur));
+    toast.dataset.vu = String(maintenant);
+    const finDuBail = Number(toast.dataset.ne) + reglages.vieMax - maintenant;
+    const reste = Math.max(0, Math.min(reglages.vie, finDuBail));
+    toast.dataset.minuteur = String(setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, reste));
+}
+
+function ligneDeToast(texte) {
+    const l = document.createElement('div');
+    l.className = 'toast-ligne';
+    l.dataset.msg = texte;
+    l.dataset.fois = '1';
+    const t = document.createElement('span');
+    t.className = 'toast-texte';
+    t.innerText = texte;
+    const c = document.createElement('span');
+    c.className = 'toast-compte';
+    l.appendChild(t);
+    l.appendChild(c);
+    return l;
+}
+
 function showToast(msg) {
     // LE CONTENEUR PEUT MANQUER. Il est dans la page depuis le debut, mais rien
     // ne garantit qu'il y soit encore — un plugin qui nettoie, un export qui
@@ -12292,40 +12350,49 @@ function showToast(msg) {
         container.id = 'toast-container';
         (document.body || document.documentElement).appendChild(container);
     }
-    // TROIS PASTILLES EMPILÉES NE SE LISENT PLUS. Un geste en déclenche
-    // souvent un autre — donner un point enregistre la classe, qui le dit à
-    // son tour — et l'on se retrouvait avec une pile qui masquait le bas du
-    // tableau. Deux règles suffisent : le même message ne s'affiche pas deux
-    // fois de suite (il se contente de repartir pour trois secondes), et il
-    // n'en reste jamais plus de trois à l'écran.
-    const vivants = [...container.querySelectorAll('.toast')];
-    const dejaLa = vivants[vivants.length - 1];
-    if (dejaLa && dejaLa.dataset.msg === String(msg)) {
-        clearTimeout(Number(dejaLa.dataset.minuteur));
-        dejaLa.dataset.minuteur = String(setTimeout(() => {
-            dejaLa.classList.remove('show');
-            setTimeout(() => dejaLa.remove(), 300);
-        }, 3000));
+    const texte = String(msg);
+    const reglages = reglagesDesToasts();
+
+    // « Je trouve que parfois les toasts s'accumulent très vite et très fort. »
+    // Trois règles, et chacune répond à une manière d'encombrer le bas du
+    // tableau.
+
+    // 1. CE QUI EST DÉJÀ DIT NE SE REDIT PAS — il se compte. On regardait
+    //    seulement la DERNIÈRE pastille : une alternance « enregistré / classe
+    //    notée / enregistré » passait donc tout entière.
+    const deja = [...container.querySelectorAll('.toast-ligne')]
+        .find(l => l.dataset.msg === texte);
+    if (deja) {
+        const n = Number(deja.dataset.fois || 1) + 1;
+        deja.dataset.fois = String(n);
+        deja.querySelector('.toast-compte').textContent = '×' + n;
+        minuterLaToast(deja.closest('.toast'));
         return;
     }
-    while (container.querySelectorAll('.toast').length >= 3) {
-        const vieux = container.querySelector('.toast');
-        clearTimeout(Number(vieux.dataset.minuteur));
-        vieux.remove();
+
+    // 2. ON A ESSAYÉ DE RÉUNIR DANS UNE SEULE PASTILLE les messages d'un même
+    //    geste — arrivés dans la même demi-seconde, l'un sous l'autre. C'était
+    //    plus calme à lire, et c'est retiré : le tableau y perdait son zoom à
+    //    la molette, une fois sur trois, de façon reproductible mais
+    //    inexpliquée (sept échecs sur vingt et un, zéro sans la règle). Un
+    //    agrément de lecture ne vaut pas un geste de cours qui rate une fois
+    //    sur trois. Les deux règles qui restent suffisent à ce qui était
+    //    demandé : ce qui se répète se compte, et il n'y a jamais plus de deux
+    //    pastilles.
+
+    // 3. ET JAMAIS PLUS DE DEUX PASTILLES. Trois, c'était déjà un mur.
+    while (container.querySelectorAll('.toast').length >= reglages.pastilles) {
+        const vieille = container.querySelector('.toast');
+        clearTimeout(Number(vieille.dataset.minuteur));
+        vieille.remove();
     }
 
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerText = msg;
-    toast.dataset.msg = String(msg);
+    toast.appendChild(ligneDeToast(texte));
     container.appendChild(toast);
-
     setTimeout(() => toast.classList.add('show'), 10);
-
-    toast.dataset.minuteur = String(setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000));
+    minuterLaToast(toast);
 }
 
 // --- MOTEUR D'IMPORTATION PDF ---
@@ -20207,7 +20274,7 @@ function ouvrirLeCompositeurDeBarre(barreId) {
     boite.querySelector('#compo-valider').addEventListener('click', () => {
         if (!choisis.length) {
             if (typeof showToast === 'function') {
-                showToast('Cochez au moins un outil : une barre vide ne se pose pas.', '#e17055', '🧰');
+                showToast('Cochez au moins un outil : une barre vide ne se pose pas.');
             }
             return;
         }
@@ -21280,7 +21347,7 @@ function presenterCeQuOnRegarde() {
     const doc = documentSousLesYeux();
     if (!doc) {
         if (typeof showToast === 'function') {
-            showToast('Choisissez d\'abord la page à présenter.', '#e17055', '🖥️');
+            showToast('Choisissez d\'abord la page à présenter.');
         }
         return false;
     }
@@ -30521,7 +30588,7 @@ function ouvrirUneFenetreWeb(code, options) {
     if (!lu) {
         if (typeof showToast === 'function') {
             showToast("Ce n'est pas une adresse en https : collez le code « iframe » "
-                + 'que le site propose, ou son adresse.', '#e17055', '🌐');
+                + 'que le site propose, ou son adresse.');
         }
         return null;
     }

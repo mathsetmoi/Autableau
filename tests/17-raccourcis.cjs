@@ -1145,26 +1145,74 @@ module.exports = async function (browser) {
     r.egal('elle nomme les commandes comme l\'écran les nomme',
         aideMetier.memeMots, { garder: true, refaire: true, enClasse: true });
 
-    // LES PASTILLES NE S'EMPILENT PLUS. Un geste en déclenche souvent un
-    // autre, chacun avec son message : trois pastilles l'une sur l'autre
-    // masquaient le bas du tableau et ne se lisaient plus.
+    // LES PASTILLES NE S'EMPILENT PLUS.
+    //
+    // « Je trouve que parfois les toasts s'accumulent très vite et très
+    // fort. » Il y avait déjà deux règles — pas deux fois le même message, pas
+    // plus de trois pastilles — et elles laissaient passer l'essentiel.
     const pastilles = await page.evaluate(async () => {
         const attendre = ms => new Promise(res => setTimeout(res, ms));
-        document.querySelectorAll('.toast').forEach(t => t.remove());
+        const vider = () => document.querySelectorAll('.toast').forEach(t => t.remove());
+        const lire = () => [...document.querySelectorAll('.toast')].map(t => t.innerText.trim());
+
+        vider();
         showToast('Tableau sauvegardé !');
         showToast('Tableau sauvegardé !');
         showToast('Tableau sauvegardé !');
         await attendre(60);
-        const memeMessage = document.querySelectorAll('.toast').length;
+        const meme = { pastilles: document.querySelectorAll('.toast').length,
+                       compte: (document.querySelector('.toast-compte') || {}).textContent };
+
+        // LE TROU DE LA PREMIÈRE RÈGLE : elle ne regardait que la DERNIÈRE
+        // pastille. Une alternance passait donc tout entière — et c'est
+        // exactement ce que fait un geste qui en déclenche un autre en boucle.
+        vider();
+        showToast('A'); showToast('B'); showToast('A'); showToast('B');
+        await attendre(60);
+        const alterne = { pastilles: document.querySelectorAll('.toast').length,
+                          comptes: [...document.querySelectorAll('.toast-compte')]
+                              .map(c => c.textContent).filter(Boolean) };
+
+        // ET JAMAIS PLUS DE DEUX PASTILLES.
+        vider();
         ['un', 'deux', 'trois', 'quatre', 'cinq'].forEach(m => showToast(m));
         await attendre(60);
-        const beaucoup = [...document.querySelectorAll('.toast')].map(t => t.innerText);
-        document.querySelectorAll('.toast').forEach(t => t.remove());
-        return { memeMessage, beaucoup };
+        const beaucoup = { pastilles: document.querySelectorAll('.toast').length, texte: lire() };
+
+        // UNE PASTILLE FINIT TOUJOURS PAR PARTIR. Le même message répété
+        // relance son minuteur : sans plafond, une pastille se maintenait en
+        // vie tant que le message revenait, et restait au bas du tableau du
+        // début à la fin de la leçon.
+        vider();
+        const t0 = Date.now();
+        showToast('sans fin');
+        for (let k = 0; k < 8; k++) { await attendre(900); showToast('sans fin'); }
+        await attendre(400);
+        // Elle part, et le message suivant en rouvre une NEUVE : ce qu'on
+        // mesure, c'est que le compteur est reparti de bas — la pastille qui
+        // reste n'est pas celle du début, qui aurait affiché « ×9 ».
+        const c = document.querySelector('.toast-compte');
+        const t = document.querySelector('.toast');
+        const plafond = { compte: c ? c.textContent : '',
+                          age: t ? Date.now() - Number(t.dataset.ne || 0) : -1,
+                          vecu: Date.now() - t0 };
+        vider();
+        return { meme, alterne, beaucoup, plafond };
     });
-    r.egal('le même message trois fois de suite n\'en fait qu\'un', pastilles.memeMessage, 1);
-    r.egal('et il n\'en reste jamais plus de trois — les plus anciennes partent',
-        pastilles.beaucoup, ['trois', 'quatre', 'cinq']);
+    r.egal('le même message trois fois de suite n\'en fait qu\'un',
+        pastilles.meme.pastilles, 1);
+    r.egal('et il dit combien de fois, au lieu de se répéter',
+        pastilles.meme.compte, '×3');
+    r.verifie('une alternance ne passe plus : on regarde toute la pile, pas la dernière',
+        pastilles.alterne.pastilles === 2
+        && JSON.stringify(pastilles.alterne.comptes) === JSON.stringify(['×2', '×2']),
+        JSON.stringify(pastilles.alterne));
+    r.egal('et il n\'en reste jamais plus de deux — les plus anciennes partent',
+        pastilles.beaucoup, { pastilles: 2, texte: ['quatre', 'cinq'] });
+    r.verifie('une pastille entretenue par son propre message finit par partir',
+        pastilles.plafond.vecu > 7000 && pastilles.plafond.age >= 0
+        && pastilles.plafond.age < 6000 && pastilles.plafond.compte !== '×9',
+        JSON.stringify(pastilles.plafond));
 
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
