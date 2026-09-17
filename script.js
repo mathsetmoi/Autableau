@@ -17620,8 +17620,6 @@ function construireLesCouleursDuTexte(textToolbar) {
 // ===================================================
 // GESTION DE LA POLICE ET DE LA TAILLE (VIA BOUTONS)
 // ===================================================
-const fonts = ['sans-serif', 'serif', 'monospace', "'Comic Sans MS', cursive"];
-let currentFontIndex = 0;
 
 // Une sélection non vide dans la zone de saisie : police et taille ne doivent
 // alors changer QUE sur les mots surlignés, pas sur tout le bloc.
@@ -17968,25 +17966,43 @@ function changeFontSize(delta) {
     draw();
 }
 
-const btnFontCycle = document.getElementById('btn-font-cycle');
-if (btnFontCycle) {
-    btnFontCycle.addEventListener('click', () => {
-        currentFontIndex = (currentFontIndex + 1) % fonts.length;
-        const newFont = fonts[currentFontIndex];
-        btnFontCycle.style.fontFamily = newFont;
+// Chaque pastille s'écrit dans sa propre police : c'est tout ce qui la
+// présente. On n'y écrit donc pas la famille une seconde fois — elle est
+// dans « data-police », et le style en découle.
+function lesPastillesDePolice() {
+    return Array.from(document.querySelectorAll('#text-toolbar .tt-police'));
+}
 
-        // Sélection en cours : seule la portion surlignée change de police
-        if (selectionDansSaisie() && appliquerPoliceSelection(newFont)) return;
-
-        activeStyle.fontFamily = newFont;
-        if (editingTextId) {
-            const t = getObjectById('text', editingTextId);
-            if (t) t.fontFamily = newFont;
-        }
-        updateWysiwygPosition();
-        draw();
+function majLesPolices(police) {
+    const courante = police
+        || (editingTextId && getObjectById('text', editingTextId)?.fontFamily)
+        || activeStyle.fontFamily || 'sans-serif';
+    lesPastillesDePolice().forEach(b => {
+        b.style.fontFamily = b.dataset.police;
+        b.classList.toggle('active', b.dataset.police === courante);
     });
 }
+
+function choisirLaPolice(police) {
+    if (!police) return;
+
+    // Sélection en cours : seule la portion surlignée change de police
+    if (selectionDansSaisie() && appliquerPoliceSelection(police)) { majLesPolices(police); return; }
+
+    activeStyle.fontFamily = police;
+    if (editingTextId) {
+        const t = getObjectById('text', editingTextId);
+        if (t) t.fontFamily = police;
+    }
+    majLesPolices(police);
+    updateWysiwygPosition();
+    draw();
+}
+
+lesPastillesDePolice().forEach(b => {
+    b.addEventListener('click', () => choisirLaPolice(b.dataset.police));
+});
+majLesPolices();
 
 const btnSizeUp = document.getElementById('btn-size-up');
 const btnSizeDown = document.getElementById('btn-size-down');
@@ -18080,7 +18096,9 @@ function syncBadgesTexte() {
     // Et la pastille allumée dans le tiroir suit le curseur : on voit d'un
     // coup d'œil, sans ouvrir le nuancier, où l'on en est dans la palette.
     if (typeof majLesPastillesDuTexte === 'function') majLesPastillesDuTexte(couleur);
-    if (btnFontCycle) btnFontCycle.style.fontFamily = currentFont;
+    // La pastille allumée suit le curseur elle aussi : on voit la police du mot
+    // où l'on est, sans avoir à la deviner.
+    majLesPolices(currentFont);
 }
 
 // Rafraîchit les pastilles quand on surligne un mot à la souris ou au doigt
@@ -19057,6 +19075,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dock.appendChild(bar);
             }
         });
+        majLeQuai(false);
     }
 
     document.querySelectorAll('.toolbar').forEach(toolbar => {
@@ -19096,6 +19115,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     localStorage.setItem('minimized_' + toolbarId, 'true');
                     updateDockPositions();
+                    // Celle qui rétrécit sur place se voit toute seule ; les autres
+                    // traversent l'écran pour aller au quai, et le quai le dit.
+                    if (!surPlace) majLeQuai(true);
                 });
 
                 e.stopPropagation();
@@ -19114,6 +19136,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 toolbar.style.transform = toolbar.dataset.oldTransform || '';
 
                 localStorage.setItem('minimized_' + toolbarId, 'false');
+                majLeQuai(false);
                 e.stopPropagation();
             });
         }
@@ -20203,12 +20226,37 @@ function ensureFloatingDock() {
     return dock;
 }
 
+// LE QUAI NE S'AFFICHE QUE S'IL SERT. Vide, il montrait tout de même sa
+// poignée : un petit rectangle blanc en bas à gauche que rien n'expliquait,
+// et qui occupait le coin d'un tableau où l'on écrit. Il s'efface donc tant
+// que rien n'y est rangé. En contrepartie, ce qu'on y range doit se voir
+// arriver — une barre réduite en haut de l'écran réapparaît à l'autre bout,
+// et sans un signe on la croit évaporée : le quai bat trois fois.
+function occupantsDuQuai(dock) {
+    if (!dock) return 0;
+    return Array.from(dock.children).filter(
+        el => el.classList.contains('dock-item') || el.classList.contains('toolbar')).length;
+}
+
+function majLeQuai(signaler) {
+    const dock = document.getElementById('dock');
+    if (!dock) return 0;
+    const combien = occupantsDuQuai(dock);
+    dock.classList.toggle('quai-vide', combien === 0);
+    if (combien === 0) { dock.classList.remove('quai-signale'); return 0; }
+    if (signaler) {
+        dock.classList.remove('quai-signale');
+        void dock.offsetWidth;   // on rembobine l'animation, sinon le deuxième rangement ne clignote pas
+        dock.classList.add('quai-signale');
+    }
+    return combien;
+}
+
 function updateFloatingDockPositions() {
     // La flexbox du #dock gère déjà l'espacement et le placement via `gap: 8px` et `display: flex`.
     // Plus besoin de forcer les positions manuelles qui cassent l'alignement.
-    const dock = ensureFloatingDock();
-    // On garde la fonction au cas où d'autres parties du code l'appellent,
-    // mais on la vide des forçages css 'left' et 'top'.
+    ensureFloatingDock();
+    majLeQuai(false);
 }
 
 // Le dock d'en bas à gauche accueille tout ce qui est réduit. Il ne servait
@@ -20226,13 +20274,14 @@ function rangerDansLeDock(cle, titre, icone, auClic) {
     }
     item.title = titre || 'Rouvrir';
     item.innerHTML = '<span style="font-size:22px; line-height:1;">' + (icone || '🗂️') + '</span>';
-    dock.style.display = 'flex';
+    majLeQuai(true);
     return item;
 }
 
 function retirerDuDock(cle) {
     const item = document.querySelector('#dock .dock-item[data-fenetre="' + cle + '"]');
     if (item) item.remove();
+    majLeQuai(false);
 }
 window.rangerDansLeDock = rangerDansLeDock;
 window.retirerDuDock = retirerDuDock;
@@ -20298,6 +20347,7 @@ function minimizeFloatingToolbar(bar) {
     bar.classList.add('minimized');
     bar.style.display = 'none';
     dockFloatingToolbar(bar);
+    majLeQuai(true);
     persistFloatingToolbar(bar);
 }
 

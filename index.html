@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=162">
+    <link rel="stylesheet" href="style.css?v=163">
 </head>
 
 <body>
@@ -229,8 +229,20 @@
                 <span class="tt-val" id="text-lh-display">29</span>
                 <button class="btn" id="btn-lh-up">+</button>
             </div>
-            <div class="tt-row"><span class="tt-label">Police</span>
-                <button class="btn tt-wide" id="btn-font-cycle">Aa</button>
+            <!-- LES POLICES SE MONTRENT. Un seul bouton « Aa » faisait défiler
+                 les quatre à l'aveugle : rien ne disait qu'il y avait une
+                 chasse fixe — celle qui aligne les chiffres en colonnes d'une
+                 ligne à l'autre. Chaque police porte donc son nom, écrit dans
+                 sa propre lettre, et celle qui sert est marquée. La famille
+                 vit dans « data-police » et nulle part ailleurs : le script
+                 en habille le bouton au démarrage. -->
+            <div class="tt-row"><span class="tt-label">Police</span></div>
+            <div class="tt-polices">
+                <button class="btn tt-police" data-police="sans-serif">Bâton</button>
+                <button class="btn tt-police" data-police="serif">Livre</button>
+                <button class="btn tt-police" data-police="monospace"
+                    data-tooltip="Chasse fixe : les chiffres s'alignent d'une ligne à l'autre">Chasse fixe</button>
+                <button class="btn tt-police" data-police="'Comic Sans MS', cursive">Comic</button>
             </div>
         </div>
 
@@ -3415,7 +3427,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=283"></script>
+    <script src="script.js?v=284"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

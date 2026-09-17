@@ -280,7 +280,7 @@ module.exports = async function (browser) {
     });
     await page.click('#text-toolbar .tt-tab[data-panel="size"]');
     await page.waitForTimeout(150);
-    await page.click('#btn-font-cycle');
+    await page.click('#text-toolbar .tt-police[data-police="monospace"]');
     await page.waitForTimeout(100);
     for (let i = 0; i < 10; i++) { await page.click('#btn-size-up'); }
     await page.waitForTimeout(200);
@@ -308,8 +308,93 @@ module.exports = async function (browser) {
     const dernier = seg.segs[seg.segs.length - 1] || {};
     r.verifie('sélection : le bloc garde sa taille de base', seg.base === 24, `base ${seg.base}`);
     r.verifie('sélection : la portion grandit', premier.taille === 34, JSON.stringify(seg.segs));
-    r.verifie('sélection : la portion change de police', !!premier.police && premier.police !== 'sans-serif', JSON.stringify(seg.segs));
+    r.verifie('sélection : la portion prend la police demandée', premier.police === 'monospace', JSON.stringify(seg.segs));
     r.verifie('sélection : le reste du texte est intact', seg.segs.length > 1 && !dernier.taille, JSON.stringify(seg.segs));
+
+    // LES QUATRE POLICES SE MONTRENT. Un unique bouton « Aa » les faisait
+    // défiler à l'aveugle : rien ne disait qu'il y avait une chasse fixe,
+    // celle qui aligne les chiffres d'une ligne à l'autre. Et ce bouton
+    // « 100 % de large » posé dans une ligne à libellé débordait du tiroir
+    // de la largeur exacte du libellé.
+    await page.waitForTimeout(250);
+    await tableauVierge(page);
+    await page.evaluate(() => setMode('text'));
+    await page.mouse.click(320, 320);
+    await page.waitForTimeout(300);
+    await page.keyboard.type('12 345');
+    await page.waitForTimeout(150);
+    await page.click('#text-toolbar .tt-tab[data-panel="size"]');
+    await page.waitForTimeout(250);
+
+    const pastilles = await page.evaluate(() => {
+        const panneau = document.querySelector('#text-toolbar .tt-panel[data-panel="size"]');
+        const boite = panneau.getBoundingClientRect();
+        return Array.from(panneau.querySelectorAll('.tt-police')).map(b => {
+            const r = b.getBoundingClientRect();
+            return {
+                famille: b.dataset.police,
+                ecrite: getComputedStyle(b).fontFamily.replace(/"/g, "'"),
+                nom: b.innerText.trim(),
+                deborde: Math.round(r.right - boite.right)
+            };
+        });
+    });
+    r.egal('quatre polices sont proposées', pastilles.length, 4);
+    r.verifie('la chasse fixe en fait partie, et elle porte un nom',
+        pastilles.some(p => p.famille === 'monospace' && p.nom.length > 2), JSON.stringify(pastilles));
+    r.verifie('chacune est écrite dans sa propre lettre',
+        pastilles.length > 0 && pastilles.every(p => p.ecrite === p.famille), JSON.stringify(pastilles));
+    r.verifie('et aucune ne déborde du tiroir',
+        pastilles.length > 0 && pastilles.every(p => p.deborde <= 0), JSON.stringify(pastilles));
+
+    const etatDesPolices = () => page.evaluate(() => ({
+        marquees: Array.from(document.querySelectorAll('#text-toolbar .tt-police.active')).map(b => b.dataset.police),
+        style: activeStyle.fontFamily,
+        bloc: editingTextId ? (getObjectById('text', editingTextId) || {}).fontFamily : null
+    }));
+
+    await page.click('#text-toolbar .tt-police[data-police="serif"]');
+    await page.waitForTimeout(250);
+    const enSerif = await etatDesPolices();
+    r.egal('cliquer une police la marque, elle seule', enSerif.marquees.join('|'), 'serif');
+    r.egal('et c\'est elle qu\'on écrit', enSerif.style, 'serif');
+
+    await page.click('#text-toolbar .tt-police[data-police="monospace"]');
+    await page.waitForTimeout(250);
+    const enFixe = await etatDesPolices();
+    r.egal('en changer déplace la marque', enFixe.marquees.join('|'), 'monospace');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(350);
+    const poseEnFixe = await page.evaluate(() => (texts[0] || {}).fontFamily || null);
+    r.egal('et le texte posé garde la chasse fixe', poseEnFixe, 'monospace');
+
+    // Rouvrir un bloc déjà posé et lui changer sa police doit changer LE BLOC,
+    // et pas seulement ce que l'on tapera la prochaine fois.
+    const cible = await page.evaluate(() => {
+        setMode('pointer');
+        const t = texts[0];
+        return { x: (t._cachedStartX + t._cachedW / 2) * zoom + panX, y: (t.y + t._cachedH / 2) * zoom + panY };
+    });
+    await page.mouse.dblclick(cible.x, cible.y);
+    await page.waitForTimeout(400);
+    await page.mouse.click(cible.x, cible.y);      // un clic simple repose le curseur : plus rien de surligné
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+        const tab = document.querySelector('#text-toolbar .tt-tab[data-panel="size"]');
+        const pan = document.querySelector('#text-toolbar .tt-panel[data-panel="size"]');
+        if (tab && pan && getComputedStyle(pan).display === 'none') tab.click();
+    });
+    await page.waitForTimeout(200);
+    await page.click('#text-toolbar .tt-police[data-police="serif"]');
+    await page.waitForTimeout(250);
+    const reedite = await page.evaluate(() => ({
+        edite: !!editingTextId,
+        bloc: editingTextId ? (getObjectById('text', editingTextId) || {}).fontFamily : null
+    }));
+    r.verifie('on rouvre le bloc déjà posé', reedite.edite, JSON.stringify(reedite));
+    r.egal('en changer la police change le bloc lui-même', reedite.bloc, 'serif');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(350);
 
     // Changer la taille d'un mot ne doit pas effacer les couleurs déjà posées
     // ailleurs, ni déteindre sur le reste du bloc.

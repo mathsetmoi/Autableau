@@ -1256,6 +1256,37 @@ html {
     transition: transform 0.4s, opacity 0.3s;
 }
 
+/* Le quai vide n'a rien à dire : il ne laissait qu'une poignée dans le coin
+   du tableau, un rectangle blanc sans objet. Il s'efface. */
+#dock.quai-vide {
+    display: none;
+}
+
+/* Mais ce qui s'y range doit se voir arriver : trois battements, puis il se
+   tait. Le cadre suffit — on ne déplace rien, la barre ne saute pas. */
+@keyframes quai-clignote {
+
+    0%,
+    100% {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, .08);
+    }
+
+    50% {
+        box-shadow: 0 0 0 5px rgba(108, 92, 231, .45), 0 8px 24px rgba(0, 0, 0, .08);
+    }
+}
+
+#dock.quai-signale {
+    animation: quai-clignote 0.55s ease-in-out 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #dock.quai-signale {
+        animation: none;
+        box-shadow: 0 0 0 5px rgba(108, 92, 231, .45), 0 8px 24px rgba(0, 0, 0, .08);
+    }
+}
+
 .dock-item {
     width: 44px;
     height: 44px;
@@ -6064,6 +6095,13 @@ dark-mode .title-btn:hover {
     padding: 8px;
     gap: 6px;
     flex-direction: column;
+    /* SA LARGEUR EST LA SIENNE, PAS CELLE QUE LA BARRE LUI LAISSE. Posé en
+       « left: 0 » dans une barre plus étroite que lui, un tiroir se rétrécit
+       à la place qui reste — et le code qui le centre sous son bouton le
+       mesurait ainsi, puis le déplaçait : il se rouvrait alors à sa vraie
+       largeur, et pendait de travers. Le tiroir des symboles l'a subi en
+       silence ; celui des polices l'a rendu visible. */
+    width: max-content;
     max-width: min(320px, calc(100vw - 24px));
     z-index: 2;
 }
@@ -6114,6 +6152,25 @@ dark-mode .title-btn:hover {
     font-weight: bold;
     min-width: 30px;
     text-align: center;
+}
+
+/* Les quatre polices : deux colonnes sous leur titre, chacune écrite dans sa
+   propre lettre. Elles étaient auparavant un unique bouton « 100 % de large »
+   posé dans une ligne — les 100 % se comptaient sur la ligne entière, libellé
+   compris, et le bouton débordait du tiroir de la largeur du libellé. */
+#text-toolbar .tt-polices {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+#text-toolbar .tt-panel .btn.tt-police {
+    width: 100%;
+    min-width: 0;
+    font-size: 14px;
+    padding: 0 6px;
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 /* Tiroir des symboles : deux grilles serrées, assez larges pour le doigt */

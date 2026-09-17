@@ -331,19 +331,34 @@ module.exports = async function (browser) {
 
     // --- RÉDUIRE L'EXPLORATEUR : IL VA DANS LE DOCK ---
     const reduction = await page.evaluate(async () => {
+        const quai = () => document.getElementById('dock');
+        const quaiSeVoit = () => { const d = quai(); return !!d && getComputedStyle(d).display !== 'none'; };
+        const occupants = () => {
+            const d = quai();
+            if (!d) return 0;
+            return Array.from(d.children).filter(
+                el => el.classList.contains('dock-item') || el.classList.contains('toolbar')).length;
+        };
         await ouvrirExplorateur();
         await new Promise(r => setTimeout(r, 300));
         const f = () => document.getElementById('explorateur');
         const ouvert = getComputedStyle(f()).display;
+        const avant = { quai: quaiSeVoit(), dedans: occupants() };
         document.getElementById('exp-reduire').click();
         await new Promise(r => setTimeout(r, 200));
         const icone = document.querySelector('#dock .dock-item[data-fenetre="explorateur"]');
-        const reduit = { fenetre: getComputedStyle(f()).display, icone: !!icone };
+        const reduit = {
+            fenetre: getComputedStyle(f()).display, icone: !!icone,
+            quai: quaiSeVoit(),
+            clignote: !!quai() && quai().classList.contains('quai-signale'),
+            battements: quai() ? quai().getAnimations().length : 0
+        };
         if (icone) icone.click();
         await new Promise(r => setTimeout(r, 350));
         const rouvert = {
             fenetre: getComputedStyle(f()).display,
-            icone: !!document.querySelector('#dock .dock-item[data-fenetre="explorateur"]')
+            icone: !!document.querySelector('#dock .dock-item[data-fenetre="explorateur"]'),
+            quai: quaiSeVoit(), dedans: occupants()
         };
         // Fermer ne doit pas laisser d'icône derrière soi
         document.getElementById('exp-reduire').click();
@@ -353,7 +368,7 @@ module.exports = async function (browser) {
         document.getElementById('exp-fermer').click();
         await new Promise(r => setTimeout(r, 150));
         const apresFermeture = !!document.querySelector('#dock .dock-item[data-fenetre="explorateur"]');
-        return { ouvert, reduit, rouvert, apresFermeture };
+        return { ouvert, avant, reduit, rouvert, apresFermeture, quaiFinal: quaiSeVoit() };
     });
     r.egal('la fenêtre s\'ouvre', reduction.ouvert, 'flex');
     r.egal('réduire la range : la fenêtre disparaît', reduction.reduit.fenetre, 'none');
@@ -361,6 +376,87 @@ module.exports = async function (browser) {
     r.egal('cliquer l\'icône la rouvre', reduction.rouvert.fenetre, 'flex');
     r.verifie('et l\'icône disparaît du dock', !reduction.rouvert.icone, JSON.stringify(reduction));
     r.verifie('fermer ne laisse pas d\'icône derrière soi', !reduction.apresFermeture, JSON.stringify(reduction));
+
+    // LE QUAI VIDE NE SE MONTRE PAS. Il ne restait qu'une poignée dans le coin
+    // en bas à gauche, sans rien dedans ; et quand on y range quelque chose, il
+    // faut que ça se voie partir, sinon la fenêtre semble s'être évaporée.
+    r.verifie('rien n\'est rangé : le quai ne se voit pas',
+        reduction.avant.dedans === 0 && !reduction.avant.quai, JSON.stringify(reduction.avant));
+    r.verifie('on y range : le quai apparaît', reduction.reduit.quai, JSON.stringify(reduction.reduit));
+    r.verifie('et il clignote pour le dire',
+        reduction.reduit.clignote && reduction.reduit.battements > 0, JSON.stringify(reduction.reduit));
+    r.verifie('on reprend : le quai se referme',
+        reduction.rouvert.dedans === 0 && !reduction.rouvert.quai, JSON.stringify(reduction.rouvert));
+    r.verifie('et il reste caché après la fermeture', !reduction.quaiFinal, JSON.stringify(reduction));
+
+    // ET IL LE REDIT. Le deuxième rangement doit battre comme le premier : la
+    // classe étant déjà posée, rien ne repart si l'on ne rembobine pas.
+    const deuxFois = await page.evaluate(async () => {
+        const quai = () => document.getElementById('dock');
+        rangerDansLeDock('essai-un', 'Un', '1', () => { });
+        await new Promise(r => setTimeout(r, 2200));   // le premier battement s'achève
+        const auRepos = quai().getAnimations().length;
+        rangerDansLeDock('essai-deux', 'Deux', '2', () => { });
+        await new Promise(r => setTimeout(r, 120));
+        const rejoue = quai().getAnimations().length;
+        retirerDuDock('essai-un');
+        retirerDuDock('essai-deux');
+        await new Promise(r => setTimeout(r, 120));
+        return { auRepos, rejoue, ferme: getComputedStyle(quai()).display };
+    });
+    r.egal('le battement s\'achève et le quai se tait', deuxFois.auRepos, 0);
+    r.verifie('le rangement suivant le relance', deuxFois.rejoue > 0, JSON.stringify(deuxFois));
+    r.egal('vidé, le quai se referme', deuxFois.ferme, 'none');
+
+    // Une barre réduite par son bouton « − » traverse l'écran pour s'amarrer au
+    // quai. C'est le cas où l'on perd le plus facilement ce qu'on vient de
+    // ranger : le quai doit s'ouvrir ET battre.
+    const barreRangee = await page.evaluate(async () => {
+        const quai = () => document.getElementById('dock');
+        const barre = document.getElementById('bar-tools');
+        barre.querySelector('.btn-minimize').click();
+        await new Promise(r => setTimeout(r, 350));
+        const etat = {
+            amarree: barre.parentNode === quai(),
+            vu: getComputedStyle(quai()).display !== 'none',
+            battements: quai().getAnimations().length
+        };
+        barre.querySelector('.toolbar-badge').click();
+        await new Promise(r => setTimeout(r, 350));
+        etat.apres = getComputedStyle(quai()).display;
+        return etat;
+    });
+    r.verifie('réduire une barre l\'amarre au quai', barreRangee.amarree, JSON.stringify(barreRangee));
+    r.verifie('le quai s\'ouvre et bat pour le dire',
+        barreRangee.vu && barreRangee.battements > 0, JSON.stringify(barreRangee));
+    r.egal('la reprendre le referme', barreRangee.apres, 'none');
+
+    // La barre de style, elle, rétrécit SUR PLACE : elle ne va pas au quai, et
+    // le quai n'a donc rien à annoncer — même s'il est déjà ouvert par ailleurs.
+    const surPlace = await page.evaluate(async () => {
+        const quai = () => document.getElementById('dock');
+        rangerDansLeDock('essai-trois', 'Trois', '3', () => { });
+        await new Promise(r => setTimeout(r, 2200));   // on laisse le quai se taire
+        const auRepos = quai().getAnimations().length;
+        const style = document.getElementById('bar-style');
+        style.querySelector('.btn-minimize').click();
+        await new Promise(r => setTimeout(r, 400));
+        const etat = {
+            auRepos,
+            surPlace: style.classList.contains('sur-place'),
+            auQuai: style.parentNode === quai(),
+            battements: quai().getAnimations().length
+        };
+        style.querySelector('.toolbar-badge').click();
+        await new Promise(r => setTimeout(r, 250));
+        retirerDuDock('essai-trois');
+        await new Promise(r => setTimeout(r, 150));
+        return etat;
+    });
+    r.egal('le quai s\'était tu', surPlace.auRepos, 0);
+    r.verifie('la barre de style rétrécit sur place, sans passer par le quai',
+        surPlace.surPlace && !surPlace.auQuai, JSON.stringify(surPlace));
+    r.egal('et le quai ne bat pas pour elle', surPlace.battements, 0);
 
     // --- PARCOURIR SON ORDINATEUR DANS LA FENÊTRE ---
     const ordi = await page.evaluate(async () => {
