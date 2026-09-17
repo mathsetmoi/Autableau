@@ -9520,6 +9520,36 @@ body.en-lecture #board { outline: 3px solid rgba(108, 92, 231, 0.55); outline-of
 
 #classe-pastille:hover { border-color: var(--accent, #6c5ce7); color: var(--accent, #6c5ce7); }
 #classe-pastille .cp-ico { font-size: 14px; }
+
+/* UNE ICÔNE, ET LE NOM AU SURVOL.
+   « Pour les classes, je préférerais qu'une icône, et quand on passe dessus on
+   peut avoir la classe qui s'affiche. » Le nom est écrit en toutes lettres au
+   bord haut du tableau, à côté du titre et de l'horloge, alors qu'on ne le lit
+   qu'en changeant de classe. Il passe dans l'infobulle — qui s'ouvre au survol
+   ET AU DOIGT, ce qu'un tableau tactile exige — et la pastille redevient un
+   bouton rond de la taille de ses voisins. */
+#classe-pastille {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+#classe-pastille .cp-nom,
+#classe-pastille .cp-chevron { display: none; }
+
+#classe-pastille .cp-ico { font-size: 16px; line-height: 1; }
+
+/* ON VOIT D'UN COUP D'ŒIL QU'UNE CLASSE EST CHOISIE, sans avoir à survoler :
+   c'est ce que le nom disait, et qu'il ne faut pas perdre en le rangeant. Le
+   contour prend la couleur d'accent quand il y en a une, et reste discret
+   quand il n'y en a pas — « vide » est posé par « majPastilleDeClasse ». */
+#classe-pastille:not(.vide) {
+    border-color: var(--accent, #6c5ce7);
+    box-shadow: 0 0 0 1px var(--accent, #6c5ce7) inset, 0 2px 6px rgba(0, 0, 0, 0.08);
+}
 /* Un nom de classe peut être long (« 4A — groupe 2 ») : il se coupe plutôt
    que de pousser la pastille sous le tiroir des plugins. */
 #classe-pastille .cp-nom { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -449,6 +449,72 @@ module.exports = async function (browser) {
         coin.cote <= 26 && coin.hauteur <= 26, JSON.stringify(coin));
     r.egal('sans passer par-dessus l\'horloge', coin.surLHorloge, false);
 
+    // ==================================================================
+    // REPLIÉE, LA BARRE SE DÉPLACE ENCORE
+    //
+    // « Quand on minimise la barre de style, on a une icône qu'on ne peut pas
+    // bouger. » La poignée est cachée avec tout le reste de la barre, et
+    // c'était elle qui portait le déplacement : la pastille restait plantée
+    // là où la barre se trouvait, souvent en travers de ce qu'on voulait
+    // montrer. C'est la pastille elle-même qui devient la poignée.
+    //
+    // DEUX CHOSES À TENIR ENSEMBLE, et c'est tout le sujet : elle doit se
+    // déplacer ET garder son clic. Un seuil les sépare — en deçà de quelques
+    // pixels, c'est un clic qui a tremblé, pas un déplacement.
+    //
+    // ON DONNE D'ABORD À LA BARRE DE QUOI VIVRE : sans sélection elle est
+    // éteinte et hors d'atteinte, et l'on mesurerait son absence.
+    const replie = await page.evaluate(async () => {
+        setMode('text');
+        texts.push({ id: nextId++, x: 100, y: 200, content: 'essai', fontSize: 24,
+                     color: '#2d3436', z: globalZ++ });
+        selectedItems = [{ type: 'text', id: texts[texts.length - 1].id }];
+        updateStyleBarContext(); draw();
+        await new Promise(ok => setTimeout(ok, 400));
+        const t = document.getElementById('bar-style');
+        t.querySelector('.btn-minimize').click();
+        await new Promise(ok => setTimeout(ok, 700));
+        const r = t.getBoundingClientRect();
+        return { minimisee: t.classList.contains('minimized'),
+                 x: Math.round(r.x), y: Math.round(r.y),
+                 badge: !!t.querySelector('.toolbar-badge') };
+    });
+    r.verifie('la barre de style se replie en une pastille',
+        replie.minimisee && replie.badge, JSON.stringify(replie));
+
+    const ou = await page.evaluate(() => {
+        const r = document.querySelector('#bar-style .toolbar-badge').getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    await page.mouse.move(ou.x, ou.y);
+    await page.mouse.down();
+    await page.mouse.move(ou.x + 160, ou.y + 120, { steps: 12 });
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    const bougee = await page.evaluate(() => {
+        const t = document.getElementById('bar-style'); const r = t.getBoundingClientRect();
+        return { x: Math.round(r.x), y: Math.round(r.y),
+                 toujoursRepliee: t.classList.contains('minimized') };
+    });
+    r.verifie('on la déplace en la saisissant par la pastille',
+        Math.abs((bougee.x - replie.x) - 160) <= 4 && Math.abs((bougee.y - replie.y) - 120) <= 4,
+        JSON.stringify({ avant: [replie.x, replie.y], apres: [bougee.x, bougee.y] }));
+    // LA POSER NE LA ROUVRE PAS : sans cela, on ne pouvait pas la déplacer du
+    // tout — elle se dépliait à l'arrivée.
+    r.verifie('et la poser ne la déplie pas', bougee.toujoursRepliee, JSON.stringify(bougee));
+
+    const ou2 = await page.evaluate(() => {
+        const r = document.querySelector('#bar-style .toolbar-badge').getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    await page.mouse.click(ou2.x, ou2.y);
+    await page.waitForTimeout(700);
+    r.verifie('un clic franc, lui, la rouvre comme avant',
+        await page.evaluate(() => !document.getElementById('bar-style').classList.contains('minimized')), '');
+    await page.evaluate(() => {
+        texts.length = 0; selectedItems = []; updateStyleBarContext(); draw();
+    });
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

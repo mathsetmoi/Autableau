@@ -6049,6 +6049,67 @@ document.querySelectorAll('.toolbar').forEach(bar => {
         window.addEventListener('mousemove', (e) => { if (isDraggingBar) { bar.dataset.dragged = 'true'; bar.style.left = (e.clientX - startX) + 'px'; bar.style.top = (e.clientY - startY) + 'px'; } });
         window.addEventListener('mouseup', () => isDraggingBar = false);
     }
+
+    // REPLIÉE, ELLE SE DÉPLACE AUSSI.
+    //
+    // « Quand on minimise la barre de style, on a une icône qu'on ne peut pas
+    // bouger. » La poignée est cachée avec tout le reste — « .minimized > *:
+    // not(.toolbar-badge) » — et c'est elle qui portait le déplacement : la
+    // pastille restait donc plantée là où la barre se trouvait, souvent en
+    // travers de ce qu'on voulait montrer.
+    //
+    // C'est la pastille elle-même qui devient la poignée. Elle garde son clic :
+    // on ne lui retire la main que si le doigt a VRAIMENT parcouru quelque
+    // chose — en deçà de quatre pixels, c'est un clic qui a tremblé, pas un
+    // déplacement, et il doit rouvrir la barre comme avant.
+    //
+    // AU POINTEUR ET NON À LA SOURIS : le reste de ce bloc ne connaît que la
+    // souris, ce qui suffisait tant qu'on déplaçait par une poignée large.
+    // Une pastille de quarante pixels sur un tableau tactile se déplace au
+    // doigt, ou ne se déplace pas.
+    const pastille = bar.querySelector('.toolbar-badge');
+    if (pastille) {
+        let prise = null;
+        pastille.addEventListener('pointerdown', (e) => {
+            if (!bar.classList.contains('minimized')) return;
+            const r = bar.getBoundingClientRect();
+            prise = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, bouge: false };
+            pastille.setPointerCapture(e.pointerId);
+        });
+        pastille.addEventListener('pointermove', (e) => {
+            if (!prise) return;
+            if (!prise.bouge && Math.hypot(e.clientX - prise.x, e.clientY - prise.y) < 4) return;
+            if (!prise.bouge) { prise.bouge = true; bar.dataset.dragged = 'true'; }
+            // ON DÉPLACE PAR « --reduite-x/y », ET NON PAR « left/top ».
+            // Repliée, la barre est posée par la feuille de style avec un
+            // « !important » qui bat un style en ligne ordinaire : écrire
+            // « left » dessus ne faisait rien du tout. Ces deux variables sont
+            // le mécanisme déjà prévu pour la placer — c'est par là qu'il faut
+            // passer, et c'est ce qui la fait revenir au même endroit à la
+            // séance suivante.
+            const x = Math.max(6, Math.min(window.innerWidth - 54, e.clientX - prise.dx));
+            const y = Math.max(6, Math.min(window.innerHeight - 54, e.clientY - prise.dy));
+            bar.style.setProperty('--reduite-x', Math.round(x) + 'px');
+            bar.style.setProperty('--reduite-y', Math.round(y) + 'px');
+        });
+        const lacher = (e) => {
+            if (!prise) return;
+            const aBouge = prise.bouge;
+            prise = null;
+            try { pastille.releasePointerCapture(e.pointerId); } catch (err) { /* déjà relâché */ }
+            // Un déplacement ne rouvre pas la barre : sans cela, la poser
+            // quelque part la dépliait aussitôt.
+            if (aBouge) { bar.dataset.vientDeBouger = '1'; e.preventDefault(); e.stopPropagation(); }
+        };
+        pastille.addEventListener('pointerup', lacher);
+        pastille.addEventListener('pointercancel', lacher);
+        // Le clic ne passe QUE s'il n'y a pas eu de déplacement : « pointerup »
+        // s'arrête avant le clic, mais l'ordre n'est garanti que si l'on
+        // regarde ici aussi.
+        pastille.addEventListener('click', (e) => {
+            if (bar.dataset.vientDeBouger === '1') { delete bar.dataset.vientDeBouger; e.stopPropagation(); }
+        }, true);
+    }
 });
 
 // --- RESTYLAGE DES TAMPONS DE PLUGINS DEPUIS LA BARRE DE STYLE ---

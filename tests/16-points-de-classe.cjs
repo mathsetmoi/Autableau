@@ -2798,6 +2798,61 @@ module.exports = async function (browser) {
     r.verifie('aucune erreur JS en changeant de classe', errJour.length === 0, errJour.join(' | '));
     await ctxJour.close();
 
+    // ==================================================================
+    // LA PASTILLE DE CLASSE : UNE ICÔNE, ET LE NOM AU SURVOL
+    //
+    // « Pour les classes, je préférerais qu'une icône, et quand on passe
+    // dessus on peut avoir la classe qui s'affiche. » Le nom était écrit en
+    // toutes lettres au bord haut du tableau, à côté du titre et de l'horloge,
+    // alors qu'on ne le lit qu'en changeant de classe.
+    //
+    // CE QU'ON NE VEUT PAS PERDRE EN LE RANGEANT : savoir d'un coup d'œil
+    // qu'une classe est choisie. C'est le contour qui le dit maintenant, et
+    // c'est donc cela qu'on éprouve — sans quoi « ranger » voudrait dire
+    // « effacer ».
+    // ==================================================================
+    const laPastille = await page.evaluate(async () => {
+        await majPastilleDeClasse();
+        await new Promise(ok => setTimeout(ok, 150));
+        const p = document.getElementById('classe-pastille');
+        const r = p.getBoundingClientRect();
+        const cache = (sel) => {
+            const e = p.querySelector(sel);
+            return !e || getComputedStyle(e).display === 'none';
+        };
+        return {
+            ronde: Math.round(r.width) <= 36 && Math.abs(r.width - r.height) <= 2,
+            large: Math.round(r.width),
+            nomCache: cache('.cp-nom'), chevronCache: cache('.cp-chevron'),
+            icone: !cache('.cp-ico'),
+            // Le nom vit dans l'infobulle — celle de la maison, qui s'ouvre
+            // aussi au doigt, ce qu'un tableau tactile exige.
+            bulle: p.getAttribute('data-tooltip') || '',
+            vide: p.classList.contains('vide')
+        };
+    });
+    r.verifie('la pastille est devenue une icône ronde',
+        laPastille.ronde && laPastille.icone, JSON.stringify(laPastille));
+    r.verifie('le nom et le chevron n\'occupent plus le bord du tableau',
+        laPastille.nomCache && laPastille.chevronCache, JSON.stringify(laPastille));
+    r.verifie('et le nom se lit dans l\'infobulle, qui s\'ouvre aussi au doigt',
+        /classe/i.test(laPastille.bulle), laPastille.bulle);
+    // AVEC ET SANS CLASSE : le contour doit distinguer les deux, sinon on ne
+    // sait plus si l'on en a choisi une.
+    const contour = await page.evaluate(async () => {
+        const p = document.getElementById('classe-pastille');
+        const lu = () => getComputedStyle(p).borderTopColor;
+        p.classList.add('vide');
+        await new Promise(ok => setTimeout(ok, 60));
+        const sans = lu();
+        p.classList.remove('vide');
+        await new Promise(ok => setTimeout(ok, 60));
+        const avec = lu();
+        return { sans, avec };
+    });
+    r.verifie('une classe choisie se voit sans survoler : le contour change',
+        contour.sans !== contour.avec, JSON.stringify(contour));
+
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();
