@@ -368,6 +368,11 @@ let isDrawingPostit = false; let postitBox = { startX: 0, startY: 0, endX: 0, en
 // L'ellipse libre se trace à la boîte, comme le post-it et le zoom : un coin,
 // on tire, on lâche.
 let isDrawingEllipse = false; let boiteEllipse = null;
+// LE TEXTE AUSSI SE TRACE À LA BOÎTE — « un simple clic on pose le curseur, et
+// un clic sans relâcher puis relâcher on fait une zone de texte ». On ne sait
+// lequel des deux c'est qu'AU RELÂCHEMENT : on retient donc le départ, et l'on
+// tranche à la fin sur la distance parcourue.
+let boiteTexte = null;
 let isPanningView = false; let isSpacePressed = false;
 let isDraggingObjs = false; let draggedHandle = null;
 let lastMouseX = 0, lastMouseY = 0; let lastRawX = 0, lastRawY = 0;
@@ -7665,6 +7670,7 @@ function setMode(newMode) {
 
     creationStartPointId = null; currentCurvePoints = []; currentPolygonPoints = []; wysiwygText.style.display = 'none'; editingTextId = null; if (typeof oublierSelectionSaisie === 'function') oublierSelectionSaisie();
     isDrawingEllipse = false; boiteEllipse = null;   // une boîte en cours ne survit pas au changement d'outil
+    boiteTexte = null;
     clearSelection();
 
     if (['point', 'segment', 'droite', 'demi-droite', 'circle', 'rectangle', 'text', 'freehand', 'highlighter', 'curve', 'polygon', 'postit'].includes(mode) || (typeof activeWidgets !== 'undefined' && activeWidgets['compass'])) {
@@ -10097,15 +10103,24 @@ canvas.addEventListener('pointerdown', (e) => {
 
     else if (mode === 'text') {
         if (!clickedObj || clickedObj.type !== 'text') {
-            // Le clic est un curseur de texte : la première ligne l'enfourche,
-            // elle ne pend pas dessous. On vise donc le MILIEU de la ligne, et
-            // non son sommet — sinon le cadre s'ouvre nettement plus bas que
-            // l'endroit qu'on a désigné.
-            // UNE ZONE À REMPLIR sous le clic : le bloc s'y pose, à sa taille.
-            // C'est tout l'intérêt — on ne vise plus au pixel, et le texte ne
-            // dépasse pas de la ligne qu'on remplit.
-            const vise = (typeof zoneViseeDetail === 'function') ? zoneViseeDetail(rawPos) : null;
-            ouvrirLaSaisie(vise, actionPos);
+            // ON NE SAIT PAS ENCORE SI C'EST UN CLIC OU UNE BOÎTE.
+            //
+            // « Un simple clic on pose le curseur, et un clic sans relâcher puis
+            // relâcher on fait une zone de texte. » Les deux commencent par le
+            // même appui : impossible de trancher ici. On retient donc le départ
+            // et l'on ouvre la saisie AU RELÂCHEMENT, quand la distance
+            // parcourue a répondu. Le curseur paraîtra quelques millisecondes
+            // plus tard qu'avant — le temps d'un clic, c'est-à-dire rien.
+            //
+            // LA ZONE VISÉE EST RELEVÉE MAINTENANT, à l'endroit de l'appui :
+            // c'est là qu'on a désigné le trou à remplir, et non là où le doigt
+            // s'arrête.
+            boiteTexte = {
+                x0: rawPos.x, y0: rawPos.y, x1: rawPos.x, y1: rawPos.y,
+                ecranX: e.clientX, ecranY: e.clientY,
+                pos: actionPos,
+                vise: (typeof zoneViseeDetail === 'function') ? zoneViseeDetail(rawPos) : null
+            };
         } else {
             // ON REPREND LA LIGNE LÀ OÙ ELLE EN ÉTAIT. L'outil Texte en main,
             // le clic est un curseur : cliquer sur une ligne déjà écrite doit
@@ -10128,7 +10143,13 @@ canvas.addEventListener('pointerdown', (e) => {
 // OUVRIR LE BLOC DE SAISIE, dans une zone à remplir ou à l'endroit désigné.
 // Deux chemins y mènent — le clic, et la tabulation qui va d'un trou au
 // suivant — et ils doivent poser le texte exactement pareil.
-function ouvrirLaSaisie(vise, pos) {
+// En pixels d'écran : en deçà, l'appui est un clic et non une boîte. Le même
+// seuil que les figures à deux clics — la main qui tient une craie ne tient
+// jamais un point parfaitement immobile.
+const SEUIL_ZONE_TEXTE = 5;
+
+// `cadre` : { largeur } quand on a dessiné une colonne plutôt que cliqué.
+function ouvrirLaSaisie(vise, pos, cadre) {
     const zone = vise ? vise.b : null;
     if (zone) {
         // PAR « reglerTailleTexte » ET NON A LA MAIN : poser la taille
@@ -10140,9 +10161,17 @@ function ouvrirLaSaisie(vise, pos) {
         else { activeStyle.fontSize = t; activeStyle.lineHeight = Math.round(t * 1.2); }
     }
     const interligne = activeStyle.lineHeight || Math.round(activeStyle.fontSize * 1.2);
+    // UNE BOÎTE DESSINÉE COMMENCE À SON COIN, et non au milieu d'une ligne : on
+    // a montré où le texte doit tenir, le haut du cadre est le haut de la
+    // première ligne. Un clic, lui, reste un curseur que la ligne enfourche.
     tempTextLogicalPos = zone
         ? { x: zone.x + Math.max(2, zone.h * 0.12), y: zone.y + zone.h / 2 - interligne / 2 }
-        : { x: pos.x, y: pos.y - interligne / 2 };
+        : (cadre ? { x: pos.x, y: pos.y } : { x: pos.x, y: pos.y - interligne / 2 });
+    // La colonne est posée AVANT que le champ ne s'ouvre : « updateWysiwygPosition »
+    // la lit, et le repli automatique se tait dès qu'il en trouve une — c'est
+    // écrit dans « autoWrapWhileTyping », et c'est ce qui fait qu'une largeur
+    // choisie à la main n'est jamais reprise par la machine.
+    if (cadre && cadre.largeur > 0) tempTextLogicalPos.colWidth = cadre.largeur;
     // D'où l'on vient : c'est ce qui permet d'aller au trou suivant sans
     // relever la main du clavier.
     if (vise) { tempTextLogicalPos.zoneDoc = vise.obj.id; tempTextLogicalPos.zoneRang = vise.i; }
@@ -10490,7 +10519,7 @@ canvas.addEventListener('pointermove', (e) => {
         requestAnimationFrame(draw); return;
     }
 
-    if (e.buttons === 0 && !activePointers.has(e.pointerId)) { libererLeCalque(); isPanningView = false; isDraggingObjs = false; isDrawingFreehand = false; isSelectingBox = false; isDrawingEllipse = false; boiteEllipse = null; draggedHandle = null; textResizeHint = null; activeGuides = { x: [], y: [] }; }
+    if (e.buttons === 0 && !activePointers.has(e.pointerId)) { libererLeCalque(); isPanningView = false; isDraggingObjs = false; isDrawingFreehand = false; isSelectingBox = false; isDrawingEllipse = false; boiteEllipse = null; boiteTexte = null; draggedHandle = null; textResizeHint = null; activeGuides = { x: [], y: [] }; }
 
     if (mode === 'laser' && currentLaserStroke) {
         // Lissage du tracé : on suit le pointeur avec un filtre passe-bas
@@ -10554,6 +10583,7 @@ canvas.addEventListener('pointermove', (e) => {
     if (isZoomBoxing) { zoomBox.endX = rawPos.x; zoomBox.endY = rawPos.y; requestAnimationFrame(draw); return; }
     if (isDrawingPostit && postitBox) { postitBox.endX = rawPos.x; postitBox.endY = rawPos.y; requestAnimationFrame(draw); return; }
     if (isDrawingEllipse && boiteEllipse) { boiteEllipse.endX = rawPos.x; boiteEllipse.endY = rawPos.y; requestAnimationFrame(draw); return; }
+    if (boiteTexte) { boiteTexte.x1 = rawPos.x; boiteTexte.y1 = rawPos.y; requestAnimationFrame(draw); return; }
 
     hoveredObj = findObjectAt(rawPos.x, rawPos.y);
 
@@ -11075,6 +11105,32 @@ function handlePointerUp(e) {
         }
         setMode('pointer');
         draw(); return;
+    }
+
+    // LE CLIC, OU LA BOÎTE : c'est ici qu'on tranche.
+    //
+    // Sous le seuil, rien n'a bougé : c'est un curseur, et l'on retrouve le
+    // comportement d'avant — y compris le trou à remplir qu'on visait. Au-delà,
+    // on a dessiné une colonne : le bloc naît avec sa largeur, et le texte y
+    // revient à la ligne tout seul.
+    //
+    // LA HAUTEUR TIRÉE NE FAIT RIEN, ET C'EST VOULU. Un bloc de texte grandit
+    // avec ce qu'on y écrit ; lui imposer une hauteur obligerait à cacher ce qui
+    // dépasse, ou à rapetisser les lettres — deux façons de perdre un mot sans
+    // le dire. La boîte donne donc l'endroit et la LARGEUR ; la hauteur, c'est
+    // le texte qui la décide.
+    if (boiteTexte) {
+        const b = boiteTexte; boiteTexte = null;
+        const parcouru = Math.hypot(e.clientX - b.ecranX, e.clientY - b.ecranY);
+        const largeur = Math.abs(b.x1 - b.x0);
+        if (parcouru > SEUIL_ZONE_TEXTE && largeur * zoom > SEUIL_ZONE_TEXTE) {
+            ouvrirLaSaisie(null, { x: Math.min(b.x0, b.x1), y: Math.min(b.y0, b.y1) },
+                { largeur: Math.round(largeur) });
+        } else {
+            ouvrirLaSaisie(b.vise, b.pos);
+        }
+        draw();
+        return;
     }
 
     if (isDrawingEllipse) {
@@ -12679,6 +12735,31 @@ function draw() {
             ctx.fillRect(postitBox.startX, postitBox.startY, w, h);
             ctx.strokeRect(postitBox.startX, postitBox.startY, w, h);
             ctx.setLineDash([]);
+        }
+
+        // LA COLONNE QU'ON TRACE. Tant qu'on n'a pas dépassé le seuil, on ne
+        // montre rien : un cadre qui clignote sous chaque clic ferait croire
+        // qu'on a raté son geste. Les deux traits verticaux disent ce qui
+        // compte — la largeur —, et le trait du haut où la première ligne se
+        // posera. La hauteur, elle, appartient au texte : on ne la promet pas.
+        if (boiteTexte && !isExportingTransparent) {
+            const dx = Math.abs(boiteTexte.x1 - boiteTexte.x0) * zoom;
+            if (dx > SEUIL_ZONE_TEXTE) {
+                const x1 = Math.min(boiteTexte.x0, boiteTexte.x1);
+                const x2 = Math.max(boiteTexte.x0, boiteTexte.x1);
+                const y1 = Math.min(boiteTexte.y0, boiteTexte.y1);
+                const y2 = Math.max(boiteTexte.y0, boiteTexte.y1);
+                ctx.save();
+                ctx.strokeStyle = '#6c5ce7';
+                ctx.lineWidth = lw;
+                ctx.setLineDash([lw * 5, lw * 5]);
+                ctx.beginPath();
+                ctx.moveTo(x1, y1); ctx.lineTo(x2, y1);      // le haut : la première ligne
+                ctx.moveTo(x1, y1); ctx.lineTo(x1, y2);      // les deux bords : la colonne
+                ctx.moveTo(x2, y1); ctx.lineTo(x2, y2);
+                ctx.stroke();
+                ctx.restore();
+            }
         }
 
         // L'ELLIPSE QUI VIENT, ET LA BOÎTE QUI LA PORTE. On montre les deux : le

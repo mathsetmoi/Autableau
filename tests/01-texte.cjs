@@ -569,10 +569,16 @@ p { line-height: 115%; margin-bottom: 0.25cm }</style></head>
         setMode('text');
         const board = document.getElementById('board');
         const r = board.getBoundingClientRect();
-        board.dispatchEvent(new PointerEvent('pointerdown', {
+        // APPUI ET RELÂCHEMENT, car c'est le relâchement qui tranche depuis
+        // qu'un tracé fait une colonne : l'appui seul ne dit pas encore si l'on
+        // pose un curseur ou si l'on dessine un cadre. Sans le second
+        // événement, ce contrôle attendait une saisie qui n'ouvre plus là.
+        const geste = (quoi, boutons) => board.dispatchEvent(new PointerEvent(quoi, {
             bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true,
-            button: 0, buttons: 1, clientX: r.left + 500, clientY: r.top + 400
+            button: 0, buttons: boutons, clientX: r.left + 500, clientY: r.top + 400
         }));
+        geste('pointerdown', 1);
+        geste('pointerup', 0);
         const zone = document.getElementById('wysiwyg-text');
         const rz = zone.getBoundingClientRect();
         return {
@@ -760,6 +766,159 @@ p { line-height: 115%; margin-bottom: 0.25cm }</style></head>
         setTimeout(() => ok('délai'), 3000);
     }));
     r.egal('un texte sans formule reste du texte', sansFormule, false);
+    await page.evaluate(() => { setMode('pointer'); texts.length = 0; draw(); });
+
+    // ==================================================================
+    // DEUX GESTES POUR UN OUTIL : LE CURSEUR, ET LA COLONNE
+    //
+    // « Un simple clic on pose le curseur, et un clic sans relâcher puis
+    // relâcher on fait une zone de texte, c'est possible ? »
+    //
+    // C'était possible parce que la moitié existait : un bloc a déjà une
+    // largeur de colonne — le repli automatique la pose quand la ligne atteint
+    // le bord, les poignées latérales l'ajustent, et le champ de saisie sait
+    // s'y conformer. Il ne manquait que le geste qui la fixe D'AVANCE.
+    //
+    // LES DEUX COMMENCENT PAR LE MÊME APPUI : on ne tranche donc qu'au
+    // relâchement, sur la distance parcourue. C'est ce qui s'éprouve ici — les
+    // deux moitiés, sans quoi « la boîte marche » ne dirait pas si le clic,
+    // lui, marche encore.
+    // ==================================================================
+    const aPlat = () => page.evaluate(() => {
+        texts.length = 0; images.length = 0; selectedItems = [];
+        panX = 0; panY = 0; zoom = 1;
+        setMode('text'); draw();
+    });
+    const leTexte = () => page.evaluate(() => texts.map(t => ({
+        x: Math.round(t.x), y: Math.round(t.y), col: t.colWidth || null,
+        lignes: (t._cachedH && t.lineHeight) ? Math.round(t._cachedH / t.lineHeight) : null
+    })));
+
+    // 1. LE CLIC RESTE UN CURSEUR — et la ligne l'enfourche, elle ne pend pas
+    //    dessous : le bloc s'ouvre une demi-interligne PLUS HAUT que le clic.
+    await aPlat();
+    await page.mouse.click(400, 300);
+    await page.waitForTimeout(250);
+    await page.keyboard.type('un clic');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const parLeClic = await leTexte();
+    r.verifie('un simple clic pose toujours un curseur, sans colonne',
+        parLeClic.length === 1 && parLeClic[0].col === null
+        && parLeClic[0].x === 400 && parLeClic[0].y < 300,
+        JSON.stringify(parLeClic));
+
+    // 2. TIRER DESSINE UNE COLONNE. Le bloc naît à son coin — et non au milieu
+    //    d'une ligne — avec la largeur tracée, et le texte s'y replie.
+    await aPlat();
+    await page.mouse.move(300, 200);
+    await page.mouse.down();
+    await page.mouse.move(700, 340, { steps: 8 });
+    const pendantLeTrace = await page.evaluate(() => ({
+        enCours: !!boiteTexte,
+        // Rien n'est encore posé : la saisie n'ouvre qu'au relâchement.
+        champOuvert: getComputedStyle(document.getElementById('wysiwyg-text')).display !== 'none'
+    }));
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const aLOuverture = await page.evaluate(() => ({
+        col: tempTextLogicalPos ? tempTextLogicalPos.colWidth : null,
+        champ: Math.round(document.getElementById('wysiwyg-text').getBoundingClientRect().width)
+    }));
+    r.egal('pendant le tracé, rien n\'est encore ouvert',
+        pendantLeTrace, { enCours: true, champOuvert: false });
+    r.egal('le champ s\'ouvre à la largeur tracée', [aLOuverture.col, aLOuverture.champ], [400, 400]);
+
+    await page.keyboard.type('une phrase assez longue pour devoir revenir à la ligne toute seule dans sa colonne');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const parLaBoite = await leTexte();
+    r.verifie('le bloc garde sa colonne, naît à son coin, et le texte s\'y replie',
+        parLaBoite.length === 1 && parLaBoite[0].col === 400
+        && parLaBoite[0].x === 300 && parLaBoite[0].y === 200
+        && parLaBoite[0].lignes >= 2,
+        JSON.stringify(parLaBoite));
+
+    // 3. ET LA MAIN GARDE LE DERNIER MOT. Le repli automatique ne touche jamais
+    //    une colonne choisie : c'est ce qui rend le geste utile — sans quoi la
+    //    largeur tracée serait reprise dès la première ligne un peu longue.
+    const aLArrivee = await page.evaluate(() => (texts[0] || {}).colWidth);
+    r.egal('la largeur tracée survit à la frappe', aLArrivee, 400);
+
+    // UNE COLONNE TRACÉE JUSQU'AU BORD N'EST PAS RÉTRÉCIE PAR LA MACHINE.
+    //
+    // C'est le seul endroit où les deux se disputent la même largeur : le repli
+    // automatique se déclenche quand la ligne déborde de ce qu'il reste à
+    // droite, et une colonne dessinée jusqu'au bord déborde par construction.
+    // Sans le garde-fou, elle se ferait reprendre au premier mot un peu long —
+    // et l'on aurait dessiné pour rien.
+    //
+    // Il a fallu METTRE LA SCÈNE EN PLACE pour le voir : appeler le repli à la
+    // main ne suffisait pas, la boîte de saisie étant refermée, sa largeur vaut
+    // alors zéro et le repli renonce avant même d'atteindre le garde-fou.
+    // Le geste est envoyé DIRECTEMENT au tableau : pour déborder, la colonne
+    // doit finir à moins de trente pixels du bord droit, et c'est là que vit la
+    // languette du tiroir — elle intercepterait le relâchement d'une vraie
+    // souris, et l'on éprouverait le tiroir au lieu du texte.
+    await aPlat();
+    const auBord = await page.evaluate(async () => {
+        const board = document.getElementById('board');
+        const b = board.getBoundingClientRect();
+        const fin = window.innerWidth - 6;
+        const geste = (quoi, x, boutons) => board.dispatchEvent(new PointerEvent(quoi, {
+            bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true,
+            button: 0, buttons: boutons, clientX: x, clientY: b.top + 250
+        }));
+        geste('pointerdown', 100, 1);
+        geste('pointermove', fin, 1);
+        geste('pointerup', fin, 0);
+        await new Promise(ok => setTimeout(ok, 250));
+        return {
+            col: tempTextLogicalPos ? tempTextLogicalPos.colWidth : null,
+            // Ce qu'il reste à droite : c'est à cela que le repli compare.
+            reste: Math.round((window.innerWidth
+                - document.getElementById('wysiwyg-text').getBoundingClientRect().left - 30) / zoom)
+        };
+    });
+    r.verifie('la colonne tracée dépasse bien ce qui reste à droite — sinon on n\'éprouve rien',
+        auBord.col > auBord.reste, JSON.stringify(auBord));
+    await page.keyboard.type('un mot puis un autre et encore un autre pour remplir la ligne entière');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    r.egal('et le repli automatique ne la rétrécit pas',
+        await page.evaluate(() => (texts[0] || {}).colWidth), auBord.col);
+
+    // 4. UN TREMBLEMENT N'EST PAS UNE BOÎTE. La main qui tient une craie ne
+    //    tient pas un point parfaitement immobile : quelques pixels restent un
+    //    clic, sinon le geste le plus courant deviendrait le plus rare.
+    await aPlat();
+    await page.mouse.move(500, 400);
+    await page.mouse.down();
+    await page.mouse.move(503, 402);
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    await page.keyboard.type('tremblé');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const tremble = await leTexte();
+    r.verifie('trois pixels de tremblement restent un curseur',
+        tremble.length === 1 && tremble[0].col === null, JSON.stringify(tremble));
+
+    // 5. ET UNE BOÎTE COMMENCÉE NE SURVIT PAS AU CHANGEMENT D'OUTIL.
+    await aPlat();
+    await page.mouse.move(300, 500);
+    await page.mouse.down();
+    await page.mouse.move(600, 560, { steps: 4 });
+    const abandon = await page.evaluate(() => {
+        const avant = !!boiteTexte;
+        setMode('freehand');
+        return { avant, apres: !!boiteTexte };
+    });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    r.egal('changer d\'outil en plein tracé range la boîte', abandon, { avant: true, apres: false });
+    r.egal('et rien n\'est écrit', await page.evaluate(() => texts.length), 0);
+
     await page.evaluate(() => { setMode('pointer'); texts.length = 0; draw(); });
 
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
