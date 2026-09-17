@@ -901,6 +901,75 @@ module.exports = async function (browser) {
         texts.length = 0; selectedItems = []; setMode('pointer'); draw();
     });
 
+    // ==================================================================
+    // LA SAISIE PASSE SOUS LES BARRES, ET LE TABLEAU LUI FAIT LA PLACE
+    //
+    // « Parfois le texte passe au-dessus des toolbars. » La zone de saisie
+    // était à cinq mille quand les barres sont à mille : elle recouvrait la
+    // barre de style et celle du texte — précisément celles dont on se sert
+    // PENDANT qu'on écrit. Et le texte passait devant la barre pendant la
+    // frappe, derrière une fois validé : la promesse « ce qu'on tape est là où
+    // ça se pose » se rompait d'une autre façon.
+    //
+    // ELLE PASSE DONC DESSOUS. Mais rien ne doit être caché pour autant : le
+    // tableau glisse du strict nécessaire quand le bloc vient toucher une
+    // barre, comme un éditeur qui suit son curseur. C'est cela qu'on éprouve —
+    // les deux moitiés, car l'une sans l'autre serait pire que le mal.
+    // ==================================================================
+    await page.evaluate(() => {
+        texts.length = 0; images.length = 0; selectedItems = [];
+        editingTextId = null;
+        if (wysiwygText) wysiwygText.style.display = 'none';
+        panX = 0; panY = 0; zoom = 1; setMode('text'); draw();
+    });
+    await page.mouse.click(600, 300);
+    await page.waitForTimeout(300);
+    await page.keyboard.type('Réponse');
+    await page.waitForTimeout(250);
+
+    const dessous = await page.evaluate(() => {
+        const w = document.getElementById('wysiwyg-text');
+        return { saisie: Number(getComputedStyle(w).zIndex),
+                 barre: Number(getComputedStyle(document.getElementById('bar-style')).zIndex),
+                 ouvert: w.style.display };
+    });
+    r.verifie('la saisie est ouverte et passe SOUS les barres',
+        dessous.ouvert === 'block' && dessous.saisie < dessous.barre, JSON.stringify(dessous));
+
+    // ON AMÈNE LE BLOC SOUS LES BARRES DU HAUT. Un clic ne le pourrait pas —
+    // la barre prendrait le clic : c'est en déplaçant la vue, ou en voyant une
+    // barre paraître, que le cas se présente.
+    const degage = await page.evaluate(async () => {
+        panY -= 260; draw(); updateWysiwygPosition();
+        const avant = document.getElementById('wysiwyg-text').getBoundingClientRect().top;
+        const plafond = plafondQuiGeneLaSaisie();
+        const bouge = degagerLaSaisie();
+        await new Promise(ok => setTimeout(ok, 120));
+        const apres = document.getElementById('wysiwyg-text').getBoundingClientRect().top;
+        return { avant: Math.round(avant), plafond, apres: Math.round(apres), bouge };
+    });
+    r.verifie('sous une barre, le bloc était bien caché',
+        degage.avant < degage.plafond, JSON.stringify(degage));
+    r.verifie('et le tableau lui fait la place : il repasse sous le plancher des barres',
+        degage.bouge && degage.apres >= degage.plafond, JSON.stringify(degage));
+
+    // ET IL NE BOUGE PAS QUAND RIEN NE LE GÊNE : déplacer la vue à chaque
+    // ouverture serait pire que le mal.
+    const tranquille = await page.evaluate(() => {
+        const y = panY;
+        const bouge = degagerLaSaisie();
+        return { bouge, memePanY: Math.round(panY) === Math.round(y) };
+    });
+    r.egal('et il ne bouge pas quand rien ne le gêne',
+        tranquille, { bouge: false, memePanY: true });
+
+    await page.evaluate(() => {
+        editingTextId = null;
+        if (wysiwygText) wysiwygText.style.display = 'none';
+        texts.length = 0; selectedItems = []; panX = 0; panY = 0;
+        setMode('pointer'); draw();
+    });
+
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

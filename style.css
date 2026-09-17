@@ -2620,7 +2620,17 @@ input[type=range]::-moz-range-thumb {
 #wysiwyg-text {
     position: absolute;
     display: none;
-    z-index: 5000;
+    /* SOUS LES BARRES, ET NON PAR-DESSUS.
+       « Parfois le texte passe au-dessus des toolbars. » Il était à cinq
+       mille quand les barres sont à mille : la zone de saisie recouvrait donc
+       la barre de style et celle du texte — précisément celles dont on se sert
+       PENDANT qu'on écrit. Et le texte passait devant la barre pendant la
+       frappe, derrière une fois validé : la promesse « ce qu'on tape est là où
+       ça se pose » se rompait d'une autre façon.
+       RIEN N'EST CACHÉ POUR AUTANT : « degagerLaSaisie » fait glisser le
+       tableau du minimum nécessaire quand le bloc touche une barre — c'est ce
+       que fait tout éditeur qui suit son curseur. */
+    z-index: 900;
     background: transparent;
     outline: 0px dashed rgba(108, 92, 231, 0.5);
     border: none;

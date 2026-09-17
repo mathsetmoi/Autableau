@@ -4814,6 +4814,52 @@ async function exportAllPagesPdf() {
         showToast("✅ PDF Multi-pages téléchargé !");
 }
 // --- HELPER DYNAMIQUE POUR L'EDITEUR WYSIWYG ---
+// LE TABLEAU FAIT LA PLACE À CE QU'ON ÉCRIT.
+//
+// La zone de saisie est passée SOUS les barres : elles restent atteignables —
+// ce sont celles du style et du texte, dont on se sert en écrivant — et ce
+// qu'on tape est à la place exacte où ça se posera. Encore faut-il le voir. On
+// écarte donc le tableau du strict nécessaire quand le bloc vient toucher une
+// barre, comme un éditeur qui suit son curseur.
+//
+// DU MINIMUM, ET SEULEMENT SI ÇA TOUCHE : déplacer la vue à chaque ouverture
+// serait pire que le mal. Et l'on préfère dégager par le HAUT quand le bloc est
+// plus grand que l'espace libre : c'est la première ligne qu'on regarde.
+function plafondQuiGeneLaSaisie() {
+    let bas = (typeof plancherDesBarresDuHaut === 'function') ? plancherDesBarresDuHaut() : 0;
+    // Le tiroir du haut compte aussi : la barre du document se range dessous,
+    // mais elle n'est pas toujours là.
+    const tiroir = document.getElementById('bar-plugins');
+    if (tiroir && typeof tiroirEnPlace === 'function' && tiroirEnPlace(tiroir)) {
+        bas = Math.max(bas, Math.round(tiroir.getBoundingClientRect().bottom));
+    }
+    return bas;
+}
+
+function degagerLaSaisie() {
+    if (typeof wysiwygText === 'undefined' || !wysiwygText) return false;
+    if (wysiwygText.style.display !== 'block') return false;
+    const r = wysiwygText.getBoundingClientRect();
+    if (r.height < 1) return false;
+    const MARGE = 8;
+    const haut = plafondQuiGeneLaSaisie();
+    const bas = (typeof plafondDesBarresDuBas === 'function') ? plafondDesBarresDuBas() : window.innerHeight;
+    let dy = 0;
+    if (haut && r.top < haut + MARGE) dy = (haut + MARGE) - r.top;
+    else if (bas < window.innerHeight && r.bottom > bas - MARGE) {
+        dy = (bas - MARGE) - r.bottom;
+        // Ne jamais faire sortir la première ligne par le haut pour gagner la
+        // dernière : on lit d'abord ce qu'on vient d'écrire.
+        if (haut && r.top + dy < haut + MARGE) dy = 0;
+    }
+    if (!dy) return false;
+    panY += dy;
+    if (typeof draw === 'function') draw();
+    updateWysiwygPosition();
+    return true;
+}
+window.degagerLaSaisie = degagerLaSaisie;
+
 function updateWysiwygPosition() {
     if (wysiwygText.style.display === 'block') {
         let currentSize = activeStyle.fontSize;
@@ -7088,6 +7134,13 @@ function updateStyleBarContext() {
     syncStampStyleControls();
     syncTextStyleControls();
 
+    // UNE BARRE QUI PARAÎT NE DOIT PAS MANGER CE QU'ON ÉCRIT. C'est le cas
+    // réel : on écrit en clair, puis la sélection change, la barre de style
+    // arrive et se pose sur le bloc. Un clic ne peut pas ouvrir la saisie SOUS
+    // une barre — la barre prendrait le clic —, c'est donc ici que ça se joue.
+    // « degagerLaSaisie » ne fait rien tant qu'il n'y a pas de saisie ouverte,
+    // ni tant que rien ne la touche.
+    if (typeof degagerLaSaisie === 'function') degagerLaSaisie();
 }
 
 
@@ -9812,6 +9865,7 @@ function ouvrirLaSaisie(vise, pos) {
     wysiwygText.style.padding = '0';
 
     updateWysiwygPosition();
+    degagerLaSaisie();
 
     saisieRouverteParUnClic();
     // LA BARRE DE STYLE SE TAIT MAINTENANT, ET NON À LA PROCHAINE SÉLECTION.
@@ -9895,6 +9949,7 @@ function rouvrirLeTexte(t) {
     // Position, police, taille, interligne, couleur et alignement : tout est
     // dérivé de l'objet édité, avec la même convention que le rendu canvas.
     updateWysiwygPosition();
+    degagerLaSaisie();
     // Le texte édité ne se dessine plus sur le tableau (c'est la zone de
     // saisie qui l'affiche), pas plus que son cadre de sélection ni ses
     // poignées : encore faut-il repeindre pour les effacer. Sans ce
