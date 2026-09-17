@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=156">
+    <link rel="stylesheet" href="style.css?v=157">
 </head>
 
 <body>
@@ -421,6 +421,22 @@
         <div class="rideau-poignee" data-bord="droite"></div>
     </div>
     <div id="spot-calque" hidden><div id="spot-trou"></div></div>
+    <!-- SUIVRE LA PAGE, OU RESTER À L'ÉCRAN.
+         « Une icône pour ne montrer qu'une partie du PDF, pratique pour un
+         exercice. » Le rideau le faisait déjà — mais il masque l'ÉCRAN : dès
+         qu'on déplace la page ou qu'on zoome, le cache est à côté de ce qu'il
+         cachait. Ce n'était donc pas un bouton à ajouter aux barres, c'était
+         cet outil-ci à rendre solidaire de la page.
+         L'INTERRUPTEUR VIT AVEC LE RIDEAU, à côté de sa croix : il ne paraît
+         que quand un cache est posé, et les barres ne gagnent pas un pixel. -->
+    <button id="masque-accrocher" data-tooltip="Le cache reste à l'écran : le tableau glisse dessous">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none"
+            stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 4h14v16H5z" opacity="0.45" />
+            <path d="M9 9h6v6H9z" fill="currentColor" stroke="none" opacity="0.85" />
+            <path d="M12 2v2M12 20v2" />
+        </svg>
+    </button>
     <button id="masque-fermer" title="Fermer le rideau / le projecteur (Échap)">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none"
             stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
@@ -3326,7 +3342,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=271"></script>
+    <script src="script.js?v=272"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

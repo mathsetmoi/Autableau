@@ -314,6 +314,80 @@ module.exports = async function (browser) {
           apresDeplacement: calque.apresDeplacement, horsTrace: calque.horsTrace },
         { pendant: true, apresZoom: false, apresDeplacement: false, horsTrace: false });
 
+    // ==================================================================
+    // LE CACHE PEUT SUIVRE LA PAGE
+    //
+    // « Une icône pour ne montrer qu'une partie du PDF, pratique pour un
+    // exercice. » Le rideau le faisait déjà — mais il masque l'ÉCRAN : dès
+    // qu'on déplace la page, qu'on zoome ou qu'on tourne, le cache est à côté
+    // de ce qu'il cachait. Ce n'était donc pas un bouton à ajouter aux barres,
+    // c'était cet outil-ci à rendre solidaire de la page.
+    //
+    // LES DEUX COMPORTEMENTS SE TIENNENT, et c'est pourquoi on les éprouve
+    // tous les deux : masquer une portion de l'écran a son usage — dévoiler
+    // une correction ligne à ligne, le tableau bougeant dessous — et reste le
+    // défaut. Accrocher est un geste qu'on demande.
+    // ==================================================================
+    const cacheOuvert = await page.evaluate(async () => {
+        panX = 0; panY = 0; zoom = 1;
+        document.getElementById('btn-rideau').click();
+        await new Promise(ok => setTimeout(ok, 300));
+        const r = document.getElementById('rideau');
+        const b = document.getElementById('masque-accrocher');
+        return { vu: !r.hidden, accroche: rideauEstAccroche(),
+                 boutonVu: b ? b.classList.contains('visible') : false };
+    });
+    r.verifie('le rideau s\'ouvre, et son interrupteur d\'ancrage paraît avec lui',
+        cacheOuvert.vu && cacheOuvert.boutonVu, JSON.stringify(cacheOuvert));
+    r.egal('il masque l\'écran par défaut : c\'est ce qu\'il faut pour dévoiler une correction',
+        cacheOuvert.accroche, false);
+
+    const aLEcran = await page.evaluate(async () => {
+        const r = document.getElementById('rideau');
+        const avant = Math.round(r.getBoundingClientRect().left);
+        panX += 180; draw();
+        await new Promise(ok => setTimeout(ok, 150));
+        return { avant, apres: Math.round(r.getBoundingClientRect().left) };
+    });
+    r.egal('le tableau glisse dessous, et le cache ne bouge pas',
+        aLEcran.apres, aLEcran.avant);
+
+    const surLaPage = await page.evaluate(async () => {
+        panX = 0; draw();
+        await new Promise(ok => setTimeout(ok, 150));
+        basculerLAncrageDuRideau(true);
+        const r = document.getElementById('rideau');
+        const avant = Math.round(r.getBoundingClientRect().left);
+        const largeurAvant = Math.round(r.getBoundingClientRect().width);
+        panX += 180; draw();
+        await new Promise(ok => setTimeout(ok, 150));
+        const apres = Math.round(r.getBoundingClientRect().left);
+        zoom = 2; draw();
+        await new Promise(ok => setTimeout(ok, 150));
+        const largeurApres = Math.round(r.getBoundingClientRect().width);
+        return { avant, apres, largeurAvant, largeurApres, accroche: rideauEstAccroche() };
+    });
+    r.egal('accroché, il suit le déplacement de la page, au pixel',
+        surLaPage.apres - surLaPage.avant, 180);
+    // ET LE ZOOM AUSSI : un cache qui suit en déplacement mais pas en zoom
+    // serait à côté dès qu'on grossit un exercice — c'est-à-dire tout le temps.
+    r.egal('et il grandit avec elle quand on zoome',
+        surLaPage.largeurApres, surLaPage.largeurAvant * 2);
+
+    const referme = await page.evaluate(async () => {
+        panX = 0; zoom = 1; draw();
+        document.getElementById('btn-rideau').click();
+        await new Promise(ok => setTimeout(ok, 250));
+        document.getElementById('btn-rideau').click();
+        await new Promise(ok => setTimeout(ok, 250));
+        const etat = rideauEstAccroche();
+        document.getElementById('btn-rideau').click();
+        await new Promise(ok => setTimeout(ok, 250));
+        return etat;
+    });
+    r.egal('et il se rouvre toujours à l\'écran : accrocher est un geste qu\'on demande',
+        referme, false);
+
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     // --- COPIER, COUPER, DUPLIQUER, COLLER ---
     // Les raccourcis existaient depuis toujours ; rien ne les montrait, et sur

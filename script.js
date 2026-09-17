@@ -12447,6 +12447,9 @@ function draw() {
 
         peindreLeFondDePresentation();
 
+        // LE CACHE ACCROCHÉ SUIT LA PAGE. C'est le seul endroit qui sache que
+        // la vue vient de changer — déplacement, zoom, changement de page.
+        if (typeof replacerLeRideau === 'function') replacerLeRideau();
     } // Fin du bloc finally
 } // Fin de la fonction draw()
 
@@ -34555,22 +34558,79 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Le rideau couvre toute l'interface : sans cette croix, on ne pourrait
     // plus rien fermer sur une tablette, faute de touche Échap.
+    const btnAccrocher = document.getElementById('masque-accrocher');
     const majFermeture = () => {
+        if (btnAccrocher) {
+            // L'ancrage ne concerne que le rideau : le projecteur éclaire une
+            // zone de l'écran, et suivre la page n'y voudrait rien dire.
+            btnAccrocher.classList.toggle('visible', !rideau.hidden);
+        }
         if (!btnFermer) return;
         btnFermer.classList.toggle('visible', !rideau.hidden || !spotCalque.hidden);
     };
+    if (btnAccrocher) btnAccrocher.addEventListener('click', (e) => {
+        e.stopPropagation();
+        basculerLAncrageDuRideau();
+    });
 
     // --- RIDEAU ---
-    // Bornes en pixels écran : le rideau ne suit ni le zoom ni le
-    // déplacement du tableau, il masque une portion de l'ÉCRAN.
+    // Bornes en pixels ÉCRAN par défaut : le rideau masque une portion de
+    // l'écran, et c'est ce qu'on veut pour dévoiler une correction ligne à
+    // ligne — le tableau bouge, le rideau reste.
     let cadre = null;
 
+    // MAIS SUR UN EXERCICE, C'EST LA PAGE QU'ON MASQUE.
+    //
+    // « Une icône pour ne montrer qu'une partie du PDF, pratique pour un
+    // exercice. » Le rideau le fait déjà — sauf qu'il masque l'ÉCRAN : dès
+    // qu'on déplace la page, qu'on zoome ou qu'on tourne, le cache est à côté
+    // de ce qu'il cachait. Ce n'était donc pas un bouton à ajouter aux barres,
+    // c'était cet outil-ci à rendre solidaire de la page.
+    //
+    // Accroché, le cadre est retenu en coordonnées DU TABLEAU, et reconverti à
+    // chaque rendu. Les poignées, elles, continuent de travailler en pixels
+    // d'écran : c'est là que le doigt se trouve.
+    let ancre = null;
+
+    const versLeTableau = (c) => ({
+        gauche: (c.gauche - panX) / zoom, droite: (c.droite - panX) / zoom,
+        haut: (c.haut - panY) / zoom, bas: (c.bas - panY) / zoom
+    });
+    const versLEcran = (a) => ({
+        gauche: a.gauche * zoom + panX, droite: a.droite * zoom + panX,
+        haut: a.haut * zoom + panY, bas: a.bas * zoom + panY
+    });
+
     const poserCadre = () => {
-        rideau.style.left = cadre.gauche + 'px';
-        rideau.style.top = cadre.haut + 'px';
-        rideau.style.width = Math.max(0, cadre.droite - cadre.gauche) + 'px';
-        rideau.style.height = Math.max(0, cadre.bas - cadre.haut) + 'px';
+        if (!cadre) return;
+        const c = ancre ? versLEcran(ancre) : cadre;
+        rideau.style.left = c.gauche + 'px';
+        rideau.style.top = c.haut + 'px';
+        rideau.style.width = Math.max(0, c.droite - c.gauche) + 'px';
+        rideau.style.height = Math.max(0, c.bas - c.haut) + 'px';
     };
+
+    // Le rendu du tableau vient de changer la vue : le rideau accroché suit.
+    window.replacerLeRideau = () => { if (!rideau.hidden && ancre) poserCadre(); };
+
+    function basculerLAncrageDuRideau(force) {
+        const voulu = (force === undefined) ? !ancre : !!force;
+        ancre = voulu ? versLeTableau(cadre || cadrePlein()) : null;
+        const b = document.getElementById('masque-accrocher');
+        if (b) {
+            b.classList.toggle('actif', !!ancre);
+            b.setAttribute('data-tooltip', ancre
+                ? 'Le cache suit la page : il reste sur ce qu\'il masque'
+                : 'Le cache reste à l\'écran : le tableau glisse dessous');
+        }
+        poserCadre();
+        if (typeof showToast === 'function') {
+            showToast(ancre ? 'Le cache suit la page' : 'Le cache reste à l\'écran');
+        }
+        return !!ancre;
+    }
+    window.basculerLAncrageDuRideau = basculerLAncrageDuRideau;
+    window.rideauEstAccroche = () => !!ancre;
 
     const cadrePlein = () => ({ gauche: 0, haut: 0, droite: window.innerWidth, bas: window.innerHeight });
 
@@ -34585,6 +34645,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         cadre = cadrePlein();
+        // On rouvre toujours à l'écran : accrocher est un geste qu'on demande.
+        ancre = null;
+        basculerLAncrageDuRideau(false);
         poserCadre();
         rideau.hidden = false;
         btnRideau.classList.add('active');
@@ -34617,6 +34680,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (prise.bord === 'droite') {
             cadre.droite = Math.max(d.droite + dx, d.gauche + 20);
         }
+        // Accroché, on retient la nouvelle place EN COORDONNÉES DU TABLEAU :
+        // sans quoi le prochain rendu ramènerait le cadre d'avant.
+        if (ancre) ancre = versLeTableau(cadre);
         poserCadre();
         e.preventDefault();
     });

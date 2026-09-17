@@ -6162,6 +6162,34 @@ dark-mode .title-btn:hover {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
+/* L'INTERRUPTEUR D'ANCRAGE, à gauche de la croix : même forme, même famille.
+   Il ne paraît qu'avec le rideau — le projecteur éclaire une zone de l'écran,
+   « suivre la page » n'y voudrait rien dire. */
+#masque-accrocher {
+    position: fixed;
+    top: 14px;
+    width: 46px;
+    height: 46px;
+    border: none;
+    border-radius: 50%;
+    background: #ffffff;
+    color: #2d3436;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 999991;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    right: 74px;
+}
+
+#masque-accrocher.visible { display: flex; }
+
+#masque-accrocher.actif {
+    color: var(--accent, #6c5ce7);
+    border-color: var(--accent, #6c5ce7);
+}
+
 #masque-fermer.visible { display: flex; }
 #masque-fermer:hover { background: #f1f2f6; }
 
