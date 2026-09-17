@@ -5083,7 +5083,14 @@ const RACCOURCIS_PARTOUT = [
     // la même touche se mettait aussi à naviguer, on ne saurait plus, en
     // l'appuyant, si l'on efface son trait ou si l'on change de page ; or c'est
     // le raccourci qu'on tape sans regarder.
-    { touche: 'Alt+←', nom: 'Revenir au document d\'avant', bouton: ['btn-ecran-retour'] }
+    { touche: 'Alt+←', nom: 'Revenir au document d\'avant', bouton: ['btn-ecran-retour'] },
+    // LES PAGES DU TABLEAU, sans ouvrir le tiroir du bas. Elles ne prennent la
+    // touche que si l'on ne tient pas de document : celui qu'on tient, et celui
+    // qu'on projette, tournent leurs propres pages d'abord.
+    { touche: 'Page↑', nom: 'Page précédente du tableau',
+      bouton: ['btn-prev-page', 'bm-page-prec'] },
+    { touche: 'Page↓', nom: 'Page suivante du tableau',
+      bouton: ['btn-next-page', 'bm-page-suiv'] }
 ];
 
 // Les combinaisons : elles passent PARTOUT, y compris pendant qu'on écrit —
@@ -5519,6 +5526,34 @@ window.addEventListener('keydown', (e) => {
             feuilleterPdf(docAFeuilleter, (e.key === 'ArrowRight' || e.key === 'PageDown') ? 1 : -1);
             return;
         }
+    }
+
+    // LES PAGES DU TABLEAU, AU CLAVIER.
+    //
+    // « C'est un peu chiant de devoir sortir le tiroir du bas pour les pages. »
+    // C'est vrai, et c'était le seul endroit où les atteindre — sauf pendant un
+    // découpage, où le tiroir des morceaux en porte une copie.
+    //
+    // LA RÈGLE TIENT EN UNE PHRASE : « Page↓ tourne la page de ce qu'on TIENT ;
+    // si l'on ne tient rien, c'est la page du tableau. » Les deux cas plus
+    // spécifiques sont traités juste au-dessus et gardent la main — la page
+    // qu'on projette, puis celle du document qu'on tient. Il ne reste ici que
+    // le tableau nu, et c'est justement là qu'on en a besoin : après avoir posé
+    // les exercices sur une page neuve, on ne tient plus de document, et
+    // « Page↑ » ramène au polycopié.
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+        && (e.key === 'PageDown' || e.key === 'PageUp')
+        && typeof pages !== 'undefined' && pages.length > 1) {
+        const vers = currentPageIndex + (e.key === 'PageDown' ? 1 : -1);
+        if (vers >= 0 && vers < pages.length) {
+            e.preventDefault();
+            loadPage(vers);
+            if (typeof majLaPageDuTiroir === 'function') majLaPageDuTiroir();
+            // Le tableau change entièrement : on dit OÙ l'on vient d'arriver,
+            // sans quoi on ne sait pas s'il en reste.
+            if (typeof showToast === 'function') showToast(`Page ${vers + 1} sur ${pages.length}`);
+        }
+        return;
     }
 
     if (mode === 'randomClock') {
@@ -15363,9 +15398,41 @@ function placeLibrePourLesMorceaux() {
 
 function poserTousLesMorceaux() {
     if (!morceauxEnAttente.length) return 0;
-    // On sort du plein écran AVANT de choisir la place : tant qu'il dure, la
-    // vue est bornée à la page et n'irait pas voir ce qu'on vient de poser.
-    quitterLaPresentationSiOnPoseDehors(null);
+
+    // POSER PENDANT QU'ON PROJETTE OUVRE UNE PAGE NEUVE.
+    //
+    // « J'importe un PDF, je mets en plein écran, je coupe deux morceaux que je
+    // demande de poser à côté. À ce moment je sors du plein écran. »
+    //
+    // On en sortait, et il le fallait : cette fonction range dans la ZONE
+    // VISIBLE, et pendant une projection le visible c'est la page — les
+    // exercices se seraient posés par-dessus le document. Les ranger dans la
+    // marge n'aurait pas mieux valu : mesurée, une A4 projetée sur un écran de
+    // 1280 laisse deux bandes de 368 pixels contre 543 pour la page, si bien
+    // que les exercices y seraient PLUS PETITS que sur l'original. Montrer un
+    // exercice moins lisible que le document dont il sort n'a pas de sens.
+    //
+    // Ils vont donc sur une PAGE DE TABLEAU VIERGE, où ils s'étalent sans rien
+    // à éviter — jusqu'à trois fois leur taille. On quitte bien le plein écran,
+    // mais pour montrer autre chose, et non pour rien : la page qui s'ouvre ne
+    // contient que les exercices, en grand. « Page↑ » et le « ◀ » du tiroir
+    // ramènent au document, et supprimer les exercices revient à supprimer la
+    // page — ce qui répond du même coup à « ou la possibilité de supprimer les
+    // exercices découpés ».
+    //
+    // Le tiroir des morceaux n'appartient à aucune page : il traverse, et c'est
+    // ce qui rend le voyage possible.
+    let pageNeuve = false;
+    if (typeof presentationEnCours !== 'undefined' && presentationEnCours
+        && typeof createNewPage === 'function' && typeof loadPage === 'function') {
+        quitterLaPresentation();
+        pages.push(createNewPage());
+        loadPage(pages.length - 1);
+        pageNeuve = true;
+    } else {
+        // Hors projection, rien ne change : on pose là où l'on regarde.
+        quitterLaPresentationSiOnPoseDehors(null);
+    }
     const ecart = 16 / zoom;
     const zone = placeLibrePourLesMorceaux();
     const gauche = zone.x, haut = zone.y, L = zone.L, H = zone.H;
@@ -15423,10 +15490,15 @@ function poserTousLesMorceaux() {
     affinerLesMorceaux(poses);
     saveState();
     draw();
+    if (typeof majLaPageDuTiroir === 'function') majLaPageDuTiroir();
     if (typeof showToast === 'function') {
-        showToast(zone.aCote
-            ? `${combien} morceau(x) posé(s) à côté du document — les voici`
-            : `${combien} morceau(x) posé(s) sur cette page, au plus grand`);
+        // Sur une page neuve, on dit COMMENT REVENIR : c'est la seule chose
+        // qu'on ne devine pas quand le tableau change entièrement d'un coup.
+        showToast(pageNeuve
+            ? `${combien} exercice(s) en grand sur une page neuve — Page↑ pour revenir au document`
+            : (zone.aCote
+                ? `${combien} morceau(x) posé(s) à côté du document — les voici`
+                : `${combien} morceau(x) posé(s) sur cette page, au plus grand`));
     }
     return combien;
 }

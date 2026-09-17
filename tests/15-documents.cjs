@@ -2925,10 +2925,23 @@ module.exports = async function (browser) {
           tenu: ['en haut', 'en haut'] });
 
     // =====================================================================
-    // ON NE POSE PAS À CÔTÉ D'UNE PAGE QU'ON PROJETTE
-    // En présentation, le pourtour est peint sombre PAR-DESSUS tout le reste,
-    // et la vue est bornée à la page : un morceau posé à côté tombait dans le
-    // noir, hors d'atteinte.
+    // POSER PENDANT QU'ON PROJETTE OUVRE UNE PAGE NEUVE
+    //
+    // « J'importe un PDF, je mets en plein écran, je coupe deux morceaux que je
+    // demande de poser à côté. À ce moment je sors du plein écran. »
+    //
+    // On en sortait, et il le fallait : « Poser » range dans la ZONE VISIBLE, et
+    // pendant une projection le visible c'est la page — les exercices se
+    // seraient posés par-dessus le document, ou, à côté, sous le pourtour peint
+    // sombre. La marge n'aurait pas mieux valu : mesurée, une A4 projetée sur un
+    // écran de 1280 laisse deux bandes de 368 pixels contre 543 pour la page,
+    // donc des exercices PLUS PETITS que sur l'original. Montrer un exercice
+    // moins lisible que le document dont il sort n'a pas de sens.
+    //
+    // Ils vont donc sur une PAGE DE TABLEAU VIERGE, où ils s'étalent sans rien à
+    // éviter. On quitte bien le plein écran — mais pour montrer autre chose, et
+    // non pour rien. Le tiroir des morceaux n'appartient à aucune page : il
+    // traverse, et c'est ce qui rend le voyage possible.
     // =====================================================================
     const enPlein = await page.evaluate(async () => {
         const c = document.createElement('canvas');
@@ -2958,31 +2971,137 @@ module.exports = async function (browser) {
 
         presenterLeDocument();
         const enPresentation = !!presentationEnCours;
+        const pagesAvant = pages.length, pageAvant = currentPageIndex;
+        const tailleDOrigine = morceauxEnAttente.map(m => m.w);
         poserTousLesMorceaux();
         const apres = !!presentationEnCours;
-        const m = images.find(o => o.pluginData && o.pluginData.id === 'morceau');
+        const m = images.find(o => o && o.pluginData && o.pluginData.id === 'morceau');
         const cadre = { x1: (0 - panX) / zoom, y1: (0 - panY) / zoom,
                         x2: (window.innerWidth - panX) / zoom, y2: (window.innerHeight - panY) / zoom };
         return {
-            enPresentation, apres,
-            // Posé à côté du document, et VU : la vue a pu aller le chercher.
-            aCote: !!m && m.x >= doc.x + doc.w,
+            enPresentation, apres, pagesAvant, pageAvant,
+            pagesApres: pages.length, pageApres: currentPageIndex,
+            // La page neuve ne tient que les exercices : le document est resté
+            // sur la sienne.
+            surLaPage: images.map(o => (o && o.pluginData && o.pluginData.id) || 'nue').sort(),
+            // Et ils y sont EN GRAND : c'est tout l'intérêt d'une page à eux.
+            agrandi: !!m && m.w > tailleDOrigine[0] * 1.05,
             visible: !!m && m.x >= cadre.x1 - 1 && m.x + m.w <= cadre.x2 + 1
                      && m.y >= cadre.y1 - 1 && m.y + m.h <= cadre.y2 + 1
         };
     });
-    r.egal('la présentation était bien en cours', enPlein.enPresentation, true);
-    r.egal('poser à côté en sort : sinon les morceaux tombent dans le noir',
-        enPlein.apres, false);
-    r.verifie('et ils sont posés à côté, sous les yeux',
-        enPlein.aCote && enPlein.visible, JSON.stringify(enPlein));
+    r.egal('la présentation était bien en cours, sur la seule page du tableau',
+        { projette: enPlein.enPresentation, pages: enPlein.pagesAvant, page: enPlein.pageAvant },
+        { projette: true, pages: 1, page: 0 });
+    r.egal('poser ouvre une page neuve et s\'y rend',
+        { pages: enPlein.pagesApres, page: enPlein.pageApres }, { pages: 2, page: 1 });
+    r.egal('elle ne tient que les exercices : le document est resté sur la sienne',
+        enPlein.surLaPage, ['morceau']);
+    r.verifie('la projection est quittée — mais pour montrer autre chose, en grand et sous les yeux',
+        enPlein.apres === false && enPlein.agrandi && enPlein.visible, JSON.stringify(enPlein));
+
+    // ET LES BARRES SONT REVENUES AVEC. Quitter une projection, ce n'est pas
+    // seulement éteindre un drapeau : c'est rendre le mode Focus, le plein écran
+    // du navigateur et les outils. Un sabotage a montré que le drapeau
+    // s'éteignait TOUT SEUL en changeant de page — le document n'étant plus là,
+    // « documentPresente » le remet à zéro. On serait donc arrivé sur la page
+    // neuve avec toutes les barres encore effacées, et rien pour les rappeler.
+    r.egal('et l\'on n\'arrive pas sur la page neuve les barres effacées',
+        await page.evaluate(() => document.body.classList.contains('focus-mode')), false);
+
+    // ET « PAGE↑ » RAMÈNE AU DOCUMENT, sans ouvrir le tiroir du bas.
+    //
+    // « C'est un peu chiant de devoir sortir le tiroir du bas pour les pages. »
+    // La règle tient en une phrase : « Page↓ tourne la page de ce qu'on TIENT ;
+    // si l'on ne tient rien, c'est la page du tableau. » On éprouve les deux
+    // moitiés — sans quoi « la touche marche » ne dirait pas laquelle.
+    await page.evaluate(() => { selectedItems = []; setMode('pointer'); majBarreDocument(); });
+    await page.keyboard.press('PageUp');
+    await page.waitForTimeout(350);
+    const retourClavier = await page.evaluate(() => ({
+        page: currentPageIndex,
+        pdf: images.some(o => o && o.pluginData && o.pluginData.id === 'pdfDoc')
+    }));
+    r.egal('Page↑ ramène à la page du document', retourClavier, { page: 0, pdf: true });
+
+    // Mais en TENANT un document feuilletable, la touche tourne SA page.
+    const tenu = await page.evaluate(async ({ octets }) => {
+        images.length = 0; morceauxEnAttente = []; selectedItems = [];
+        await poserPdfFeuilletable(new File([new Uint8Array(octets)], 'clavier.pdf', { type: 'application/pdf' }));
+        await new Promise(ok => setTimeout(ok, 1200));
+        setMode('pointer');
+        selectedItems = [{ type: 'image', id: images[0].id }];
+        majBarreDocument();
+        return { page: currentPageIndex, pageDuPdf: images[0].pluginData.page };
+    }, { octets: Array.from(petitPdf()) });
+    await page.keyboard.press('PageDown');
+    await page.waitForTimeout(400);
+    const apresPageBas = await page.evaluate(() => ({
+        page: currentPageIndex,
+        pageDuPdf: images[0] && images[0].pluginData ? images[0].pluginData.page : null
+    }));
+    r.verifie('en tenant le document, Page↓ tourne SA page et non celle du tableau',
+        apresPageBas.page === tenu.page && apresPageBas.pageDuPdf === tenu.pageDuPdf + 1,
+        JSON.stringify({ tenu, apresPageBas }));
+
+    // ET LA TOUCHE SEULE, JAMAIS AVEC CONTRÔLE : Ctrl+Page↓ appartient au
+    // NAVIGATEUR, qui s'en sert pour changer d'onglet. La lui prendre ferait
+    // d'un geste réflexe un changement de page de tableau, et l'onglet voulu ne
+    // viendrait jamais.
+    const avecControle = await page.evaluate(() => {
+        images.length = 0; selectedItems = []; setMode('pointer');
+        if (pages.length < 2) { pages.push(createNewPage()); }
+        loadPage(0);
+        return currentPageIndex;
+    });
+    await page.keyboard.press('Control+PageDown');
+    await page.waitForTimeout(300);
+    r.egal('Ctrl+Page↓ reste au navigateur : la page du tableau ne bouge pas',
+        await page.evaluate(() => currentPageIndex), avecControle);
+
+    // LA TOUCHE SE DIT SUR LE BOUTON, comme toutes les autres : une table, trois
+    // consommateurs — l'infobulle, l'aide, et rien à tenir à jour deux fois.
+    const surLesBoutons = await page.evaluate(() => ({
+        prec: (document.getElementById('btn-prev-page') || {}).getAttribute
+            ? document.getElementById('btn-prev-page').getAttribute('data-raccourci') : null,
+        suiv: (document.getElementById('btn-next-page') || {}).getAttribute
+            ? document.getElementById('btn-next-page').getAttribute('data-raccourci') : null,
+        tiroir: (document.getElementById('bm-page-prec') || {}).getAttribute
+            ? document.getElementById('bm-page-prec').getAttribute('data-raccourci') : null
+    }));
+    r.egal('les boutons de page portent leur touche', surLesBoutons,
+        { prec: 'Page↑', suiv: 'Page↓', tiroir: 'Page↑' });
+
+    // On rend le tableau à une seule page pour la suite du chapitre.
+    await page.evaluate(() => {
+        if (currentPageIndex !== 0) loadPage(0);
+        while (pages.length > 1) pages.pop();
+        morceauxEnAttente = [];
+        if (typeof majLeTiroirDesMorceaux === 'function') majLeTiroirDesMorceaux();
+        selectedItems = []; setMode('pointer'); draw();
+    });
 
     // Mais un morceau lâché SUR la page projetée s'y voit très bien : on ne
     // coupe pas la présentation pour cela.
-    const surLaPage = await page.evaluate(() => {
-        const doc = images.find(o => o.pluginData && o.pluginData.id === 'pdfDoc');
-        images.length = 0; images.push(doc);
-        morceauxEnAttente = [];
+    const surLaPage = await page.evaluate(async () => {
+        images.length = 0; morceauxEnAttente = [];
+        const c = document.createElement('canvas');
+        c.width = 600; c.height = 800;
+        const g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, 600, 800);
+        g.fillStyle = '#111';
+        for (let i = 0; i < 20; i++) g.fillRect(50, 30 + i * 36, 500, 12);
+        const url = c.toDataURL('image/png');
+        const img = new Image();
+        await new Promise(ok => { img.onload = ok; img.src = url; });
+        imageCache[url] = img;
+        panX = 0; panY = 0; zoom = 1;
+        const doc = { id: nextId++, x: 0, y: 0, w: 300, h: 400, cx: 0, cy: 0, cw: 600, ch: 800,
+                      src: url, fileName: 'poly.png', z: globalZ++,
+                      pluginData: { id: 'pdfDoc', cle: 'zz', page: 1, pages: 1 } };
+        images.push(doc);
+        selectedItems = [{ type: 'image', id: doc.id }];
+        majBarreDocument();
         basculerLaDecoupe(true);
         const rr = { x: doc.x + doc.w * 0.1, y: doc.y + doc.h * 0.1, l: doc.w * 0.3, h: doc.h * 0.1 };
         decoupeGeste = { obj: doc, debut: { x: rr.x, y: rr.y }, rect: rr };
