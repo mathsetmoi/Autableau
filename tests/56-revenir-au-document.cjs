@@ -17,10 +17,20 @@
 // lui, et pour laquelle il avait déménagé dans la barre du coin. La vignette
 // l'y rejoint.
 //
+// ET LA SORTIE DE PLEIN ÉCRAN A ÉTÉ RESSERRÉE DEPUIS. « Quand je suis en plein
+// écran, je découpe, je mets sur le côté, et ça me fait sortir du plein écran. »
+// On en sortait dès que le morceau n'était pas ENTIÈREMENT sur la page, au motif
+// qu'on ne pose pas à côté d'une page qu'on projette — ce qui était vrai tant
+// que le voile de présentation couvrait la marge. Il épargne maintenant ce qu'on
+// a tiré de la page projetée, et l'on ne quitte plus que si le morceau tombe
+// HORS DE VUE.
+//
 // CE QUE CETTE SUITE TIENT :
 //
 //   — la vignette ne paraît que s'il y a où revenir, et elle PEINT sa
 //     destination : un bouton qui montre où il mène n'a pas à être deviné ;
+//   — posé dans la marge, on reste projeté ET le morceau s'y voit ; posé hors
+//     de l'écran, on quitte pour le retrouver ; « Tout poser » quitte toujours ;
 //   — un morceau rentre chez lui, à la page d'où il vient, projeté s'il l'était
 //     au moment du découpage ;
 //   — sinon elle rend le dernier document tenu, là où on l'a laissé — y
@@ -211,9 +221,91 @@ module.exports = async function (browser) {
     r.verifie('le PDF est bien projeté avant la découpe',
         (await etat()).projette === true, JSON.stringify(await etat()));
 
+    // POSÉ DANS LA MARGE, ON RESTE EN PLEIN ÉCRAN.
+    //
+    // « Quand je suis en plein écran, je découpe, je mets sur le côté, et ça me
+    // fait sortir du plein écran. » On en sortait parce que le voile de
+    // présentation couvrait la marge : un morceau posé là aurait été invisible.
+    // Il l'épargne maintenant — la page au milieu, l'exercice découpé à côté,
+    // c'est la disposition qu'on cherche. Et l'on éprouve les DEUX : qu'on y
+    // reste, et que le morceau se VOIT vraiment, sans quoi « on reste projeté »
+    // ne dirait rien de bon.
+    const dansLaMarge = await page.evaluate(async () => {
+        const d = documentPresente();
+        // Si la projection s'est déjà refermée, on le DIT plutôt que de buter
+        // sur un document absent : un chapitre qui plante emporte ses trente
+        // autres résultats avec lui, et l'on ne sait plus lequel se plaignait.
+        if (!d) return { projette: false, clarteDuMorceau: -1, clarteDuVoile: -1,
+                         pourquoi: 'la projection était déjà refermée' };
+        basculerLaDecoupe(true);
+        commencerGesteDeDecoupe({ x: d.x + 20, y: d.y + 20 });
+        poursuivreGesteDeDecoupe({ x: d.x + d.w * 0.5, y: d.y + d.h * 0.25 });
+        finirGesteDeDecoupe();
+        // « Sur le côté » : au milieu de l'écran en hauteur, contre le bord
+        // gauche — donc bien à l'écran, et hors de la page.
+        const m = poserLeMorceau(morceauxEnAttente[0], {
+            x: (60 - panX) / zoom, y: (window.innerHeight / 2 - panY) / zoom
+        });
+        await new Promise(ok => setTimeout(ok, 300));
+        draw();
+        const sx = Math.round(panX + (m.x + m.w / 2) * zoom);
+        const sy = Math.round(panY + (m.y + m.h / 2) * zoom);
+        const p = ctx.getImageData(sx, sy, 1, 1).data;
+        const v = ctx.getImageData(4, 4, 1, 1).data;
+        return { projette: !!presentationEnCours,
+                 clarteDuMorceau: Math.round((p[0] + p[1] + p[2]) / 3),
+                 clarteDuVoile: Math.round((v[0] + v[1] + v[2]) / 3) };
+    });
+    r.verifie('posé dans la marge, on reste en plein écran',
+        dansLaMarge.projette === true, JSON.stringify(dansLaMarge));
+    r.verifie('et le morceau s\'y voit : le voile l\'épargne',
+        dansLaMarge.clarteDuMorceau > 200 && dansLaMarge.clarteDuVoile < 80,
+        JSON.stringify(dansLaMarge));
+
+    // L'EXCEPTION EST ÉTROITE, ET ELLE DOIT LE RESTER. Le voile n'épargne que
+    // ce qui vient de la page projetée. Un morceau d'un AUTRE document traînant
+    // sur le tableau resterait sinon allumé au milieu du noir pendant qu'on
+    // projette — c'est la salle autour de l'écran, elle n'a pas à se montrer.
+    const dAilleurs = await page.evaluate(async () => {
+        const m = images.find(i => i.pluginData && i.pluginData.id === 'morceau');
+        if (!m || !presentationEnCours) return 999;     // on le dit, on ne bute pas
+        const vrai = m.pluginData.cle, vraiSrc = m.pluginData.source;
+        m.pluginData.cle = 'pdf_dun_autre_cours';
+        m.pluginData.source = -1;
+        draw();
+        const sx = Math.round(panX + (m.x + m.w / 2) * zoom);
+        const sy = Math.round(panY + (m.y + m.h / 2) * zoom);
+        const p = ctx.getImageData(sx, sy, 1, 1).data;
+        m.pluginData.cle = vrai; m.pluginData.source = vraiSrc;
+        draw();
+        return Math.round((p[0] + p[1] + p[2]) / 3);
+    });
+    r.verifie('un morceau venu d\'un autre document, lui, reste sous le voile',
+        dAilleurs < 80, String(dAilleurs));
+
+    // ET « TOUT POSER » QUITTE TOUJOURS : il répand les morceaux sur tout le
+    // tableau, bien au-delà de ce qu'on voit — il a besoin de la vue entière.
+    const toutPoser = await page.evaluate(async () => {
+        const d = documentPresente();
+        if (!d) return { avant: false, apres: false, pourquoi: 'plus de projection avant même d\'essayer' };
+        basculerLaDecoupe(true);
+        commencerGesteDeDecoupe({ x: d.x + 30, y: d.y + 30 });
+        poursuivreGesteDeDecoupe({ x: d.x + d.w * 0.4, y: d.y + d.h * 0.3 });
+        finirGesteDeDecoupe();
+        const avant = !!presentationEnCours;
+        poserTousLesMorceaux();
+        await new Promise(ok => setTimeout(ok, 300));
+        return { avant, apres: !!presentationEnCours };
+    });
+    r.egal('« Tout poser » quitte le plein écran, comme avant',
+        toutPoser, { avant: true, apres: false });
+
+    // MAIS POSÉ HORS DE VUE, ON QUITTE — sinon on ne saurait pas où il est allé.
+    await poserLePdf(2);
+    await page.evaluate(async () => { presenterLeDocument(); await new Promise(r => setTimeout(r, 400)); });
     await decouperEtPoser();
     const apresPose = await etat();
-    r.verifie('poser le morceau referme la projection — c\'est la règle d\'avant',
+    r.verifie('posé hors de l\'écran, la projection se referme pour qu\'on le retrouve',
         apresPose.projette === false && apresPose.tenu === 'morceau', JSON.stringify(apresPose));
 
     await page.evaluate(() => document.getElementById('btn-ecran-retour').click());

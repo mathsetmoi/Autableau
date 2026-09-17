@@ -12781,6 +12781,26 @@ function draw() {
 // autour de l'écran. Une page A4 sur un écran 16/9 laisse forcément du vide
 // sur les côtés — c'est de la géométrie, pas un réglage. Ce qui change, c'est
 // qu'on le voit comme un fond et non comme deux bandes blanches restées là.
+// CE QU'ON A TIRÉ DE LA PAGE RESTE VISIBLE DANS LA MARGE.
+//
+// « Quand je suis en plein écran, je découpe, je mets sur le côté, et ça me
+// fait sortir du plein écran. » On en sortait pour une bonne raison : le voile
+// couvre tout sauf la page, à quatre-vingt-quatorze pour cent, si bien qu'un
+// morceau posé dans la bande latérale aurait disparu sous lui. Poser à côté
+// n'avait donc pas de sens — tant que le voile ne faisait pas d'exception.
+//
+// Il en fait une, et une seule : LES MORCEAUX TIRÉS DE LA PAGE QU'ON PROJETTE.
+// C'est exactement la disposition qu'on cherche — la page au milieu, l'exercice
+// découpé agrandi à côté — et une page A4 sur un écran 16/9 laisse pour cela
+// deux bandes vides, par géométrie. Ce qui vient d'ailleurs reste sous le
+// voile : c'est la salle autour de l'écran, et elle n'a pas à se montrer.
+function morceauxDeLaPageProjetee(doc) {
+    if (!doc || typeof images === 'undefined') return [];
+    const cle = doc.pluginData && doc.pluginData.cle;
+    return images.filter(o => o !== doc && o.pluginData && o.pluginData.id === 'morceau'
+        && ((cle && o.pluginData.cle === cle) || o.pluginData.source === doc.id));
+}
+
 function peindreLeFondDePresentation() {
     if (!presentationEnCours || isExportingTransparent) return;
     const doc = getObjectById('image', presentationEnCours);
@@ -12788,14 +12808,28 @@ function peindreLeFondDePresentation() {
     const L = canvas.clientWidth, H = canvas.clientHeight;
     const x = doc.x * zoom + panX, y = doc.y * zoom + panY;
     const w = doc.w * zoom, h = doc.h * zoom;
+
+    // LE VOILE SE TROUE PLUTÔT QUE DE S'ÉCRIRE EN QUATRE BANDES, dès qu'il y a
+    // des morceaux à épargner : un seul chemin, la page et les morceaux
+    // soustraits, rempli en « pair-impair ». Sans morceau, on garde les quatre
+    // bandes — c'est le cas courant, et il ne coûte pas un chemin.
+    const epargnes = morceauxDeLaPageProjetee(doc);
     ctx.save();
     ctx.fillStyle = 'rgba(20, 22, 24, 0.94)';
-    // Les quatre bandes autour de la page, jamais par-dessus
-    if (y > 0) ctx.fillRect(0, 0, L, Math.min(y, H));
-    if (y + h < H) ctx.fillRect(0, Math.max(0, y + h), L, H - Math.max(0, y + h));
-    const hb = Math.max(0, Math.min(y, H)), bb = Math.max(0, Math.min(y + h, H));
-    if (x > 0) ctx.fillRect(0, hb, Math.min(x, L), bb - hb);
-    if (x + w < L) ctx.fillRect(Math.max(0, x + w), hb, L - Math.max(0, x + w), bb - hb);
+    if (epargnes.length) {
+        ctx.beginPath();
+        ctx.rect(0, 0, L, H);
+        ctx.rect(x, y, w, h);
+        epargnes.forEach(o => ctx.rect(o.x * zoom + panX, o.y * zoom + panY, o.w * zoom, o.h * zoom));
+        ctx.fill('evenodd');
+    } else {
+        // Les quatre bandes autour de la page, jamais par-dessus
+        if (y > 0) ctx.fillRect(0, 0, L, Math.min(y, H));
+        if (y + h < H) ctx.fillRect(0, Math.max(0, y + h), L, H - Math.max(0, y + h));
+        const hb = Math.max(0, Math.min(y, H)), bb = Math.max(0, Math.min(y + h, H));
+        if (x > 0) ctx.fillRect(0, hb, Math.min(x, L), bb - hb);
+        if (x + w < L) ctx.fillRect(Math.max(0, x + w), hb, L - Math.max(0, x + w), bb - hb);
+    }
     ctx.restore();
 }
 
@@ -14986,20 +15020,46 @@ function fantomeDuMorceau(m) {
 // aller. Poser à côté, c'est préparer, pas montrer. On sort donc du plein
 // écran — sauf si le morceau atterrit SUR la page projetée, où il se voit très
 // bien et où on l'a peut-être voulu.
+// CE QU'ON POSE LÀ OÙ ON LE VOIT NE FAIT PLUS SORTIR DU PLEIN ÉCRAN.
+//
+// « Quand je suis en plein écran, je découpe, je mets sur le côté, et ça me
+// fait sortir du plein écran. »
+//
+// La règle d'avant comparait le morceau À LA PAGE : posé ne serait-ce qu'un
+// millimètre à côté, on quittait, au motif qu'« on ne pose pas à côté d'une
+// page qu'on projette ». C'était vrai tant que le voile recouvrait la marge —
+// on y aurait posé un morceau invisible. Le voile épargne maintenant ce qu'on a
+// tiré de la page, et la marge redevient une place : celle où l'on met
+// l'exercice agrandi, à côté de la page qu'on lit.
+//
+// ON NE QUITTE DONC PLUS QUE SI L'ON POSE HORS DE VUE — là, on ne saurait pas
+// où le morceau est allé, et il faut bien rendre l'écran pour le retrouver.
+// C'est le MILIEU du morceau qui tranche : à cheval sur un bord, on voit encore
+// de quoi il s'agit et où il est.
+function onLeVoitALEcran(rect) {
+    if (!rect || !zoom) return false;
+    const x = panX + (rect.x + rect.w / 2) * zoom;
+    const y = panY + (rect.y + rect.h / 2) * zoom;
+    const L = (canvas && canvas.clientWidth) || window.innerWidth;
+    const H = (canvas && canvas.clientHeight) || window.innerHeight;
+    return x >= 0 && x <= L && y >= 0 && y <= H;
+}
+
 function quitterLaPresentationSiOnPoseDehors(rect) {
     if (typeof presentationEnCours === 'undefined' || !presentationEnCours) return false;
     const page = (typeof documentPresente === 'function') ? documentPresente() : null;
     if (!page) return false;
-    if (rect && rect.x >= page.x && rect.y >= page.y
-        && rect.x + rect.w <= page.x + page.w && rect.y + rect.h <= page.y + page.h) {
-        return false;
-    }
+    // « rect » manquant, c'est « Tout poser » : il répand les morceaux sur tout
+    // le tableau et a besoin de la vue entière. Il quitte, comme avant.
+    if (rect && onLeVoitALEcran(rect)) return false;
     quitterLaPresentation();
     if (typeof showToast === 'function') {
-        showToast('Plein écran quitté : on ne pose pas à côté d\'une page qu\'on projette');
+        showToast(rect ? 'Plein écran quitté : le morceau est posé hors de l\'écran'
+                       : 'Plein écran quitté pour poser les morceaux');
     }
     return true;
 }
+window.onLeVoitALEcran = onLeVoitALEcran;
 
 // `ou` en coordonnées du tableau, ou rien pour le milieu de l'écran.
 function poserLeMorceau(m, ou) {
