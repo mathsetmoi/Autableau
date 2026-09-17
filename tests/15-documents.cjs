@@ -3337,12 +3337,23 @@ module.exports = async function (browser) {
     r.verifie('le groupe « Annoter » du document porte un bouton de cache',
         leCache.bouton, JSON.stringify(leCache));
 
-    await page.evaluate(() => {
-        // Le groupe ne paraît qu'en annotation : on l'ouvre pour viser le bouton.
-        document.getElementById('doc-annoter').style.display = 'inline-flex';
+    // ON PASSE PAR LE VRAI CHEMIN, sans forcer le groupe à paraître : c'est en
+    // le forçant que le premier contrôle avait laissé passer la panne. « Le
+    // cache blanc ne fonctionne pas » : le rectangle ne figurait pas parmi les
+    // outils d'annotation, si bien que le bouton EFFAÇAIT le contexte et
+    // resélectionnait le document — il se sabordait lui-même. Et comme le
+    // document redevenait un objet qu'on tient, le trait qu'on traçait ensuite
+    // ne se sélectionnait plus : les clics allaient sur la page.
+    const enAnnotant = await page.evaluate(async () => {
         document.getElementById('doc-outil-cache').click();
+        await new Promise(ok => setTimeout(ok, 300));
+        return { annote: docEnAnnotation !== null, mode,
+                 drapeau: estUnCacheBlanc(),
+                 choisi: selectedItems.map(s => s.type).join(',') };
     });
-    await page.waitForTimeout(250);
+    r.egal('le bouton met le document EN ANNOTATION, il ne le resélectionne pas',
+        enAnnotant, { annote: true, mode: 'rectangle', drapeau: true, choisi: '' });
+    await page.waitForTimeout(150);
     await page.mouse.click(250, 250);
     await page.waitForTimeout(150);
     await page.mouse.click(450, 380);

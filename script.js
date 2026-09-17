@@ -15524,7 +15524,16 @@ function documentSelectionne() {
 // encore au premier trait). La barre du document, qui ne parle que de l'objet
 // sélectionné, s'en irait donc juste au moment où l'on en a besoin. Elle retient
 // le document qu'on annote tant qu'on a un outil de tracé en main.
-const OUTILS_ANNOTATION = ['freehand', 'highlighter', 'text'];
+// LE CACHE BLANC ANNOTE, LUI AUSSI.
+//
+// « Le cache blanc ne fonctionne pas. » Il prend l'outil rectangle — et le
+// rectangle ne figurait pas ici. « annoterLeDocument » prenait donc l'autre
+// branche : elle EFFAÇAIT le contexte d'annotation et resélectionnait le
+// document. Le bouton se sabordait lui-même : le groupe « Annoter » se
+// refermait, le document redevenait un objet qu'on tient, et le cache ne se
+// posait pas. Couvrir une réponse pour écrire par-dessus est une annotation au
+// même titre qu'un trait de crayon.
+const OUTILS_ANNOTATION = ['freehand', 'highlighter', 'text', 'rectangle'];
 let docEnAnnotation = null;
 
 // Appelée par setMode, avant qu'il ne vide la sélection.
