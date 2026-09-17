@@ -11,7 +11,7 @@
 // porter, et l'onglet « Fond » restait là pour régler une chose sans effet.
 // Le fond n'a de sens que sur ce qui a un dedans : cercle, rectangle,
 // polygone, courbe fermée.
-const { creerRapport, ouvrirApp } = require('./harness.cjs');
+const { creerRapport, ouvrirApp, rechargerApp } = require('./harness.cjs');
 
 module.exports = async function (browser) {
     const r = creerRapport('Couleurs');
@@ -272,7 +272,11 @@ module.exports = async function (browser) {
 
     // ELLES SURVIVENT À LA SÉANCE. C'est tout l'intérêt : la teinte cherchée
     // pour la carte de géographie était à refaire chaque fois.
-    await page.reload();
+    // ON RECHARGE PAR LE HARNAIS, et non à la main : il arrive que Chromium
+    // reparte avec un stockage amputé, et l'on accusait alors l'application
+    // d'avoir oublié des couleurs qu'elle avait bel et bien écrites. Le filet
+    // ne peut rendre que ce que l'application a elle-même posé.
+    await rechargerApp(page);
     await page.waitForFunction(() => typeof majLesCouleursRecentes === 'function', { timeout: 25000 });
     // ON ATTEND QUE LA RANGÉE SOIT DESSINÉE, et non un délai au jugé : elle se
     // remplit au chargement du document, et quatre cents millisecondes ne
