@@ -1543,6 +1543,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-ecran-presenter')?.addEventListener('click', () => {
         if (typeof presenterCeQuOnRegarde === 'function') presenterCeQuOnRegarde();
     });
+    document.getElementById('btn-ecran-retour')?.addEventListener('click', () => {
+        if (typeof revenirAuDocumentDavant === 'function') revenirAuDocumentDavant();
+    });
 
     document.getElementById('btn-voir-tout')?.addEventListener('click', () => {
         const boite = (typeof boiteDuTravail === 'function') ? boiteDuTravail() : null;
@@ -5074,7 +5077,13 @@ const RACCOURCIS_PARTOUT = [
     { touche: 'Ctrl+A', nom: 'Tout sélectionner' },
     { touche: 'Suppr', nom: 'Effacer la sélection', bouton: ['btn-quick-delete'] },
     { touche: 'Espace', nom: 'Panoramique (maintenir)' },
-    { touche: 'Échap', nom: 'Revenir à la sélection', bouton: ['exit-focus-cross'] }
+    { touche: 'Échap', nom: 'Revenir à la sélection', bouton: ['exit-focus-cross'] },
+    // L'IDIOME DU « PRÉCÉDENT », celui de tous les navigateurs : il est déjà
+    // dans les doigts. Et surtout, PAS Ctrl+Z — qui défait ce qu'on a tracé. Si
+    // la même touche se mettait aussi à naviguer, on ne saurait plus, en
+    // l'appuyant, si l'on efface son trait ou si l'on change de page ; or c'est
+    // le raccourci qu'on tape sans regarder.
+    { touche: 'Alt+←', nom: 'Revenir au document d\'avant', bouton: ['btn-ecran-retour'] }
 ];
 
 // Les combinaisons : elles passent PARTOUT, y compris pendant qu'on écrit —
@@ -15005,27 +15014,40 @@ function poserLeMorceau(m, ou) {
 }
 
 // ==============================================================================
-// REVENIR AU DOCUMENT D'OÙ VIENT LE MORCEAU
+// REVENIR AU DOCUMENT D'AVANT — UNE VIGNETTE QUI MONTRE OÙ ELLE MÈNE
 //
 // « Quand je coupe dans un PDF et que je mets à côté, c'est relou de revenir au
 // PDF — qui d'ailleurs ne devient qu'une image, on ne peut plus naviguer
-// dedans. »
+// dedans. » Puis : « On pourrait mettre aussi une petite vignette à côté du
+// plein écran pour revenir au document d'avant. »
 //
-// C'est exact, et le retour coûtait quatre gestes. Poser un morceau referme le
-// plein écran — on ne pose pas à côté d'une page qu'on projette —, le morceau
-// devient le document tenu, et un morceau n'a pas de pages : les flèches s'en
-// vont avec lui. Il fallait alors retrouver le PDF sous les morceaux, le
-// cliquer, re-presser « Projeter », et retomber sur la bonne page.
+// LE PROBLÈME. Poser un morceau referme le plein écran — on ne pose pas à côté
+// d'une page qu'on projette —, le morceau devient le document tenu, et un
+// morceau n'a pas de pages : les flèches s'en vont avec lui. Le retour
+// demandait quatre gestes : retrouver le PDF sous les morceaux, le cliquer,
+// re-presser « Projeter », revenir à la bonne page.
 //
-// Or le morceau savait DÉJÀ tout : le fichier, le numéro de page, le document
-// dont il a été tiré — et, depuis maintenant, s'il était projeté à l'instant du
-// découpage. Il ne manquait que le chemin. Un bouton, et l'on rentre là d'où
-// l'on vient, à la page qu'il faut, comme on l'avait laissé.
+// OÙ CE BOUTON DOIT VIVRE. Il avait d'abord été posé dans la barre du document,
+// et c'était refaire l'erreur que « Projeter » avait déjà faite avant lui :
+// cette barre paraît et disparaît avec la sélection. Elle n'est donc plus là au
+// moment précis où l'on veut revenir — quand on vient de ranger ses morceaux et
+// qu'on ne tient plus rien. Il vit maintenant dans la barre du coin, toujours
+// au même pixel, et ne paraît que s'il y a où revenir.
+//
+// OÙ IL MÈNE, EN DEUX RÈGLES ET DANS CET ORDRE :
+//   1. un MORCEAU rentre chez lui — le document dont il a été tiré, à la page
+//      d'où il vient, projeté s'il l'était au moment du découpage ;
+//   2. sinon, le dernier document tenu qui n'est pas celui d'aujourd'hui, LÀ OÙ
+//      ON L'A LAISSÉ.
+// Deux règles dans un seul bouton, c'est d'ordinaire une de trop. Ici elles ne
+// se contredisent pas et, surtout, ON VOIT LA DESTINATION : la vignette peint
+// la page où l'on va. Un bouton qui montre où il mène n'a pas à être deviné.
 // ==============================================================================
 
-// Le document d'origine, s'il est encore sur le tableau. On cherche D'ABORD le
-// PDF par sa clé : un morceau redécoupé dans un morceau renvoie à son voisin
-// immédiat, alors que ce qu'on veut retrouver, c'est la page qu'on feuillette.
+// Le document d'origine d'un morceau, s'il est encore sur le tableau. On cherche
+// D'ABORD le PDF par sa clé : un morceau redécoupé dans un morceau renvoie à son
+// voisin immédiat, alors que ce qu'on veut retrouver, c'est la page qu'on
+// feuillette.
 function documentSourceDuMorceau(m) {
     if (!m || !m.pluginData || m.pluginData.id !== 'morceau') return null;
     const pd = m.pluginData;
@@ -15040,40 +15062,129 @@ function documentSourceDuMorceau(m) {
     return (direct && direct !== m) ? direct : null;
 }
 
-async function revenirAuDocumentDuMorceau() {
-    const m = (typeof documentDeLaBarre === 'function') ? documentDeLaBarre() : null;
-    const source = documentSourceDuMorceau(m);
-    if (!source) {
-        if (typeof showToast === 'function') showToast("Le document d'origine n'est plus sur le tableau");
+// LA TRACE DE CE QU'ON A TENU. Le plus récent en tête, et un document n'y figure
+// qu'une fois : revenir deux fois au même endroit n'est pas deux étapes. La tête
+// est le document d'aujourd'hui tant qu'on en tient un, et reste le dernier tenu
+// quand on lâche tout — c'est ce qui fait que la vignette survit au clic dans le
+// vide, seul moment où l'on en a vraiment besoin.
+let traceDesDocuments = [];
+const TRACE_MAX = 8;
+
+function noterLeDocumentTenu(doc) {
+    if (!doc || typeof estUnDocumentPose !== 'function' || !estUnDocumentPose(doc)) return;
+    const etape = {
+        id: doc.id,
+        page: (doc.pluginData && doc.pluginData.page) || null,
+        projete: (typeof presentationEnCours !== 'undefined' && presentationEnCours === doc.id)
+    };
+    traceDesDocuments = traceDesDocuments.filter(e => e.id !== doc.id);
+    traceDesDocuments.unshift(etape);
+    if (traceDesDocuments.length > TRACE_MAX) traceDesDocuments.length = TRACE_MAX;
+}
+
+// Où l'on reviendrait si l'on appuyait : { doc, page, projete }, ou rien.
+function documentOuRevenir() {
+    const tenu = (typeof documentDeLaBarre === 'function') ? documentDeLaBarre() : null;
+    const source = documentSourceDuMorceau(tenu);
+    if (source) {
+        return { doc: source, page: tenu.pluginData.page || null, projete: !!tenu.pluginData.projete };
+    }
+    for (const e of traceDesDocuments) {
+        if (tenu && e.id === tenu.id) continue;
+        const doc = getObjectById('image', e.id);
+        if (doc && estUnDocumentPose(doc)) return { doc, page: e.page, projete: e.projete };
+    }
+    return null;
+}
+
+// L'IMAGE À MONTRER. Un PDF garde ses pages rendues : on prend celle où l'on va,
+// et non celle qu'il affiche en ce moment — la vignette mentirait. Si cette
+// page-là n'a pas encore été rendue, on se rabat sur ce que le document montre :
+// une vignette approximative vaut mieux qu'un carré vide.
+function imageDeLaVignette(doc, page) {
+    const essais = [];
+    if (doc.pluginData && doc.pluginData.cle && page && typeof documentsPdf !== 'undefined') {
+        const d = documentsPdf.get(doc.pluginData.cle);
+        const rendu = d && d.rendus && d.rendus.get(page);
+        if (rendu && rendu.src) essais.push(rendu.src);
+    }
+    if (doc.src) essais.push(doc.src);
+    for (const s of essais) {
+        const img = imageCache[s];
+        if (img && (img.naturalWidth || img.width)) return img;
+    }
+    return null;
+}
+
+function peindreLaVignette(cnv, doc, page) {
+    const c = cnv.getContext('2d');
+    c.clearRect(0, 0, cnv.width, cnv.height);
+    const img = imageDeLaVignette(doc, page);
+    if (!img) return false;
+    // Le cadrage du document, s'il en a un : la vignette d'un morceau montre SON
+    // bout de page, et non la page entière dont il a été tiré.
+    const sw = doc.cw || img.naturalWidth || img.width;
+    const sh = doc.ch || img.naturalHeight || img.height;
+    if (!(sw > 0) || !(sh > 0)) return false;
+    const sx = doc.cx || 0, sy = doc.cy || 0;
+    const k = Math.min(cnv.width / sw, cnv.height / sh);
+    const w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+    const x = Math.round((cnv.width - w) / 2), y = Math.round((cnv.height - h) / 2);
+    // Un fond blanc sous la page : un PDF a des marges transparentes, et sans
+    // cela la vignette prenait la couleur du bouton par en dessous.
+    c.fillStyle = '#ffffff';
+    c.fillRect(x, y, w, h);
+    try { c.drawImage(img, sx, sy, sw, sh, x, y, w, h); } catch (e) { return false; }
+    return true;
+}
+
+function majLaVignetteDeRetour() {
+    const bouton = document.getElementById('btn-ecran-retour');
+    if (!bouton) return;
+    const cible = documentOuRevenir();
+    const cnv = document.getElementById('vignette-retour');
+    const peinte = (cible && cnv) ? peindreLaVignette(cnv, cible.doc, cible.page) : false;
+    // PAS DE BOUTON SANS DESSIN. Une vignette qui n'a pas pu se peindre n'est
+    // qu'un rectangle gris de plus dans un coin qu'on a passé du temps à
+    // désencombrer : tant qu'on ne sait pas montrer où l'on va, on se tait.
+    bouton.style.display = peinte ? 'flex' : 'none';
+}
+window.majLaVignetteDeRetour = majLaVignetteDeRetour;
+
+async function revenirAuDocumentDavant() {
+    const cible = documentOuRevenir();
+    if (!cible) {
+        if (typeof showToast === 'function') showToast("Aucun document où revenir");
         return false;
     }
-    const page = m.pluginData.page;
+    const { doc, page, projete } = cible;
     // Tenir un document, c'est l'avoir en main : on repose le crayon. Dans cet
     // ordre — « setMode » vide la sélection, il ne doit pas effacer la nôtre.
     if (mode !== 'pointer') setMode('pointer');
-    selectedItems = [{ type: 'image', id: source.id }];
-    if (typeof estUnPdfFeuilletable === 'function' && estUnPdfFeuilletable(source)
-        && page && source.pluginData.page !== page) {
-        await allerALaPage(source, page);
+    selectedItems = [{ type: 'image', id: doc.id }];
+    if (typeof estUnPdfFeuilletable === 'function' && estUnPdfFeuilletable(doc)
+        && page && doc.pluginData.page !== page) {
+        await allerALaPage(doc, page);
     }
-    // COMME ON L'AVAIT LAISSÉ. Projeté s'il l'était quand on a découpé ; sinon
-    // simplement ramené sous les yeux — il a pu sortir de l'écran pendant qu'on
-    // rangeait les morceaux, et le sélectionner sans le montrer ne sert à rien.
-    if (m.pluginData.projete && typeof presenterLeDocument === 'function') presenterLeDocument();
-    else if (typeof cadrerSurLObjet === 'function') cadrerSurLObjet(source);
+    // COMME ON L'AVAIT LAISSÉ. Projeté s'il l'était ; sinon simplement ramené
+    // sous les yeux — il a pu sortir de l'écran pendant qu'on rangeait les
+    // morceaux, et le sélectionner sans le montrer ne sert à rien.
+    if (projete && typeof presenterLeDocument === 'function') presenterLeDocument();
+    else if (typeof cadrerSurLObjet === 'function') cadrerSurLObjet(doc);
     if (typeof majBarreDocument === 'function') majBarreDocument();
     draw();
-    // LE NOM ET LA PAGE SE DISENT ICI, et non sur le bouton : cette barre ne
-    // porte que des icônes, et son infobulle ne peut pas changer sans devenir
-    // la phrase écrite que personne ne lit (voir le chapitre 54).
+    // LE NOM ET LA PAGE SE DISENT ICI, et non sur le bouton : son infobulle ne
+    // peut pas changer sans devenir la phrase écrite que personne ne lit (voir
+    // le chapitre 54), et la vignette, elle, montre déjà la page.
     if (typeof showToast === 'function') {
-        const nom = m.pluginData.nom || source.fileName || 'le document';
+        const nom = (doc.pluginData && doc.pluginData.nom) || doc.fileName || 'le document';
         showToast('↩ ' + nom + (page ? ' — page ' + page : ''));
     }
     return true;
 }
-window.revenirAuDocumentDuMorceau = revenirAuDocumentDuMorceau;
+window.revenirAuDocumentDavant = revenirAuDocumentDavant;
 window.documentSourceDuMorceau = documentSourceDuMorceau;
+window.documentOuRevenir = documentOuRevenir;
 
 // Celui qui réclame le plus de finesse tire les autres avec lui : ils
 // partagent la même page rendue.
@@ -15975,6 +16086,14 @@ function majBarreDocument() {
 
     const obj = documentDeLaBarre();
 
+    // ON PASSE TOUJOURS PAR ICI quand le document tenu change — c'est donc ici
+    // qu'on note où l'on était, et ici qu'on rafraîchit la vignette du retour.
+    // Avant le départ anticipé qui suit : lâcher tout efface la barre, mais
+    // c'est justement le moment où la vignette doit encore montrer quelque
+    // chose.
+    noterLeDocumentTenu(obj);
+    majLaVignetteDeRetour();
+
     // DE QUOI ÉCRIRE, DÈS QU'ON TIENT UN DOCUMENT. Ces trois outils ne
     // paraissaient qu'en plein écran, au motif que les barres y sont effacées
     // et qu'ailleurs elles sont « sous la main ». Mais quand on ouvre un
@@ -16056,15 +16175,6 @@ function majBarreDocument() {
     if (bZones) {
         bZones.style.display = unPdf ? 'inline-flex' : 'none';
         bZones.classList.toggle('actif', zonesActives);
-    }
-    // LE CHEMIN DU RETOUR, et seulement quand il mène quelque part : sur un
-    // morceau, et si le document dont il vient est encore sur le tableau.
-    const bRetour = document.getElementById('doc-retour');
-    if (bRetour) {
-        const versOu = documentSourceDuMorceau(obj);
-        bRetour.style.display = versOu ? 'inline-flex' : 'none';
-        const sepRetour = document.getElementById('doc-retour-sep');
-        if (sepRetour) sepRetour.style.display = versOu ? 'block' : 'none';
     }
     // Découper vaut pour tout ce qui est une image posée : un PDF, un scan,
     // une photo — et un morceau, qu'on redécoupe parfois en deux fois.
@@ -16338,13 +16448,6 @@ function brancherBarreDocument() {
         bouton.addEventListener('click', () => { repererLesExercices(); });
     })();
 
-    // ↩ Revenir au document d'où vient le morceau, à sa page, et projeté s'il
-    // l'était quand on l'a découpé.
-    (function () {
-        const bouton = b('doc-retour');
-        if (!bouton) return;
-        bouton.addEventListener('click', () => { revenirAuDocumentDuMorceau(); });
-    })();
 
     // DEUX GESTES, DEUX BOUTONS : la page en grand ou non, et les outils
     // par-dessus ou non. Le cycle à trois temps mêlait deux questions sans
@@ -22133,6 +22236,17 @@ window.addEventListener('keydown', (e) => {
             if (couleurParRaccourci(n)) { e.preventDefault(); e.stopPropagation(); }
             return;
         }
+    }
+
+    // Alt+← : revenir au document d'avant. Une flèche ne compose rien — c'est
+    // pourquoi Alt lui va, là où Alt+chiffre écrivait un caractère. On arrête
+    // la touche au passage : sur une page servie par le web, le navigateur en
+    // ferait son « page précédente » et l'on quitterait le tableau.
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === 'ArrowLeft') {
+        if (typeof onEcritAilleurs === 'function' && onEcritAilleurs(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        if (typeof revenirAuDocumentDavant === 'function') revenirAuDocumentDavant();
+        return;
     }
 
     // Ctrl+Maj+F : plein écran

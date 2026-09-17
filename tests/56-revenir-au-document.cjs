@@ -1,49 +1,52 @@
-// LE CHEMIN DU RETOUR, APRÈS UNE DÉCOUPE.
+// LE CHEMIN DU RETOUR, ET IL MONTRE OÙ IL MÈNE.
 //
 // « Quand je coupe dans un PDF et que je mets à côté, c'est relou de revenir au
 // PDF — qui d'ailleurs ne devient qu'une image, on ne peut plus naviguer
-// dedans. »
+// dedans. » Puis : « On pourrait mettre aussi une petite vignette à côté du
+// plein écran pour revenir au document d'avant. »
 //
 // C'était exact, et mesuré : poser un morceau referme le plein écran (on ne
 // pose pas à côté d'une page qu'on projette), le morceau devient le document
 // tenu, et un morceau n'a pas de pages — les flèches s'en vont avec lui. Le
-// retour demandait quatre gestes : retrouver le PDF sous les morceaux, le
-// cliquer, re-projeter, revenir à la bonne page.
+// retour demandait quatre gestes.
 //
-// Le morceau savait pourtant déjà tout : le fichier, la page, le document dont
-// il vient. Il ne manquait que le chemin — et, pour rendre le document COMME ON
-// L'AVAIT LAISSÉ, une chose de plus : qu'il ait noté, à l'instant du découpage,
-// qu'on le projetait.
+// LE BOUTON A D'ABORD ÉTÉ POSÉ AU MAUVAIS ENDROIT : dans la barre du document,
+// qui paraît et disparaît avec la sélection. Elle n'est donc plus là au moment
+// précis où l'on veut revenir — quand on vient de ranger ses morceaux et qu'on
+// ne tient plus rien. C'est l'erreur que « Projeter » avait déjà faite avant
+// lui, et pour laquelle il avait déménagé dans la barre du coin. La vignette
+// l'y rejoint.
 //
 // CE QUE CETTE SUITE TIENT :
 //
-//   — le bouton ne paraît que sur un morceau, et seulement si le document dont
-//     il vient est encore sur le tableau ;
-//   — il rend le document, à SA page, et re-projette s'il était projeté quand
-//     on a découpé ;
-//   — hors projection, il ramène le document sous les yeux : le sélectionner
-//     sans le montrer ne servirait à rien ;
-//   — un morceau redécoupé dans un morceau rentre jusqu'au PDF, et non chez son
-//     voisin immédiat ;
-//   — la source effacée, le bouton s'en va et le chemin le dit ;
-//   — et les flèches de page reviennent avec le document : c'est toute la
-//     plainte.
+//   — la vignette ne paraît que s'il y a où revenir, et elle PEINT sa
+//     destination : un bouton qui montre où il mène n'a pas à être deviné ;
+//   — un morceau rentre chez lui, à la page d'où il vient, projeté s'il l'était
+//     au moment du découpage ;
+//   — sinon elle rend le dernier document tenu, là où on l'a laissé — y
+//     compris quand on ne tient plus rien, seul moment où l'on en a besoin ;
+//   — un morceau taillé dans un morceau rentre jusqu'au PDF, pas chez son
+//     voisin ;
+//   — le document effacé, la vignette s'en va ;
+//   — Alt+← fait le même geste, et Ctrl+Z, lui, continue de défaire ;
+//   — et l'ancien bouton de la barre du document a bien disparu : deux chemins
+//     vers le même endroit, c'est un de trop.
 const { creerRapport, ouvrirApp, petitPdf } = require('./harness.cjs');
 
 module.exports = async function (browser) {
-    const r = creerRapport('Revenir au document découpé');
+    const r = creerRapport('Revenir au document d\'avant');
     const { context, page, erreurs } = await ouvrirApp(browser);
     await page.waitForFunction(() => typeof poserPdfFeuilletable === 'function'
         && typeof allerALaPage === 'function', { timeout: 20000 });
 
     const octets = Array.from(petitPdf());
 
-    // Un PDF de trois pages, posé à plat, ouvert à la page demandée.
     const poserLePdf = (n) => page.evaluate(async ({ octets, n }) => {
         panX = 0; panY = 0; zoom = 1;
         images.length = 0; freehands.length = 0; texts.length = 0;
         if (typeof quitterLaPresentation === 'function') quitterLaPresentation();
         morceauxEnAttente = [];
+        traceDesDocuments = [];
         await poserPdfFeuilletable(new File([new Uint8Array(octets)], 'cours.pdf', { type: 'application/pdf' }));
         await new Promise(res => setTimeout(res, 1000));
         setMode('pointer');
@@ -53,7 +56,6 @@ module.exports = async function (browser) {
         return images[0].id;
     }, { octets, n });
 
-    // Découper un morceau dans l'image visée, et le poser où on le dit.
     const decouperEtPoser = (ou) => page.evaluate((ou) => {
         const src = images.find(i => i.pluginData && i.pluginData.id === 'pdfDoc') || images[0];
         basculerLaDecoupe(true);
@@ -72,49 +74,113 @@ module.exports = async function (browser) {
             return !!e && getComputedStyle(e).display !== 'none';
         };
         const doc = documentDeLaBarre();
+        const cible = documentOuRevenir();
         return {
             tenu: doc ? (doc.pluginData ? doc.pluginData.id : 'image') : null,
             feuilletable: doc ? estUnPdfFeuilletable(doc) : null,
-            retour: vu('doc-retour'),
+            vignette: vu('btn-ecran-retour'),
             fleches: vu('doc-pages'),
             page: doc && doc.pluginData ? doc.pluginData.page : null,
-            projette: !!presentationEnCours
+            projette: !!presentationEnCours,
+            versOu: cible ? ((cible.doc.pluginData ? cible.doc.pluginData.id : 'image')
+                             + '#' + cible.doc.id + '@' + cible.page) : null
         };
     });
 
+    // Une vignette peinte n'est pas un carré vide : on compte les pixels qui
+    // ne sont pas transparents, et l'on regarde s'il y a autre chose que du
+    // blanc — un fond blanc tout seul serait une page qu'on n'a pas su rendre.
+    const vignettePeinte = () => page.evaluate(() => {
+        const c = document.getElementById('vignette-retour');
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let opaques = 0, encre = 0;
+        for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] > 10) opaques++;
+            if (d[i + 3] > 10 && (d[i] < 230 || d[i + 1] < 230 || d[i + 2] < 230)) encre++;
+        }
+        return { opaques, encre, total: c.width * c.height };
+    });
+
     // ------------------------------------------------------------------
-    // 1. LE BOUTON PARAÎT OÙ IL SERT, ET NULLE PART AILLEURS
+    // 1. ELLE NE PARAÎT QUE S'IL Y A OÙ REVENIR
     // ------------------------------------------------------------------
     await poserLePdf(1);
-    const surLePdf = await etat();
-    r.verifie('sur le PDF lui-même, pas de bouton de retour : on y est',
-        surLePdf.retour === false && surLePdf.fleches === true, JSON.stringify(surLePdf));
+    const seul = await etat();
+    r.verifie('un seul document tenu : nulle part où revenir, pas de vignette',
+        seul.vignette === false && seul.versOu === null, JSON.stringify(seul));
 
     await decouperEtPoser();
     const surLeMorceau = await etat();
-    r.verifie('sur le morceau posé, le bouton de retour paraît — et les flèches sont parties',
-        surLeMorceau.tenu === 'morceau' && surLeMorceau.retour === true
-        && surLeMorceau.fleches === false, JSON.stringify(surLeMorceau));
+    r.verifie('sur le morceau posé, la vignette paraît et vise le PDF',
+        surLeMorceau.tenu === 'morceau' && surLeMorceau.vignette === true
+        && surLeMorceau.fleches === false
+        && /^pdfDoc#\d+@1$/.test(surLeMorceau.versOu), JSON.stringify(surLeMorceau));
 
-    // L'INFOBULLE NE NOMME PAS LE FICHIER, et c'est voulu : elle serait alors
-    // réécrite au chargement, ce que le chapitre 54 refuse. Mais elle existe —
-    // le chapitre 09 refuse une icône muette dans cette barre.
-    // Et l'icône est un DESSIN, pas une vitre : un « <svg> » vide passe pour une
-    // icône auprès de qui ne compte que les balises — deux boutons de cette
-    // barre sont d'ailleurs des vitres que le code remplit, mais celui-ci
-    // porte son trait dans la page.
-    const bulle = await page.evaluate(() => {
-        const b = document.getElementById('doc-retour');
-        const svg = b.querySelector('svg');
-        return { texte: b.getAttribute('data-tooltip'), mot: b.textContent.trim(),
-                 traits: svg ? svg.children.length : 0 };
+    // ELLE PEINT SA DESTINATION. C'est tout son intérêt : on voit où l'on va.
+    const peinte = await vignettePeinte();
+    r.verifie('et elle peint vraiment la page où elle mène',
+        peinte.opaques > peinte.total * 0.5 && peinte.encre > 20, JSON.stringify(peinte));
+
+    // ET ELLE MONTRE LA PAGE OÙ ELLE MÈNE, pas celle que le document affiche
+    // en ce moment. Sans quoi la vignette mentirait exactement là où elle sert :
+    // on découpe page 1, on continue à feuilleter jusqu'à la 3, et l'image du
+    // retour annoncerait la 3 pour ramener à la 1.
+    await poserLePdf(1);
+    await decouperEtPoser();
+    const montre = await page.evaluate(async () => {
+        const pdf = images.find(i => i.pluginData.id === 'pdfDoc');
+        await allerALaPage(pdf, 3);
+        selectedItems = [{ type: 'image', id: images.find(i => i.pluginData.id === 'morceau').id }];
+        majBarreDocument();
+        const cnv = document.getElementById('vignette-retour');
+        const lu = cnv.getContext('2d').getImageData(0, 0, cnv.width, cnv.height).data;
+        // La référence est peinte À PART, depuis le rendu de chaque page : se
+        // servir de la fonction de l'application y recopierait ses propres
+        // bugs, et le test ne mesurerait plus que sa propre cohérence.
+        const d = documentsPdf.get(pdf.pluginData.cle);
+        const ecart = (n) => new Promise(res => {
+            const r = d.rendus.get(n);
+            if (!r || !r.src) return res(null);
+            const im = new Image();
+            im.onload = () => {
+                const t = document.createElement('canvas');
+                t.width = cnv.width; t.height = cnv.height;
+                const c = t.getContext('2d');
+                const sw = pdf.cw || im.naturalWidth, sh = pdf.ch || im.naturalHeight;
+                const k = Math.min(t.width / sw, t.height / sh);
+                const w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+                const x = Math.round((t.width - w) / 2), y = Math.round((t.height - h) / 2);
+                c.fillStyle = '#ffffff'; c.fillRect(x, y, w, h);
+                c.drawImage(im, pdf.cx || 0, pdf.cy || 0, sw, sh, x, y, w, h);
+                const ref = c.getImageData(0, 0, t.width, t.height).data;
+                let somme = 0;
+                for (let i = 0; i < ref.length; i += 4) {
+                    somme += Math.abs(ref[i] - lu[i]) + Math.abs(ref[i + 1] - lu[i + 1])
+                           + Math.abs(ref[i + 2] - lu[i + 2]);
+                }
+                res(Math.round(somme / (ref.length / 4) * 100) / 100);
+            };
+            im.onerror = () => res(null);
+            im.src = r.src;
+        });
+        return { versLa1: await ecart(1), versLa3: await ecart(3), pdfEstA: pdf.pluginData.page };
     });
-    r.verifie('le bouton porte son infobulle, un vrai dessin, et pas un mot écrit',
-        !!bulle.texte && bulle.texte.length > 10 && bulle.traits >= 2 && bulle.mot === '',
+    r.verifie('la vignette montre la page du morceau, et non celle que le PDF affiche',
+        montre.pdfEstA === 3 && montre.versLa1 !== null && montre.versLa3 !== null
+        && montre.versLa1 < montre.versLa3, JSON.stringify(montre));
+
+    // Elle porte une infobulle : une image de quelques pixels reste un rébus
+    // pour qui ne l'a jamais vue, et cette barre n'accepte pas les muets.
+    const bulle = await page.evaluate(() => {
+        const b = document.getElementById('btn-ecran-retour');
+        return { texte: b.getAttribute('data-tooltip'), touche: b.getAttribute('data-raccourci') };
+    });
+    r.verifie('la vignette porte son infobulle et sa touche',
+        !!bulle.texte && bulle.texte.length > 10 && bulle.touche === 'Alt+←',
         JSON.stringify(bulle));
 
     // ------------------------------------------------------------------
-    // 2. IL REND LE DOCUMENT, À SA PAGE
+    // 2. UN MORCEAU RENTRE CHEZ LUI, À SA PAGE
     // C'est le cœur de la plainte : « on ne peut plus naviguer dedans ».
     // ------------------------------------------------------------------
     await poserLePdf(2);
@@ -130,10 +196,10 @@ module.exports = async function (browser) {
         selectedItems = [{ type: 'image', id: images.find(i => i.pluginData.id === 'morceau').id }];
         majBarreDocument();
     });
-    await page.evaluate(() => document.getElementById('doc-retour').click());
+    await page.evaluate(() => document.getElementById('btn-ecran-retour').click());
     await page.waitForTimeout(500);
     const rentre = await etat();
-    r.verifie('le bouton rend le PDF, à la page du morceau, avec ses flèches',
+    r.verifie('la vignette rend le PDF, à la page du morceau, avec ses flèches',
         rentre.tenu === 'pdfDoc' && rentre.feuilletable === true
         && rentre.page === 2 && rentre.fleches === true, JSON.stringify(rentre));
 
@@ -141,7 +207,7 @@ module.exports = async function (browser) {
     // 3. COMME ON L'AVAIT LAISSÉ
     // ------------------------------------------------------------------
     await poserLePdf(2);
-    await page.evaluate(async () => { presenterLeDocument(); await new Promise(r => setTimeout(r, 400)); });
+    await page.evaluate(async () => { presenterLeDocument(); await new Promise(res => setTimeout(res, 400)); });
     r.verifie('le PDF est bien projeté avant la découpe',
         (await etat()).projette === true, JSON.stringify(await etat()));
 
@@ -150,27 +216,22 @@ module.exports = async function (browser) {
     r.verifie('poser le morceau referme la projection — c\'est la règle d\'avant',
         apresPose.projette === false && apresPose.tenu === 'morceau', JSON.stringify(apresPose));
 
-    await page.evaluate(() => document.getElementById('doc-retour').click());
+    await page.evaluate(() => document.getElementById('btn-ecran-retour').click());
     await page.waitForTimeout(600);
     const reprojete = await etat();
     r.verifie('et le retour re-projette le document, à sa page',
         reprojete.projette === true && reprojete.tenu === 'pdfDoc' && reprojete.page === 2,
         JSON.stringify(reprojete));
 
-    // Découpé SANS projection, le retour ne projette pas : on ne décide pas à
-    // la place du professeur de mettre une page en grand devant la classe.
     await poserLePdf(1);
     await decouperEtPoser();
-    await page.evaluate(() => document.getElementById('doc-retour').click());
+    await page.evaluate(() => document.getElementById('btn-ecran-retour').click());
     await page.waitForTimeout(400);
     const sansProjection = await etat();
     r.verifie('découpé sans projeter, le retour ne projette pas',
         sansProjection.projette === false && sansProjection.tenu === 'pdfDoc',
         JSON.stringify(sansProjection));
 
-    // MAIS IL RAMÈNE LE DOCUMENT SOUS LES YEUX. On range les morceaux, on
-    // dérive à l'autre bout du tableau : le sélectionner sans le montrer ne
-    // servirait à rien.
     await poserLePdf(1);
     await decouperEtPoser();
     const ramene = await page.evaluate(async () => {
@@ -185,15 +246,65 @@ module.exports = async function (browser) {
         const avant = dehors(pdf);
         selectedItems = [{ type: 'image', id: images.find(i => i.pluginData.id === 'morceau').id }];
         majBarreDocument();
-        document.getElementById('doc-retour').click();
-        await new Promise(r => setTimeout(r, 400));
+        document.getElementById('btn-ecran-retour').click();
+        await new Promise(res => setTimeout(res, 400));
         return { avant, apres: dehors(pdf) };
     });
     r.verifie('le document parti de l\'écran y revient', ramene.avant && !ramene.apres,
         JSON.stringify(ramene));
 
     // ------------------------------------------------------------------
-    // 4. LES CAS OÙ LE CHEMIN NE MÈNE PLUS NULLE PART
+    // 4. ET SURTOUT : QUAND ON NE TIENT PLUS RIEN
+    // C'est pour ce moment-là que la vignette a quitté la barre du document —
+    // celle-ci s'en va avec la sélection, justement quand on en a besoin.
+    // ------------------------------------------------------------------
+    await poserLePdf(2);
+    await decouperEtPoser();
+    const maisLache = await page.evaluate(() => {
+        clearSelection();
+        majBarreDocument();
+        const barre = document.getElementById('bar-document');
+        return {
+            barreDuDoc: barre.classList.contains('visible'),
+            vignette: getComputedStyle(document.getElementById('btn-ecran-retour')).display !== 'none',
+            versOu: (() => { const c = documentOuRevenir(); return c ? c.doc.pluginData.id : null; })()
+        };
+    });
+    r.verifie('on lâche tout : la barre du document s\'en va, la vignette reste',
+        maisLache.barreDuDoc === false && maisLache.vignette === true,
+        JSON.stringify(maisLache));
+    r.egal('et elle vise le dernier document tenu', maisLache.versOu, 'morceau');
+
+    await page.evaluate(() => document.getElementById('btn-ecran-retour').click());
+    await page.waitForTimeout(400);
+    r.egal('un clic sur la vignette le reprend en main',
+        (await etat()).tenu, 'morceau');
+
+    // L'ALLER-RETOUR. Du morceau on va au PDF, du PDF on revient au morceau :
+    // la vignette fait la navette entre les deux derniers.
+    await page.evaluate(() => document.getElementById('btn-ecran-retour').click());
+    await page.waitForTimeout(400);
+    r.egal('du morceau, elle mène au PDF', (await etat()).tenu, 'pdfDoc');
+    await page.evaluate(() => document.getElementById('btn-ecran-retour').click());
+    await page.waitForTimeout(400);
+    r.egal('et du PDF, elle ramène au morceau', (await etat()).tenu, 'morceau');
+
+    // ET LA TRACE NE COMPTE CHAQUE DOCUMENT QU'UNE FOIS. Revenir deux fois au
+    // même endroit n'est pas deux étapes : sinon un simple aller-retour entre
+    // deux documents remplit la mémoire des derniers tenus, et les autres en
+    // tombent — ceux-là mêmes qu'on aurait voulu retrouver.
+    const trace = await page.evaluate(() => {
+        const pdf = images.find(i => i.pluginData.id === 'pdfDoc');
+        const m = images.find(i => i.pluginData.id === 'morceau');
+        const tenir = (o) => { selectedItems = [{ type: 'image', id: o.id }]; majBarreDocument(); };
+        tenir(pdf); tenir(m); tenir(pdf); tenir(m); tenir(pdf);
+        return traceDesDocuments.map(e => e.id);
+    });
+    r.egal('cinq allers-retours ne laissent que deux étapes dans la trace',
+        trace.length, 2);
+
+    // ------------------------------------------------------------------
+    // 5. LES CAS OÙ LE CHEMIN NE MÈNE PLUS NULLE PART
     // ------------------------------------------------------------------
     await poserLePdf(1);
     await decouperEtPoser();
@@ -203,17 +314,18 @@ module.exports = async function (browser) {
         selectedItems = [{ type: 'image', id: images.find(i => i.pluginData.id === 'morceau').id }];
         majBarreDocument();
         return {
-            bouton: getComputedStyle(document.getElementById('doc-retour')).display,
-            chemin: documentSourceDuMorceau(images.find(i => i.pluginData.id === 'morceau'))
+            vignette: getComputedStyle(document.getElementById('btn-ecran-retour')).display,
+            chemin: documentOuRevenir()
         };
     });
-    r.egal('le document effacé, le bouton s\'en va', sansSource.bouton, 'none');
+    r.egal('le document effacé, la vignette s\'en va', sansSource.vignette, 'none');
     r.egal('et le chemin ne mène plus nulle part', sansSource.chemin, null);
+    r.egal('appelée quand même, elle refuse proprement',
+        await page.evaluate(() => revenirAuDocumentDavant()), false);
 
-    // SEUL UN MORCEAU A UNE MAISON. Un document n'est le morceau de personne —
-    // et le même PDF posé DEUX FOIS partage sa clé avec son jumeau : sans cette
-    // règle, chaque exemplaire s'offrirait un bouton pour « revenir » chez
-    // l'autre, ce qui ne veut rien dire.
+    // SEUL UN MORCEAU A UNE MAISON. Le même PDF posé DEUX FOIS partage sa clé
+    // avec son jumeau : sans cette règle, chaque exemplaire « reviendrait »
+    // chez l'autre, ce qui ne veut rien dire.
     await poserLePdf(1);
     const pasUnMorceau = await page.evaluate(() => {
         const pdf = images.find(i => i.pluginData.id === 'pdfDoc');
@@ -222,29 +334,17 @@ module.exports = async function (browser) {
         images.push(jumeau);
         const nue = { id: nextId++, x: 10, y: 10, w: 40, h: 40, src: pdf.src, z: globalZ++ };
         images.push(nue);
-        selectedItems = [{ type: 'image', id: jumeau.id }];
-        majBarreDocument();
         return {
-            surLeJumeau: getComputedStyle(document.getElementById('doc-retour')).display,
-            cheminDuJumeau: documentSourceDuMorceau(jumeau),
-            cheminDuPdf: documentSourceDuMorceau(pdf),
-            cheminDUneImage: documentSourceDuMorceau(nue)
+            duJumeau: documentSourceDuMorceau(jumeau),
+            duPdf: documentSourceDuMorceau(pdf),
+            dUneImage: documentSourceDuMorceau(nue)
         };
     });
-    r.egal('un PDF posé deux fois ne s\'offre pas un bouton pour rentrer chez son jumeau',
-        [pasUnMorceau.surLeJumeau, pasUnMorceau.cheminDuJumeau], ['none', null]);
-    r.egal('ni un PDF, ni une image nue n\'ont de maison à retrouver',
-        [pasUnMorceau.cheminDuPdf, pasUnMorceau.cheminDUneImage], [null, null]);
-
-    // Appelé quand même — par un raccourci, par une barre composée — il le dit
-    // au lieu de ne rien faire.
-    r.egal('appelé sans source, le retour refuse proprement',
-        await page.evaluate(() => revenirAuDocumentDuMorceau()), false);
+    r.egal('ni un PDF posé deux fois, ni une image nue n\'ont de maison à retrouver',
+        [pasUnMorceau.duJumeau, pasUnMorceau.duPdf, pasUnMorceau.dUneImage], [null, null, null]);
 
     // ------------------------------------------------------------------
-    // 5. UN MORCEAU DE MORCEAU RENTRE JUSQU'AU PDF
-    // On redécoupe parfois en deux fois. Le voisin immédiat n'est pas la
-    // maison : ce qu'on veut retrouver, c'est la page qu'on feuillette.
+    // 6. UN MORCEAU DE MORCEAU RENTRE JUSQU'AU PDF
     // ------------------------------------------------------------------
     await poserLePdf(3);
     await decouperEtPoser();
@@ -258,34 +358,56 @@ module.exports = async function (browser) {
             { x: premier.x, y: premier.y + premier.h + 120 });
         const versOu = documentSourceDuMorceau(second);
         return {
-            premier: premier.id, second: second.id,
             versOu: versOu ? (versOu.pluginData.id + '#' + versOu.id) : null,
+            pdf: 'pdfDoc#' + images.find(i => i.pluginData.id === 'pdfDoc').id,
             page: second.pluginData.page
         };
     });
     r.verifie('un morceau taillé dans un morceau rentre au PDF, pas chez son voisin',
-        enDeuxFois.versOu === 'pdfDoc#' + (await page.evaluate(() => images.find(i => i.pluginData.id === 'pdfDoc').id))
-        && enDeuxFois.page === 3,
+        enDeuxFois.versOu === enDeuxFois.pdf && enDeuxFois.page === 3,
         JSON.stringify(enDeuxFois));
 
     // ------------------------------------------------------------------
-    // 6. ET RIEN DE TOUT CELA NE TIENT SANS LE VRAI GESTE
-    // Appeler les fonctions à la main ne prouve pas qu'elles sont branchées :
-    // on clique le bouton à la souris, là où il se dessine.
+    // 7. LA TOUCHE, ET CELLE QU'ON NE DÉTOURNE PAS
     // ------------------------------------------------------------------
     await poserLePdf(2);
     await decouperEtPoser();
-    const place = await page.evaluate(() => {
-        const b = document.getElementById('doc-retour').getBoundingClientRect();
-        return { x: b.left + b.width / 2, y: b.top + b.height / 2, l: b.width };
-    });
-    r.verifie('le bouton occupe une vraie place à l\'écran', place.l > 8, JSON.stringify(place));
-    await page.mouse.click(place.x, place.y);
+    await page.evaluate(() => document.getElementById('board').focus());
+    await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForTimeout(500);
-    const parLaSouris = await etat();
-    r.verifie('un clic de souris sur le bouton ramène au document et à ses pages',
-        parLaSouris.tenu === 'pdfDoc' && parLaSouris.fleches === true && parLaSouris.page === 2,
-        JSON.stringify(parLaSouris));
+    const parLaTouche = await etat();
+    r.verifie('Alt+← ramène au document, à sa page',
+        parLaTouche.tenu === 'pdfDoc' && parLaTouche.page === 2, JSON.stringify(parLaTouche));
+
+    // CTRL+Z DÉFAIT, ET RIEN D'AUTRE. S'il se mettait aussi à naviguer, on ne
+    // saurait plus, en l'appuyant, si l'on efface son trait ou si l'on change
+    // de page — or c'est le raccourci qu'on tape sans regarder.
+    const ctrlZ = await page.evaluate(async () => {
+        setMode('pointer');
+        selectedItems = [{ type: 'image', id: images.find(i => i.pluginData.id === 'morceau').id }];
+        majBarreDocument();
+        freehands.push({ id: nextId++, points: [{ x: 50, y: 50 }, { x: 90, y: 90 }],
+                         color: '#000', width: 3, z: globalZ++ });
+        saveState();
+        return freehands.length;
+    });
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+    const apresCtrlZ = await page.evaluate(() => ({
+        traits: freehands.length,
+        tenu: (() => { const d = documentDeLaBarre(); return d ? d.pluginData.id : null; })()
+    }));
+    r.verifie('Ctrl+Z défait le trait et ne change pas de document',
+        ctrlZ === 1 && apresCtrlZ.traits === 0 && apresCtrlZ.tenu === 'morceau',
+        JSON.stringify({ ctrlZ, apresCtrlZ }));
+
+    // ------------------------------------------------------------------
+    // 8. ET L'ANCIEN BOUTON A BIEN DISPARU
+    // Deux chemins vers le même endroit, c'est un de trop — et celui de la
+    // barre du document n'était pas là quand on en avait besoin.
+    // ------------------------------------------------------------------
+    r.egal('plus de bouton de retour dans la barre du document',
+        await page.evaluate(() => !!document.getElementById('doc-retour')), false);
 
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();

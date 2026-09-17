@@ -1917,6 +1917,25 @@ body.focus-mode #right-drawer { transform: translateX(100%) !important; }
 
 #barre-ecran button:hover { background: var(--accent-soft); color: var(--accent); }
 
+/* LA VIGNETTE DU RETOUR. Plus large que ses voisines — c'est une page, pas une
+   icône — et volontairement : dans une rangée de carrés, celle qui montre une
+   image se distingue de celles qui portent un dessin. Elle ne paraît que s'il y
+   a où revenir, donc elle ne coûte rien le reste du temps. */
+#btn-ecran-retour {
+    width: 34px !important;
+    padding: 2px !important;
+    overflow: hidden;
+}
+
+#btn-ecran-retour canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 4px;
+    /* La page est claire ; sur fond sombre, un liseré la détache du bouton. */
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
 /* LES BARRES SEULES : les tiroirs se rangent, les outils restent. C'est
    l'écran du cours — on écrit, on trace, et rien ne mange le tableau. */
 body.sans-tiroirs #bottom-drawer { transform: translate(-50%, 100%) !important; }
