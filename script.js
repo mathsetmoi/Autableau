@@ -148,6 +148,31 @@ let activeStyle = {
     arrowStart: 0, arrowEnd: 0
 };
 
+// LE CACHE BLANC. « Rajouter une icône pour dessiner un rectangle blanc, pour
+// avoir une zone d'écriture. » C'est un rectangle ordinaire — il s'accroche
+// donc tout seul à la page et la suit —, mais rempli de blanc opaque et sans
+// contour, pour qu'il se lise comme un morceau de page vierge et non comme une
+// figure.
+//
+// UN DRAPEAU, ET NON UN RÉGLAGE DU STYLO. Poser le blanc dans « activeStyle »
+// aurait laissé le crayon en blanc après coup : on écrit alors en blanc sur du
+// blanc, sans rien y comprendre. Le drapeau ne touche à rien et « setMode » le
+// baisse dès qu'on prend un autre outil.
+let cacheBlanc = false;
+window.estUnCacheBlanc = () => cacheBlanc;
+
+// Le style d'un rectangle qu'on vient de tracer : celui du stylo, ou le blanc
+// opaque du cache. Écrit UNE fois, pour les deux endroits qui en posent un.
+function styleDuRectangle() {
+    if (cacheBlanc) {
+        return { color: '#ffffff', width: 1, dash: 'solid',
+                 isFilled: true, fillColor: '#ffffff', fillOpacity: 1, cache: true };
+    }
+    return { color: activeStyle.strokeColor, width: activeStyle.lineWidth,
+             dash: activeStyle.lineDash, isFilled: activeStyle.isFilled,
+             fillColor: activeStyle.fillColor, fillOpacity: activeStyle.fillOpacity };
+}
+
 // Le stylo n'appartient pas au tableau : il appartient à celui qui écrit. On
 // ne le range donc pas dans le fichier — un cours prêté n'a pas à imposer sa
 // couleur — mais dans le navigateur, pour le retrouver en rouvrant.
@@ -7403,6 +7428,10 @@ function syncToolbarActiveStates() {
 }
 
 function setMode(newMode) {
+    // Le cache n'est qu'une façon de poser un rectangle : tout autre outil le
+    // range, et reprendre le rectangle à la main donne un vrai rectangle.
+    if (newMode !== 'rectangle') cacheBlanc = false;
+
     // En Focus, prendre un outil de tracé alors qu'un document est en main ne
     // doit pas faire perdre le document : sa barre, ses pages et le zoom de
     // la page en dépendent. On le retient AVANT que la sélection soit vidée —
@@ -9691,7 +9720,7 @@ canvas.addEventListener('pointerdown', (e) => {
             if (creationStartPointId !== ptId) {
                 if (mode === 'segment' || mode === 'droite' || mode === 'demi-droite') segments.push({ id: nextId++, p1_id: creationStartPointId, p2_id: ptId, lineType: mode, color: activeStyle.strokeColor, width: activeStyle.lineWidth, dash: activeStyle.lineDash, arrowStart: activeStyle.arrowStart, arrowEnd: activeStyle.arrowEnd, z: globalZ++ });
                 if (mode === 'circle') circles.push({ id: nextId++, center_id: creationStartPointId, edge_id: ptId, color: activeStyle.strokeColor, width: activeStyle.lineWidth, dash: activeStyle.lineDash, isFilled: activeStyle.isFilled, fillColor: activeStyle.fillColor, fillOpacity: activeStyle.fillOpacity, z: globalZ++ });
-                if (mode === 'rectangle') rectangles.push({ id: nextId++, p1_id: creationStartPointId, p2_id: ptId, color: activeStyle.strokeColor, width: activeStyle.lineWidth, dash: activeStyle.lineDash, isFilled: activeStyle.isFilled, fillColor: activeStyle.fillColor, fillOpacity: activeStyle.fillOpacity, z: globalZ++ });
+                if (mode === 'rectangle') rectangles.push({ id: nextId++, p1_id: creationStartPointId, p2_id: ptId, ...styleDuRectangle(), z: globalZ++ });
                 saveState();
             }
             creationStartPointId = null; mouseLogicalPos = null;
@@ -10621,7 +10650,7 @@ function handlePointerUp(e) {
 
             if (mode === 'segment' || mode === 'droite' || mode === 'demi-droite') segments.push({ id: nextId++, p1_id: creationStartPointId, p2_id: ptId, lineType: mode, color: activeStyle.strokeColor, width: activeStyle.lineWidth, dash: activeStyle.lineDash, arrowStart: activeStyle.arrowStart, arrowEnd: activeStyle.arrowEnd, z: globalZ++ });
             if (mode === 'circle') circles.push({ id: nextId++, center_id: creationStartPointId, edge_id: ptId, color: activeStyle.strokeColor, width: activeStyle.lineWidth, dash: activeStyle.lineDash, isFilled: activeStyle.isFilled, fillColor: activeStyle.fillColor, fillOpacity: activeStyle.fillOpacity, z: globalZ++ });
-            if (mode === 'rectangle') rectangles.push({ id: nextId++, p1_id: creationStartPointId, p2_id: ptId, color: activeStyle.strokeColor, width: activeStyle.lineWidth, dash: activeStyle.lineDash, isFilled: activeStyle.isFilled, fillColor: activeStyle.fillColor, fillOpacity: activeStyle.fillOpacity, z: globalZ++ });
+            if (mode === 'rectangle') rectangles.push({ id: nextId++, p1_id: creationStartPointId, p2_id: ptId, ...styleDuRectangle(), z: globalZ++ });
             saveState();
             creationStartPointId = null; mouseLogicalPos = null;
         }
@@ -15516,6 +15545,8 @@ function majBarreDocument() {
         document.getElementById('doc-outil-main').classList.toggle('actif', mode === 'pointer');
         document.getElementById('doc-outil-crayon').classList.toggle('actif', mode === 'freehand');
         document.getElementById('doc-outil-texte').classList.toggle('actif', mode === 'text');
+        document.getElementById('doc-outil-cache').classList.toggle('actif',
+            mode === 'rectangle' && typeof cacheBlanc !== 'undefined' && cacheBlanc);
     }
     if (!obj || (typeof unMasqueEstOuvert === 'function' && unMasqueEstOuvert())) {
         // ELLE S'EFFACE POUR DE BON. On retirait « ctx-document », qui range
@@ -16008,6 +16039,14 @@ function brancherBarreDocument() {
     b('doc-outil-main').addEventListener('click', () => annoterLeDocument('pointer'));
     b('doc-outil-crayon').addEventListener('click', () => annoterLeDocument('freehand'));
     b('doc-outil-texte').addEventListener('click', () => annoterLeDocument('text'));
+    // LE CACHE PREND L'OUTIL RECTANGLE, PUIS LÈVE SON DRAPEAU — dans cet
+    // ordre : « setMode » baisse le drapeau dès qu'on change d'outil, et le
+    // relever avant serait le perdre aussitôt.
+    b('doc-outil-cache').addEventListener('click', () => {
+        annoterLeDocument('rectangle');
+        cacheBlanc = true;
+        if (typeof majBarreDocument === 'function') majBarreDocument();
+    });
 
 }
 

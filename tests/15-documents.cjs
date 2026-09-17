@@ -3305,6 +3305,84 @@ module.exports = async function (browser) {
         images.length = 0; selectedItems = []; majBarreDocument(); draw();
     });
 
+    // ==================================================================
+    // LE CACHE BLANC : DE QUOI ÉCRIRE PAR-DESSUS
+    //
+    // « Rajouter une icône pour dessiner un rectangle blanc, pour avoir une
+    // zone d'écriture. » On couvre la réponse imprimée et l'on écrit à la
+    // place : c'est l'exercice refait au tableau.
+    //
+    // CE QUI EN FAIT UN CACHE ET NON UN DESSIN : il s'accroche à la PAGE. Un
+    // rectangle blanc posé sur l'écran serait à côté dès qu'on déplace ou
+    // qu'on tourne. Le mécanisme existait déjà pour tout ce qu'on trace ; on
+    // éprouve ici qu'un cache en profite.
+    //
+    // ET LE PIÈGE QU'IL FALLAIT ÉVITER : poser le blanc dans le stylo aurait
+    // laissé le crayon en blanc après coup, et l'on aurait écrit en blanc sur
+    // du blanc. Le contrôle regarde donc AUSSI la couleur du stylo, avant et
+    // après.
+    // ==================================================================
+    const leCache = await page.evaluate(async () => {
+        images.length = 0; rectangles.length = 0; selectedItems = [];
+        panX = 0; panY = 0; zoom = 1;
+        images.push({ id: nextId++, x: 100, y: 100, w: 600, h: 500, cx: 0, cy: 0, cw: 600, ch: 500,
+                      src: 'x', z: globalZ++, nomFichier: 'doc.pdf',
+                      pluginData: { id: 'pdfDoc', page: 1, pages: 3 } });
+        selectedItems = [{ type: 'image', id: images[0].id }];
+        updateStyleBarContext(); majBarreDocument();
+        await new Promise(ok => setTimeout(ok, 400));
+        const b = document.getElementById('doc-outil-cache');
+        return { bouton: !!b, stylo: activeStyle.strokeColor };
+    });
+    r.verifie('le groupe « Annoter » du document porte un bouton de cache',
+        leCache.bouton, JSON.stringify(leCache));
+
+    await page.evaluate(() => {
+        // Le groupe ne paraît qu'en annotation : on l'ouvre pour viser le bouton.
+        document.getElementById('doc-annoter').style.display = 'inline-flex';
+        document.getElementById('doc-outil-cache').click();
+    });
+    await page.waitForTimeout(250);
+    await page.mouse.click(250, 250);
+    await page.waitForTimeout(150);
+    await page.mouse.click(450, 380);
+    await page.waitForTimeout(250);
+
+    const leCachePose = await page.evaluate(() => {
+        const r = rectangles[rectangles.length - 1];
+        if (!r) return null;
+        return { cache: !!r.cache, fond: r.fillColor, opacite: r.fillOpacity, trait: r.color,
+                 accroche: r.surObjet ? r.surObjet.type : null,
+                 page: r.surPage ? r.surPage.page : null,
+                 stylo: activeStyle.strokeColor };
+    });
+    r.verifie('un cache se pose, blanc et opaque',
+        !!leCachePose && leCachePose.cache && leCachePose.fond === '#ffffff' && leCachePose.opacite === 1
+        && leCachePose.trait === '#ffffff', JSON.stringify(leCachePose));
+    r.egal('il s\'accroche à la page, et à SA page : il la suivra et se rangera avec elle',
+        leCachePose && { accroche: leCachePose.accroche, page: leCachePose.page }, { accroche: 'image', page: 1 });
+    r.egal('et le stylo n\'a pas viré au blanc : on écrirait en blanc sur blanc',
+        leCachePose && leCachePose.stylo, leCache.stylo);
+
+    const apres = await page.evaluate(async () => {
+        setMode('freehand');
+        await new Promise(ok => setTimeout(ok, 120));
+        const encore = { drapeau: estUnCacheBlanc(), stylo: activeStyle.strokeColor };
+        // Repris à la main, le rectangle redevient un rectangle ordinaire.
+        setMode('rectangle');
+        await new Promise(ok => setTimeout(ok, 120));
+        return { ...encore, apresRectangle: estUnCacheBlanc() };
+    });
+    r.egal('prendre un autre outil range le cache, sans toucher au stylo',
+        { drapeau: apres.drapeau, stylo: apres.stylo }, { drapeau: false, stylo: leCache.stylo });
+    r.egal('et reprendre le rectangle à la main donne un vrai rectangle',
+        apres.apresRectangle, false);
+
+    await page.evaluate(() => {
+        images.length = 0; rectangles.length = 0; selectedItems = [];
+        setMode('pointer'); updateStyleBarContext(); draw();
+    });
+
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();
