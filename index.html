@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=157">
+    <link rel="stylesheet" href="style.css?v=158">
 </head>
 
 <body>
@@ -2068,10 +2068,14 @@
                     <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" />
                 </svg></button>
 
-            <button class="btn" data-mode="circle" title="Cercle"><svg xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24" class="stroke-icon">
-                    <circle cx="12" cy="12" r="8" />
-                    <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+            <!-- Les deux façons de tracer un cercle sont dessinées ici toutes les
+                 deux ; « body.cercle-libre » choisit laquelle se montre. Reprendre
+                 le bouton quand on tient déjà l'outil passe de l'une à l'autre. -->
+            <button class="btn" data-mode="circle" title="Cercle — recliquer change sa façon"><svg
+                    xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="stroke-icon">
+                    <circle class="ico-cercle-points" cx="12" cy="12" r="8" />
+                    <circle class="ico-cercle-points" cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+                    <ellipse class="ico-cercle-libre" cx="12" cy="12" rx="9.5" ry="6.5" />
                 </svg></button>
             <button class="btn" data-mode="polygon" title="Polygone / Ligne brisée"><svg
                     xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="stroke-icon">
@@ -3342,7 +3346,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=274"></script>
+    <script src="script.js?v=275"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

@@ -365,6 +365,9 @@ function getGroupMembers(groupId) {
 let isSelectingBox = false; let selectionBox = { startX: 0, startY: 0, endX: 0, endY: 0 };
 let isZoomBoxing = false; let zoomBox = { startX: 0, startY: 0, endX: 0, endY: 0 };
 let isDrawingPostit = false; let postitBox = { startX: 0, startY: 0, endX: 0, endY: 0 };
+// L'ellipse libre se trace à la boîte, comme le post-it et le zoom : un coin,
+// on tire, on lâche.
+let isDrawingEllipse = false; let boiteEllipse = null;
 let isPanningView = false; let isSpacePressed = false;
 let isDraggingObjs = false; let draggedHandle = null;
 let lastMouseX = 0, lastMouseY = 0; let lastRawX = 0, lastRawY = 0;
@@ -3468,6 +3471,90 @@ function dessinerLesPoigneesDuRectangle(ctx, b, lw) {
 }
 window.etirerLeRectangle = etirerLeRectangle;
 
+// ---------------------------------------------------------------------------
+// DEUX FAÇONS DE TRACER UN CERCLE
+//
+// « Rajoute un cycle sur le cercle pour des ellipses — de toute façon on aura
+// un cadre autour du cercle. Mais s'il est créé par point, les points doivent
+// être disponibles. »
+//
+// Le cercle du tableau est une FIGURE DE GÉOMÉTRIE : deux points, un centre et
+// un point du bord, qu'on reprend, qu'on aimante, qu'on croise. C'est ce qu'il
+// faut pour construire une figure. Ce n'est pas ce qu'il faut pour entourer un
+// mot au tableau : là on veut poser une boucle d'un seul geste, et qu'elle
+// épouse ce qu'elle entoure — donc une ellipse, plus large que haute, tracée
+// comme un rectangle.
+//
+// LES DEUX VIVENT DANS LA MÊME LISTE. Une ellipse libre est un cercle sans
+// points : elle porte son centre et ses deux rayons. Tout ce qui a besoin de
+// savoir OÙ passe le trait — le dessin, l'export, la sélection, la boîte
+// englobante — le demande à « geometrieDuCercle », et ne connaît plus la
+// différence. Ce qui a besoin des POINTS, lui, la connaît : une ellipse libre
+// n'en a pas, et c'est son cadre qui la redimensionne.
+// ---------------------------------------------------------------------------
+const estUneEllipseLibre = (o) => !!(o && o.libre);
+
+function geometrieDuCercle(o) {
+    if (!o) return null;
+    if (o.libre) {
+        if (!(o.rx >= 0) || !(o.ry >= 0)) return null;
+        return { cx: o.cx, cy: o.cy, rx: o.rx, ry: o.ry, libre: true };
+    }
+    const c = getObjectById('point', o.center_id), e = getObjectById('point', o.edge_id);
+    if (!c || !e) return null;
+    const r = Math.hypot(e.x - c.x, e.y - c.y);
+    return { cx: c.x, cy: c.y, rx: r, ry: r, libre: false };
+}
+
+// Le contour, pour le fantôme comme pour le trait définitif : un cercle est une
+// ellipse dont les deux rayons sont égaux, et « ctx.ellipse » trace les deux.
+// Un rayon nul ferait lever une erreur au navigateur — on garde un cheveu.
+function cheminDuCercle(ctx, g) {
+    ctx.beginPath();
+    ctx.ellipse(g.cx, g.cy, Math.max(g.rx, 0.01), Math.max(g.ry, 0.01), 0, 0, Math.PI * 2);
+}
+
+// La boîte d'une ellipse libre : celle qu'on lui montre, et qu'on tire.
+// Rend « null » pour un cercle par points — lui se reprend par ses points.
+function boiteDeLEllipse(o) {
+    if (!estUneEllipseLibre(o)) return null;
+    const g = geometrieDuCercle(o);
+    if (!g) return null;
+    return { x: g.cx - g.rx, y: g.cy - g.ry, w: g.rx * 2, h: g.ry * 2 };
+}
+
+const RAYON_MINI_ELLIPSE = 4;       // en pixels du tableau : au-dessous, rien à saisir
+
+function etirerLEllipse(o, poignee, pos) {
+    const b = boiteDeLEllipse(o);
+    if (!b || o.locked) return false;
+    const mini = RAYON_MINI_ELLIPSE * 2;
+    let minX = b.x, maxX = b.x + b.w, minY = b.y, maxY = b.y + b.h;
+    if (poignee.includes('L')) minX = Math.min(pos.x, maxX - mini);
+    if (poignee.includes('R')) maxX = Math.max(pos.x, minX + mini);
+    if (poignee.includes('T')) minY = Math.min(pos.y, maxY - mini);
+    if (poignee.includes('B')) maxY = Math.max(pos.y, minY + mini);
+    o.cx = (minX + maxX) / 2; o.cy = (minY + maxY) / 2;
+    o.rx = (maxX - minX) / 2; o.ry = (maxY - minY) / 2;
+    return true;
+}
+
+// LA DISTANCE AU TRAIT, mesurée le long du rayon qui passe par le point :
+// exacte sur un cercle, et assez juste sur une ellipse pour la désigner du
+// doigt. La distance vraie à une ellipse demande de résoudre une quartique —
+// on ne la paie pas à chaque déplacement de souris pour gagner un pixel.
+function distanceAuContourDuCercle(g, x, y) {
+    const rx = Math.max(g.rx, 0.01), ry = Math.max(g.ry, 0.01);
+    const dx = x - g.cx, dy = y - g.cy;
+    const d = Math.hypot(dx, dy);
+    if (d < 1e-9) return Math.min(rx, ry);
+    const contour = 1 / Math.hypot((dx / d) / rx, (dy / d) / ry);
+    return Math.abs(d - contour);
+}
+
+window.geometrieDuCercle = geometrieDuCercle;
+window.etirerLEllipse = etirerLEllipse;
+
 function drawPoint(minX, maxX, minY, maxY, lw, gw) { const radius = 1.5 * lw * gw; ctx.fillStyle = isDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.35)"; ctx.beginPath(); for (let x = Math.floor(minX / 30) * 30; x < maxX; x += 30) { for (let y = Math.floor(minY / 30) * 30; y < maxY; y += 30) { ctx.moveTo(x, y); ctx.arc(x, y, radius, 0, Math.PI * 2); } } ctx.fill(); }
 function drawMillimetre(minX, maxX, minY, maxY, lw, gw) { const size = 10; const drawLayer = (stepMult, color, widthMult) => { const step = size * stepMult; ctx.beginPath(); for (let x = Math.floor(minX / step) * step; x < maxX; x += step) { ctx.moveTo(x, minY); ctx.lineTo(x, maxY); } for (let y = Math.floor(minY / step) * step; y < maxY; y += step) { ctx.moveTo(minX, y); ctx.lineTo(maxX, y); } ctx.strokeStyle = color; ctx.lineWidth = lw * widthMult * gw; ctx.stroke(); }; drawLayer(1, isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(230, 126, 34, 0.18)", 1); drawLayer(5, isDarkMode ? "rgba(255,255,255,0.25)" : "rgba(230, 126, 34, 0.45)", 1.5); drawLayer(10, isDarkMode ? "rgba(255,255,255,0.4)" : "#e67e22", 2.2); }
 function drawSeyes(minX, maxX, minY, maxY, lw, gw) { const size = 40; const sub = size / 4; ctx.beginPath(); for (let x = Math.floor(minX / size) * size; x < maxX; x += size) { ctx.moveTo(x, minY); ctx.lineTo(x, maxY); } ctx.strokeStyle = isDarkMode ? "rgba(255,255,255,0.15)" : "rgba(116, 185, 255, 0.35)"; ctx.lineWidth = lw * gw; ctx.stroke(); ctx.beginPath(); for (let y = Math.floor(minY / sub) * sub; y < maxY; y += sub) { if (y % size !== 0) { ctx.moveTo(minX, y); ctx.lineTo(maxX, y); } } ctx.stroke(); ctx.beginPath(); for (let y = Math.floor(minY / size) * size; y < maxY; y += size) { ctx.moveTo(minX, y); ctx.lineTo(maxX, y); } ctx.strokeStyle = isDarkMode ? "rgba(255,255,255,0.25)" : "rgba(108, 92, 231, 0.45)"; ctx.lineWidth = lw * 1.6 * gw; ctx.stroke(); }
@@ -3993,10 +4080,11 @@ function generateSVGString(rect, keepBg) {
                 }
             }
         } else if (item.type === 'circle') {
-            const center = getObjectById('point', obj.center_id), edge = getObjectById('point', obj.edge_id);
-            if (center && edge) {
-                const r = Math.hypot(edge.x - center.x, edge.y - center.y);
-                svg += `<circle cx="${center.x}" cy="${center.y}" r="${r}" fill="${fill}" stroke="${color}" stroke-width="${w}" stroke-dasharray="${dash}" />`;
+            const g = geometrieDuCercle(obj);
+            if (g && g.libre) {
+                svg += `<ellipse cx="${g.cx}" cy="${g.cy}" rx="${g.rx}" ry="${g.ry}" fill="${fill}" stroke="${color}" stroke-width="${w}" stroke-dasharray="${dash}" />`;
+            } else if (g) {
+                svg += `<circle cx="${g.cx}" cy="${g.cy}" r="${g.rx}" fill="${fill}" stroke="${color}" stroke-width="${w}" stroke-dasharray="${dash}" />`;
             }
         } else if (item.type === 'arc') {
             const startX = obj.cx + obj.radius * Math.cos(obj.startAngle);
@@ -4292,11 +4380,8 @@ function getAutoBoundingBox(padding = 40) {
         addPt(a.cx - a.radius, a.cy - a.radius); addPt(a.cx + a.radius, a.cy + a.radius);
     });
     if (typeof circles !== 'undefined') circles.forEach(c => {
-        const center = getObjectById('point', c.center_id), edge = getObjectById('point', c.edge_id);
-        if (center && edge) {
-            const r = Math.hypot(edge.x - center.x, edge.y - center.y);
-            addPt(center.x - r, center.y - r); addPt(center.x + r, center.y + r);
-        }
+        const g = geometrieDuCercle(c);
+        if (g) { addPt(g.cx - g.rx, g.cy - g.ry); addPt(g.cx + g.rx, g.cy + g.ry); }
     });
 
     // Si la page est vide, on crée une fausse zone au milieu
@@ -7508,6 +7593,7 @@ function setMode(newMode) {
     if (typeof syncToolbarActiveStates === 'function') syncToolbarActiveStates();
 
     creationStartPointId = null; currentCurvePoints = []; currentPolygonPoints = []; wysiwygText.style.display = 'none'; editingTextId = null; if (typeof oublierSelectionSaisie === 'function') oublierSelectionSaisie();
+    isDrawingEllipse = false; boiteEllipse = null;   // une boîte en cours ne survit pas au changement d'outil
     clearSelection();
 
     if (['point', 'segment', 'droite', 'demi-droite', 'circle', 'rectangle', 'text', 'freehand', 'highlighter', 'curve', 'polygon', 'postit'].includes(mode) || (typeof activeWidgets !== 'undefined' && activeWidgets['compass'])) {
@@ -7521,10 +7607,52 @@ function setMode(newMode) {
     updateCursor(); draw();
 }
 
+// ===================================================
+// LE BOUTON CERCLE PORTE LES DEUX FAÇONS
+// Le reprendre quand on l'a DÉJÀ en main passe de l'une à l'autre — le même
+// geste que la gomme, qui se range quand on la reclique. Pas de bouton en
+// plus : la barre d'outils est déjà longue, et le cercle par points comme
+// l'ellipse libre sont le même outil, tracé de deux manières.
+//
+// L'ICÔNE DIT LAQUELLE ON TIENT, et les deux dessins sont ÉCRITS DANS LA PAGE :
+// c'est une classe posée sur le corps de page qui choisit lequel se montre.
+// Rien ici ne réécrit ce que la page a déjà dit — voir le test « une seule
+// vérité par infobulle », qui refuse justement la phrase écrite que personne
+// ne lit.
+// ===================================================
+const CLE_FACON_CERCLE = 'autableau_facon_cercle';
+let faconDuCercle = 'points';
+try { if (localStorage.getItem(CLE_FACON_CERCLE) === 'ellipse') faconDuCercle = 'ellipse'; }
+catch (e) { /* stockage refusé : on garde la façon d'origine */ }
+
+function majLaFaconDuCercle() {
+    if (document.body) document.body.classList.toggle('cercle-libre', faconDuCercle === 'ellipse');
+}
+
+function changerLaFaconDuCercle() {
+    faconDuCercle = (faconDuCercle === 'ellipse') ? 'points' : 'ellipse';
+    try { localStorage.setItem(CLE_FACON_CERCLE, faconDuCercle); } catch (e) { /* refusé */ }
+    // Un cercle commencé dans l'autre façon ne se finit pas dans celle-ci :
+    // son premier point resterait seul sur la page, à attendre un second clic
+    // qui ne viendra plus.
+    creationStartPointId = null; mouseLogicalPos = null;
+    isDrawingEllipse = false; boiteEllipse = null;
+    majLaFaconDuCercle();
+    if (typeof showToast === 'function') {
+        showToast(faconDuCercle === 'ellipse'
+            ? 'Ellipse libre : glissez une boîte, elle se met dedans'
+            : 'Cercle par points : le centre, puis un point du bord');
+    }
+    if (typeof draw === 'function') draw();
+}
+window.changerLaFaconDuCercle = changerLaFaconDuCercle;
+majLaFaconDuCercle();
+
 // Gestion des clics sur la barre d'outils
 document.querySelectorAll('.btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', (e) => {
         if (btn.dataset.mode === 'eraser' && mode === 'eraser') setMode('pointer');
+        else if (btn.dataset.mode === 'circle' && mode === 'circle') changerLaFaconDuCercle();
         else setMode(btn.dataset.mode);
 
         if (btn.dataset.mode === 'postit') {
@@ -7568,6 +7696,12 @@ function getHandleAt(lx, ly, obj, type) {
         const b = boiteDuRectangle(obj);
         if (!b) return null;
         startX = b.x; startY = b.y; w = b.w; h = b.h;
+    } else if (type === 'circle') {
+        // Seule l'ellipse libre a des poignées : le cercle par points se reprend
+        // par ses points, et « boiteDeLEllipse » ne rend rien pour lui.
+        const b = boiteDeLEllipse(obj);
+        if (!b) return null;
+        startX = b.x; startY = b.y; w = b.w; h = b.h;
     } else return null;
 
     cx = startX + w / 2; cy = startY + h / 2;
@@ -7579,7 +7713,8 @@ function getHandleAt(lx, ly, obj, type) {
     // Un rectangle est fait de deux points : il n'a pas d'angle propre à
     // tourner, et la poignée de rotation n'aurait rien à quoi s'appliquer.
     const rotY = startY - (30 / zoom);
-    if (type !== 'rectangle' && Math.hypot(unrotatedX - cx, unrotatedY - rotY) <= hw * 1.5) return 'ROT';
+    if (type !== 'rectangle' && type !== 'circle'
+        && Math.hypot(unrotatedX - cx, unrotatedY - rotY) <= hw * 1.5) return 'ROT';
     // Poignées de la bulle interactive
     if (obj.isBubble) {
         // 1. Poignée de la pointe (Absolue)
@@ -7592,7 +7727,7 @@ function getHandleAt(lx, ly, obj, type) {
         let brY = obj.y - pad; // MODIFIÉ : On utilise le haut (y - pad)
         if (Math.hypot(unrotatedX - brX, unrotatedY - brY) <= hw * 1.5) return 'BUBBLE_RESIZE';
     }
-    if (type === 'image' || type === 'rectangle') {
+    if (type === 'image' || type === 'rectangle' || type === 'circle') {
         const hx = [startX, startX + w / 2, startX + w, startX + w, startX + w, startX + w / 2, startX, startX];
         const hy = [startY, startY, startY, startY + h / 2, startY + h, startY + h, startY + h, startY + h / 2];
         const hNames = ['TL', 'T', 'TR', 'R', 'BR', 'B', 'BL', 'L'];
@@ -8354,6 +8489,13 @@ function surLArc(c, x, y) {
 function cerclesGeometriques(pos, portee) {
     const res = [];
     circles.forEach(c => {
+        // UNE ELLIPSE LIBRE N'ENTRE PAS ICI, et c'est voulu. Tout ce qui suit —
+        // l'aimant sur le trait, les points d'intersection — travaille avec un
+        // centre et UN rayon ; une figure qui en a deux y serait aimantée de
+        // travers. Elle en est écartée SANS GARDE PARTICULIÈRE : n'ayant pas de
+        // points, elle n'a pas de centre à retrouver, et la ligne suivante la
+        // laisse sortir avec les cercles dont un point a été effacé. Une garde
+        // de plus ne protégerait de rien, et se donnerait des airs de le faire.
         const centre = getObjectById('point', c.center_id), bord = getObjectById('point', c.edge_id);
         if (!centre || !bord) return;
         const r = Math.hypot(bord.x - centre.x, bord.y - centre.y);
@@ -8828,7 +8970,7 @@ function findObjectAt(lx, ly) {
     const hitZoneLine = 8 / zoom;
 
     // --- 1. Vérification des poignées (Images, Textes ET Rectangles) ---
-    if (selectedItems.length === 1 && ['image', 'text', 'rectangle'].includes(selectedItems[0].type)) {
+    if (selectedItems.length === 1 && ['image', 'text', 'rectangle', 'circle'].includes(selectedItems[0].type)) {
         const obj = getObjectById(selectedItems[0].type, selectedItems[0].id);
         if (obj) {
             const handle = getHandleAt(lx, ly, obj, selectedItems[0].type);
@@ -8949,7 +9091,10 @@ function findObjectAt(lx, ly) {
             if (dist < hitZoneLine) updateHit({ type: 'segment', id: s.id });
         }
     }
-    for (let i = circles.length - 1; i >= 0; i--) { const c = circles[i], center = getObjectById('point', c.center_id), edge = getObjectById('point', c.edge_id); if (center && edge && Math.abs(Math.hypot(lx - center.x, ly - center.y) - Math.hypot(edge.x - center.x, edge.y - center.y)) < hitZoneLine) updateHit({ type: 'circle', id: c.id }); }
+    for (let i = circles.length - 1; i >= 0; i--) {
+        const c = circles[i], g = geometrieDuCercle(c);
+        if (g && distanceAuContourDuCercle(g, lx, ly) < hitZoneLine) updateHit({ type: 'circle', id: c.id });
+    }
 
     for (let i = rectangles.length - 1; i >= 0; i--) {
         const r = rectangles[i], p1 = getObjectById('point', r.p1_id), p2 = getObjectById('point', r.p2_id);
@@ -9704,6 +9849,17 @@ canvas.addEventListener('pointerdown', (e) => {
         updateCursor(); draw(); return;
     }
 
+    // L'ELLIPSE LIBRE SE TRACE COMME UN RECTANGLE : on pose un coin, on tire,
+    // elle se met dans la boîte. Rien n'est aimanté — c'est tout l'intérêt de
+    // cette façon-là : on entoure un mot d'un geste, sans semer deux croix sur
+    // la page et sans que le trait aille se coller à ce qui traîne autour.
+    if (mode === 'circle' && faconDuCercle === 'ellipse') {
+        clearSelection();
+        isDrawingEllipse = true;
+        boiteEllipse = { startX: rawPos.x, startY: rawPos.y, endX: rawPos.x, endY: rawPos.y };
+        updateCursor(); draw(); return;
+    }
+
     if (mode === 'eraser') {
         if (clickedObj && clickedObj.type !== 'handle') {
             const obj = getObjectById(clickedObj.type, clickedObj.id);
@@ -10263,7 +10419,7 @@ canvas.addEventListener('pointermove', (e) => {
         requestAnimationFrame(draw); return;
     }
 
-    if (e.buttons === 0 && !activePointers.has(e.pointerId)) { libererLeCalque(); isPanningView = false; isDraggingObjs = false; isDrawingFreehand = false; isSelectingBox = false; draggedHandle = null; textResizeHint = null; activeGuides = { x: [], y: [] }; }
+    if (e.buttons === 0 && !activePointers.has(e.pointerId)) { libererLeCalque(); isPanningView = false; isDraggingObjs = false; isDrawingFreehand = false; isSelectingBox = false; isDrawingEllipse = false; boiteEllipse = null; draggedHandle = null; textResizeHint = null; activeGuides = { x: [], y: [] }; }
 
     if (mode === 'laser' && currentLaserStroke) {
         // Lissage du tracé : on suit le pointeur avec un filtre passe-bas
@@ -10326,6 +10482,7 @@ canvas.addEventListener('pointermove', (e) => {
     if (isSelectingBox) { selectionBox.endX = rawPos.x; selectionBox.endY = rawPos.y; requestAnimationFrame(draw); return; }
     if (isZoomBoxing) { zoomBox.endX = rawPos.x; zoomBox.endY = rawPos.y; requestAnimationFrame(draw); return; }
     if (isDrawingPostit && postitBox) { postitBox.endX = rawPos.x; postitBox.endY = rawPos.y; requestAnimationFrame(draw); return; }
+    if (isDrawingEllipse && boiteEllipse) { boiteEllipse.endX = rawPos.x; boiteEllipse.endY = rawPos.y; requestAnimationFrame(draw); return; }
 
     hoveredObj = findObjectAt(rawPos.x, rawPos.y);
 
@@ -10355,6 +10512,12 @@ canvas.addEventListener('pointermove', (e) => {
 
     if (draggedHandle && selectedItems.length === 1 && selectedItems[0].type === 'rectangle') {
         etirerLeRectangle(getObjectById('rectangle', selectedItems[0].id), draggedHandle, rawPos);
+        lastMouseX = e.clientX; lastMouseY = e.clientY;
+    }
+    // « De toute façon on aura un cadre autour du cercle » : c'est ce cadre qui
+    // redimensionne l'ellipse libre, puisqu'elle n'a pas de points à tirer.
+    else if (draggedHandle && selectedItems.length === 1 && selectedItems[0].type === 'circle') {
+        etirerLEllipse(getObjectById('circle', selectedItems[0].id), draggedHandle, rawPos);
         lastMouseX = e.clientX; lastMouseY = e.clientY;
     }
     else if (draggedHandle && selectedItems.length === 1 && (selectedItems[0].type === 'image' || selectedItems[0].type === 'text')) {
@@ -10592,6 +10755,8 @@ canvas.addEventListener('pointermove', (e) => {
         let dy = currentLog.y - getRawLogicalPos({ clientX: lastMouseX, clientY: lastMouseY }).y;
 
         let ptsToMove = new Set(); let txtsToMove = new Set(); let freehandsToMove = new Set(); let imgsToMove = new Set(); let arcsToMove = new Set();
+        // Une ellipse libre n'a pas de points : c'est son centre qu'on déplace.
+        let ellipsesToMove = new Set();
         let itemsToProcessMap = new Map();
         selectedItems.forEach(item => {
             itemsToProcessMap.set(item.type + '-' + item.id, item);
@@ -10611,7 +10776,7 @@ canvas.addEventListener('pointermove', (e) => {
 
             if (item.type === 'point') ptsToMove.add(item.id);
             else if (item.type === 'segment') { const s = getObjectById('segment', item.id); if (s) { ptsToMove.add(s.p1_id); ptsToMove.add(s.p2_id); } }
-            else if (item.type === 'circle') { const c = getObjectById('circle', item.id); if (c) { ptsToMove.add(c.center_id); ptsToMove.add(c.edge_id); } }
+            else if (item.type === 'circle') { const c = getObjectById('circle', item.id); if (c) { if (estUneEllipseLibre(c)) ellipsesToMove.add(c.id); else { ptsToMove.add(c.center_id); ptsToMove.add(c.edge_id); } } }
             else if (item.type === 'rectangle') { const r = getObjectById('rectangle', item.id); if (r) { ptsToMove.add(r.p1_id); ptsToMove.add(r.p2_id); } }
             else if (item.type === 'curve') { const cu = getObjectById('curve', item.id); if (cu) { cu.points.forEach(p => ptsToMove.add(p)); } }
             else if (item.type === 'polygon') { const po = getObjectById('polygon', item.id); if (po) { po.points.forEach(p => ptsToMove.add(p)); } }
@@ -10644,9 +10809,11 @@ canvas.addEventListener('pointermove', (e) => {
             });
             formes.forEach(({ famille, o }) => {
                 if (famille === 'arc' && !arcsToMove.has(o.id)) { o.cx += dx; o.cy += dy; }
+                if (famille === 'circle' && estUneEllipseLibre(o) && !ellipsesToMove.has(o.id)) { o.cx += dx; o.cy += dy; }
             });
         });
         arcsToMove.forEach(aid => { const a = getObjectById('arc', aid); if (a) { a.cx += dx; a.cy += dy; } });
+        ellipsesToMove.forEach(cid => { const c = getObjectById('circle', cid); if (c) { c.cx += dx; c.cy += dy; } });
 
         lastMouseX = panX + currentLog.x * zoom;
         lastMouseY = panY + currentLog.y * zoom;
@@ -10790,7 +10957,19 @@ function handlePointerUp(e) {
         // blocs d'une autre page du document restent hors de portée.
         texts.forEach(t => { if (surUneAutrePage(t)) return; if (t.x >= minX && t.x <= maxX && t.y >= minY && t.y <= maxY) selectedItems.push({ type: 'text', id: t.id }); });
         segments.forEach(s => { if (surUneAutrePage(s)) return; const p1 = getObjectById('point', s.p1_id), p2 = getObjectById('point', s.p2_id); if (p1 && p2 && p1.x >= minX && p1.x <= maxX && p1.y >= minY && p1.y <= maxY && p2.x >= minX && p2.x <= maxX && p2.y >= minY && p2.y <= maxY) selectedItems.push({ type: 'segment', id: s.id }); });
-        circles.forEach(c => { if (surUneAutrePage(c)) return; const p = getObjectById('point', c.center_id); if (p && p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) selectedItems.push({ type: 'circle', id: c.id }); });
+        circles.forEach(c => {
+            if (surUneAutrePage(c)) return;
+            // L'ellipse libre s'attrape comme un rectangle : toute sa boîte doit
+            // tenir dans le lasso. Le cercle par points, lui, garde sa règle —
+            // son centre suffit, parce que son bord sort souvent du cadre.
+            if (estUneEllipseLibre(c)) {
+                const b = boiteDeLEllipse(c);
+                if (b && b.x >= minX && b.x + b.w <= maxX && b.y >= minY && b.y + b.h <= maxY) selectedItems.push({ type: 'circle', id: c.id });
+                return;
+            }
+            const p = getObjectById('point', c.center_id);
+            if (p && p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) selectedItems.push({ type: 'circle', id: c.id });
+        });
         rectangles.forEach(r => { if (surUneAutrePage(r)) return; const p1 = getObjectById('point', r.p1_id), p2 = getObjectById('point', r.p2_id); if (p1 && p2) { const rx1 = Math.min(p1.x, p2.x), rx2 = Math.max(p1.x, p2.x), ry1 = Math.min(p1.y, p2.y), ry2 = Math.max(p1.y, p2.y); if (rx1 >= minX && rx2 <= maxX && ry1 >= minY && ry2 <= maxY) selectedItems.push({ type: 'rectangle', id: r.id }); } });
         curves.forEach(c => { if (surUneAutrePage(c)) return; let inside = true; c.points.forEach(pid => { const p = getObjectById('point', pid); if (!p || p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) inside = false; }); if (inside) selectedItems.push({ type: 'curve', id: c.id }); });
         polygons.forEach(po => { if (surUneAutrePage(po)) return; let inside = true; po.points.forEach(pid => { const p = getObjectById('point', pid); if (!p || p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) inside = false; }); if (inside) selectedItems.push({ type: 'polygon', id: po.id }); });
@@ -10824,6 +11003,33 @@ function handlePointerUp(e) {
             if (typeof updateWysiwygPosition === 'function') updateWysiwygPosition();
         }
         setMode('pointer');
+        draw(); return;
+    }
+
+    if (isDrawingEllipse) {
+        isDrawingEllipse = false;
+        const b = boiteEllipse; boiteEllipse = null;
+        if (b) {
+            const minX = Math.min(b.startX, b.endX), maxX = Math.max(b.startX, b.endX);
+            const minY = Math.min(b.startY, b.endY), maxY = Math.max(b.startY, b.endY);
+            const rx = (maxX - minX) / 2, ry = (maxY - minY) / 2;
+            // UN SIMPLE CLIC NE POSE RIEN. Reprendre l'outil, hésiter, poser le
+            // doigt : autant de gestes qui laisseraient sinon un pois sur la
+            // page, trop petit pour qu'on le voie et pour qu'on le rattrape.
+            if (rx >= RAYON_MINI_ELLIPSE && ry >= RAYON_MINI_ELLIPSE) {
+                const nouvelle = {
+                    id: nextId++, libre: true,
+                    cx: minX + rx, cy: minY + ry, rx, ry,
+                    color: activeStyle.strokeColor, width: activeStyle.lineWidth,
+                    dash: activeStyle.lineDash, isFilled: activeStyle.isFilled,
+                    fillColor: activeStyle.fillColor, fillOpacity: activeStyle.fillOpacity,
+                    z: globalZ++
+                };
+                circles.push(nouvelle);
+                if (typeof accrocherLesNouvellesFormes === 'function') accrocherLesNouvellesFormes(nouvelle.id);
+                saveState();
+            }
+        }
         draw(); return;
     }
 
@@ -11681,11 +11887,19 @@ function draw() {
                 }
             }
             else if (item.type === 'circle') {
-                const center = getObjectById('point', obj.center_id), edge = getObjectById('point', obj.edge_id);
-                if (center && edge) {
-                    ctx.beginPath(); ctx.arc(center.x, center.y, Math.hypot(edge.x - center.x, edge.y - center.y), 0, Math.PI * 2);
+                const g = geometrieDuCercle(obj);
+                if (g) {
+                    cheminDuCercle(ctx, g);
                     if (obj.isFilled) { ctx.fillStyle = hexToRgba(obj.fillColor || obj.color, obj.fillOpacity || 0.2); ctx.fill(); }
                     ctx.strokeStyle = renderColor; ctx.lineWidth = (obj.width || 3) * EPAISSEUR_AU_TABLEAU; setContextDash(ctx, obj.dash, EPAISSEUR_AU_TABLEAU); ctx.stroke(); ctx.setLineDash([]);
+                    // Seule, l'ellipse libre montre de quoi la reprendre : elle
+                    // n'a pas de points à saisir, et c'est son cadre qui la
+                    // redimensionne. Le cercle par points garde les siens.
+                    if (g.libre && isSel && !isExportingTransparent && !obj.locked
+                        && selectedItems.length === 1 && selectedItems[0].type === 'circle') {
+                        const b = boiteDeLEllipse(obj);
+                        if (b) dessinerLesPoigneesDuRectangle(ctx, b, lw);
+                    }
                 }
             }
             else if (item.type === 'arc') {
@@ -12391,9 +12605,29 @@ function draw() {
             ctx.lineWidth = 2 * lw; 
             ctx.setLineDash([lw * 6, lw * 6]);
             const w = postitBox.endX - postitBox.startX, h = postitBox.endY - postitBox.startY;
-            ctx.fillRect(postitBox.startX, postitBox.startY, w, h); 
-            ctx.strokeRect(postitBox.startX, postitBox.startY, w, h); 
+            ctx.fillRect(postitBox.startX, postitBox.startY, w, h);
+            ctx.strokeRect(postitBox.startX, postitBox.startY, w, h);
             ctx.setLineDash([]);
+        }
+
+        // L'ELLIPSE QUI VIENT, ET LA BOÎTE QUI LA PORTE. On montre les deux : le
+        // trait tel qu'il sera, et le cadre en pointillé léger, parce que c'est
+        // le cadre qu'on tire et qu'une ellipse seule ne dit pas où sont ses
+        // coins.
+        if (isDrawingEllipse && boiteEllipse && !isExportingTransparent) {
+            const minX = Math.min(boiteEllipse.startX, boiteEllipse.endX);
+            const maxX = Math.max(boiteEllipse.startX, boiteEllipse.endX);
+            const minY = Math.min(boiteEllipse.startY, boiteEllipse.endY);
+            const maxY = Math.max(boiteEllipse.startY, boiteEllipse.endY);
+            ctx.save();
+            ctx.strokeStyle = "#6c5ce7"; ctx.lineWidth = lw; ctx.setLineDash([lw * 5, lw * 5]);
+            ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+            ctx.restore();
+
+            cheminDuCercle(ctx, { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, rx: (maxX - minX) / 2, ry: (maxY - minY) / 2 });
+            const remplissage = fondDuFantome(); if (remplissage) { ctx.fillStyle = remplissage; ctx.fill(); }
+            ctx.strokeStyle = traitDuFantome(); ctx.lineWidth = activeStyle.lineWidth * EPAISSEUR_AU_TABLEAU;
+            setContextDash(ctx, activeStyle.lineDash, EPAISSEUR_AU_TABLEAU); ctx.stroke(); ctx.setLineDash([]);
         }
 
         if (!isExportingTransparent && laserStrokes.length > 0) dessinerLesLasers(ctx, lw);
@@ -18441,10 +18675,9 @@ function getItemLogicalBounds(type, obj) {
     if (type === 'text') return { bx: obj._cachedStartX || obj.x, by: obj.y, bw: obj._cachedW || 100, bh: obj._cachedH || 50 };
     if (type === 'point') return { bx: obj.x, by: obj.y, bw: 0, bh: 0 };
     if (type === 'circle') {
-        const c = getObjectById('point', obj.center_id), e = getObjectById('point', obj.edge_id);
-        if (!c || !e) return null;
-        const r = Math.hypot(e.x - c.x, e.y - c.y);
-        return { bx: c.x - r, by: c.y - r, bw: 2 * r, bh: 2 * r };
+        const g = geometrieDuCercle(obj);
+        if (!g) return null;
+        return { bx: g.cx - g.rx, by: g.cy - g.ry, bw: 2 * g.rx, bh: 2 * g.ry };
     }
     if (type === 'rectangle') {
         const p1 = getObjectById('point', obj.p1_id), p2 = getObjectById('point', obj.p2_id);
@@ -18537,13 +18770,14 @@ function appliquerALaSelection(t) {
     // sommet, et il ne doit pas tourner deux fois.
     const pts = new Set(), traits = new Set(), textes = new Set();
     const imgs = new Set(), lesArcs = new Set(), postits = new Set();
+    const ellipses = new Set();
 
     bougeables.forEach(it => {
         const o = getObjectById(it.type, it.id);
         if (!o) return;
         if (it.type === 'point') pts.add(it.id);
         else if (it.type === 'segment' || it.type === 'rectangle') { pts.add(o.p1_id); pts.add(o.p2_id); }
-        else if (it.type === 'circle') { pts.add(o.center_id); pts.add(o.edge_id); }
+        else if (it.type === 'circle') { if (estUneEllipseLibre(o)) ellipses.add(it.id); else { pts.add(o.center_id); pts.add(o.edge_id); } }
         else if (it.type === 'curve' || it.type === 'polygon') (o.points || []).forEach(id => pts.add(id));
         else if (it.type === 'freehand') traits.add(it.id);
         else if (it.type === 'text') textes.add(it.id);
@@ -18561,7 +18795,10 @@ function appliquerALaSelection(t) {
         pointsAccrochesA(type, id).forEach(p => { if (!p.depend) pts.add(p.id); });
         const formes = formesAccrochesA(type, id);
         pointsDesFormes(formes).forEach(p => pts.add(p.id));
-        formes.forEach(({ famille, o }) => { if (famille === 'arc') lesArcs.add(o.id); });
+        formes.forEach(({ famille, o }) => {
+            if (famille === 'arc') lesArcs.add(o.id);
+            if (famille === 'circle' && estUneEllipseLibre(o)) ellipses.add(o.id);
+        });
     };
     Array.from(imgs).forEach(id => accrocher('image', id));
     Array.from(textes).forEach(id => accrocher('text', id));
@@ -18604,6 +18841,19 @@ function appliquerALaSelection(t) {
         parLeCentre(o, getItemLogicalBounds('text', o));
         if (t.dAngle) o.angle = (o.angle || 0) + t.dAngle;
         if (miroir) o.angle = -(o.angle || 0);
+    });
+
+    // UNE ELLIPSE LIBRE N'A PAS DE POINTS À REFLÉTER : c'est son centre qui se
+    // transforme. Et comme elle est toujours droite — ses rayons suivent les
+    // deux axes —, un quart de tour ne la fait pas pencher : il ÉCHANGE ses
+    // deux rayons. Le miroir, lui, la laisse telle quelle : une ellipse droite
+    // est sa propre image dans un miroir horizontal comme vertical.
+    ellipses.forEach(id => {
+        const o = getObjectById('circle', id);
+        if (!o) return;
+        const c = t.pointDe({ x: o.cx, y: o.cy });
+        o.cx = c.x; o.cy = c.y;
+        if (t.dAngle && Math.abs(Math.cos(t.dAngle)) < 0.5) { const r = o.rx; o.rx = o.ry; o.ry = r; }
     });
 
     lesArcs.forEach(id => {
@@ -18725,7 +18975,7 @@ function duplicateSelection() {
         const obj = getObjectById(item.type, item.id);
         if (!obj) return;
         if (item.type === 'segment' || item.type === 'rectangle') { pointsUtiles.add(obj.p1_id); pointsUtiles.add(obj.p2_id); }
-        if (item.type === 'circle') { pointsUtiles.add(obj.center_id); pointsUtiles.add(obj.edge_id); }
+        if (item.type === 'circle' && !estUneEllipseLibre(obj)) { pointsUtiles.add(obj.center_id); pointsUtiles.add(obj.edge_id); }
         if ((item.type === 'polygon' || item.type === 'curve') && Array.isArray(obj.points)) obj.points.forEach(id => pointsUtiles.add(id));
     });
 
@@ -18780,7 +19030,10 @@ function duplicateSelection() {
                 c.p1_id = copierPoint(obj.p1_id); c.p2_id = copierPoint(obj.p2_id);
                 break;
             case 'circle':
-                c.center_id = copierPoint(obj.center_id); c.edge_id = copierPoint(obj.edge_id);
+                // L'ellipse libre se décale par son centre, comme un arc : elle
+                // n'a pas de points à recopier.
+                if (estUneEllipseLibre(obj)) { c.cx += ECART_COPIE; c.cy += ECART_COPIE; }
+                else { c.center_id = copierPoint(obj.center_id); c.edge_id = copierPoint(obj.edge_id); }
                 break;
             case 'polygon': case 'curve':
                 c.points = (obj.points || []).map(id => copierPoint(id)).filter(id => id !== null);
@@ -20951,13 +21204,15 @@ const FAMILLES_DE_FORMES = () => [
 // son centre et son rayon.
 function pointsDeLaForme(type, o) {
     if (type === 'segment' || type === 'rectangle') return [o.p1_id, o.p2_id];
-    if (type === 'circle') return [o.center_id, o.edge_id];
+    // Une ellipse libre n'en a pas : elle porte son centre, comme un arc.
+    if (type === 'circle') return estUneEllipseLibre(o) ? [] : [o.center_id, o.edge_id];
     if (type === 'polygon' || type === 'curve') return (o.points || []).slice();
     return [];
 }
 
 function milieuDeLaForme(type, o) {
     if (type === 'arc') return { x: o.cx, y: o.cy };
+    if (type === 'circle' && estUneEllipseLibre(o)) return { x: o.cx, y: o.cy };
     const pts = pointsDeLaForme(type, o).map(id => getObjectById('point', id)).filter(Boolean);
     if (!pts.length) return null;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -21028,7 +21283,9 @@ function pointsDesFormes(formes) {
 function deplacerLesFormes(type, id, dx, dy) {
     const formes = formesAccrochesA(type, id);
     pointsDesFormes(formes).forEach(p => { p.x += dx; p.y += dy; });
-    formes.forEach(({ famille, o }) => { if (famille === 'arc') { o.cx += dx; o.cy += dy; } });
+    formes.forEach(({ famille, o }) => {
+        if (famille === 'arc' || (famille === 'circle' && estUneEllipseLibre(o))) { o.cx += dx; o.cy += dy; }
+    });
 }
 
 function tournerLesFormes(type, id, centre, dAngle) {
@@ -21041,6 +21298,16 @@ function tournerLesFormes(type, id, centre, dAngle) {
     const formes = formesAccrochesA(type, id);
     pointsDesFormes(formes).forEach(p => { const n = tourne(p.x, p.y); p.x = n.x; p.y = n.y; });
     formes.forEach(({ famille, o }) => {
+        if (famille === 'circle' && estUneEllipseLibre(o)) {
+            // Elle reste droite : on tourne son centre, et l'on échange ses deux
+            // rayons quand le tour est plus proche du quart que du demi. Une
+            // ellipse penchée ne se range pas dans deux rayons — c'est la limite
+            // assumée de cette figure-là, qui sert à entourer, pas à construire.
+            const n = tourne(o.cx, o.cy);
+            o.cx = n.x; o.cy = n.y;
+            if (Math.abs(Math.cos(dAngle)) < 0.5) { const r = o.rx; o.rx = o.ry; o.ry = r; }
+            return;
+        }
         if (famille !== 'arc') return;
         const n = tourne(o.cx, o.cy);
         o.cx = n.x; o.cy = n.y;
@@ -21063,6 +21330,15 @@ function etirerLesFormes(type, id, avant, apres) {
             o.cx = apres.x + (o.cx - avant.x) * kx;
             o.cy = apres.y + (o.cy - avant.y) * ky;
             if (isFinite(k) && k > 0) o.radius = Math.max(1, o.radius * k);
+        }
+        // L'ellipse libre suit la page dans les deux sens à la fois : chacun de
+        // ses rayons prend le facteur de son axe, et elle reste exactement
+        // autour de ce qu'elle entourait.
+        if (famille === 'circle' && estUneEllipseLibre(o)) {
+            o.cx = apres.x + (o.cx - avant.x) * kx;
+            o.cy = apres.y + (o.cy - avant.y) * ky;
+            if (isFinite(kx) && kx > 0) o.rx = Math.max(1, o.rx * kx);
+            if (isFinite(ky) && ky > 0) o.ry = Math.max(1, o.ry * ky);
         }
         if (isFinite(k) && k > 0 && Math.abs(k - 1) > 0.001) {
             o.width = Math.max(0.5, (o.width || 2) * k);
@@ -22318,6 +22594,10 @@ function collerDuTableau() {
                 if (newObj.x !== undefined) newObj.x += offset;
                 if (newObj.y !== undefined) newObj.y += offset;
                 // ✅ Ne pas décaler cx/cy (ce sont les coords de crop, pas de position)
+                // — sauf pour l'ellipse libre, dont « cx / cy » SONT sa position :
+                // sans cela, la copie se posait pile sur l'originale et l'on
+                // croyait qu'il ne s'était rien passé.
+                if (clip.type === 'circle' && estUneEllipseLibre(newObj)) { newObj.cx += offset; newObj.cy += offset; }
                 if (clip.type === 'freehand' && newObj.points) {
                     newObj.points.forEach(pt => { pt.x += offset; pt.y += offset; });
                 }

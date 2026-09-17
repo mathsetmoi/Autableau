@@ -2112,6 +2112,24 @@ body.sans-tiroirs #donate-float-btn {
     stroke-linejoin: round;
 }
 
+/* LE BOUTON CERCLE DIT LAQUELLE DE SES DEUX FAÇONS ON TIENT.
+   Les deux dessins sont écrits dans la page — le cercle avec son centre, et
+   l'ellipse libre —, et c'est cette classe, posée sur le corps de page, qui
+   choisit lequel se montre. Aucun code ne repeint l'icône : ce que la page
+   écrit est ce que l'on voit, y compris dans les copies du bouton que les
+   barres composées gardent sous la main. */
+.ico-cercle-libre {
+    display: none;
+}
+
+body.cercle-libre .ico-cercle-points {
+    display: none;
+}
+
+body.cercle-libre .ico-cercle-libre {
+    display: inline;
+}
+
 #color-indicator {
     width: 20px;
     height: 20px;
