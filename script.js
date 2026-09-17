@@ -8504,9 +8504,36 @@ function intersectionProche(pos, tolerance) {
 }
 
 // Le point de la figure le plus proche, s'il est à portée.
+// LE POINT DE DÉPART N'ATTIRE PAS LE SECOND CLIC.
+//
+// « J'ai du mal à dessiner des petits cercles. » Un cercle se trace en deux
+// clics : le centre, puis le bord. Tant que le second n'est pas donné, le
+// premier point attire — et à deux titres : il capte le clic (on désigne le
+// point au lieu d'en poser un neuf) et il capte la POSITION (l'aimant ramène
+// le nouveau point sur lui). Dans les deux cas le cercle était refusé, puisque
+// son bord ne peut pas être son centre : le geste s'évanouissait en silence, et
+// aucun cercle de moins de quinze pixels de rayon n'était traçable.
+//
+// S'accrocher à son propre point de départ ne sert à rien — la figure serait
+// refusée de toute façon. Une seule règle, lue aux deux endroits, vaut mieux
+// que deux réglages qui finiraient par diverger.
+//
+// LES COURBES ET LES POLYGONES GARDENT LE LEUR : y revenir n'est pas une
+// erreur chez eux, c'est ainsi qu'on ferme la boucle.
+const FIGURES_EN_DEUX_CLICS = ['segment', 'droite', 'demi-droite', 'circle', 'rectangle'];
+
+function pointDeDepartAEcarter() {
+    if (typeof creationStartPointId === 'undefined' || creationStartPointId === null) return null;
+    if (typeof mode === 'undefined' || !FIGURES_EN_DEUX_CLICS.includes(mode)) return null;
+    return creationStartPointId;
+}
+window.pointDeDepartAEcarter = pointDeDepartAEcarter;
+
 function pointProche(pos, portee) {
     let meilleur = null, min = portee;
+    const ecarte = pointDeDepartAEcarter();
     points.forEach(p => {
+        if (p.id === ecarte) return;
         const d = Math.hypot(p.x - pos.x, p.y - pos.y);
         if (d < min) { min = d; meilleur = p; }
     });
@@ -8811,10 +8838,49 @@ function findObjectAt(lx, ly) {
 
     // --- 2. Vérification des points (Priorité absolue pour aimantation) ---
     let bestPoint = null; let minDist = Infinity;
+    // Le point de départ n'attire pas le second clic : voir « pointDeDepartAEcarter ».
+    const departAEcarter = pointDeDepartAEcarter();
+
+    // UN POINT NE PREND JAMAIS PLUS QUE LA MOITIÉ DE SA FIGURE.
+    //
+    // « Quand je sélectionne un cercle et que je veux le copier ou le bouger,
+    // il se ragrandit. » Un cercle est fait de deux points — son centre et un
+    // point de son bord — et chacun se prend dans un rayon de quinze pixels.
+    // Sur un PETIT cercle, les deux zones se recouvrent et couvrent la figure
+    // entière : le clic destiné à prendre le cercle attrape un de ses points,
+    // et le tirer change le rayon. Tirer le centre seul l'éloigne du bord ;
+    // tirer le bord l'éloigne du centre. Dans les deux cas, ça grandit.
+    //
+    // La prise d'un point est donc bornée à la moitié de la distance qui le
+    // sépare de son voisin dans la même figure. Il reste alors, au milieu, de
+    // quoi désigner LA FIGURE. Sur une grande figure rien ne change : la
+    // moitié dépasse largement les quinze pixels.
+    const voisinage = new Map();
+    const noterVoisins = (a, b) => {
+        if (a === undefined || b === undefined || a === null || b === null || a === b) return;
+        const pa = getObjectById('point', a), pb = getObjectById('point', b);
+        if (!pa || !pb) return;
+        const d = Math.hypot(pa.x - pb.x, pa.y - pb.y);
+        if (!(d > 0)) return;
+        if (!voisinage.has(a) || voisinage.get(a) > d) voisinage.set(a, d);
+        if (!voisinage.has(b) || voisinage.get(b) > d) voisinage.set(b, d);
+    };
+    circles.forEach(c => noterVoisins(c.center_id, c.edge_id));
+    segments.forEach(o => noterVoisins(o.p1_id, o.p2_id));
+    rectangles.forEach(o => noterVoisins(o.p1_id, o.p2_id));
+    [...polygons, ...curves].forEach(o => {
+        const ids = o.points || [];
+        for (let k = 1; k < ids.length; k++) noterVoisins(ids[k - 1], ids[k]);
+    });
+
     for (let i = points.length - 1; i >= 0; i--) {
         if (surUneAutrePage(points[i])) continue;      // rangé avec sa page
+        if (points[i].id === departAEcarter) continue;
+        const prise = voisinage.has(points[i].id)
+            ? Math.min(hitZonePt, voisinage.get(points[i].id) / 2)
+            : hitZonePt;
         const dist = Math.hypot(points[i].x - lx, points[i].y - ly);
-        if (dist < hitZonePt && dist < minDist) { minDist = dist; bestPoint = { type: 'point', id: points[i].id }; }
+        if (dist < prise && dist < minDist) { minDist = dist; bestPoint = { type: 'point', id: points[i].id }; }
     }
     if (bestPoint) return bestPoint;
 
@@ -22124,11 +22190,28 @@ window.addEventListener('keydown', (e) => {
 // Les quatre gestes, écrits une fois : les raccourcis les appellent, les
 // boutons de la barre contextuelle aussi. Sur tablette il n'y a pas de
 // clavier — les raccourcis seuls ne suffisaient pas.
+// UNE COPIE QUI NE COPIE RIEN VIDE LE PRESSE-PAPIER.
+//
+// « La copie d'objet par Ctrl+C me donne parfois en copie d'anciens objets. »
+// Quand rien n'était sélectionné, cette fonction disait « Rien à copier » — une
+// pastille qui passe en trois secondes — et LAISSAIT INTACT le presse-papier
+// d'avant. Le collage suivant rendait donc ce qu'on avait copié dix minutes
+// plus tôt, sans que rien ne relie l'un à l'autre.
+//
+// C'est un choix, et il se discute : beaucoup de logiciels gardent leur
+// presse-papier quand la copie échoue. Ici l'on préfère la règle simple — ce
+// qu'on colle est ce qu'on vient de copier —, parce que le presse-papier du
+// tableau passe AVANT celui du système et qu'on n'a donc aucun moyen de
+// s'apercevoir qu'il est périmé.
+//
+// MÊME CHOSE SI LA SÉLECTION NE CONTIENT QUE DU VERROUILLÉ : rien n'est copié,
+// et le presse-papier ne doit pas faire croire le contraire. On remplit donc à
+// part, et l'on ne remet en place qu'une fois sûr d'avoir quelque chose.
 function copierSelection() {
     {
         if (selectedItems.length > 0) {
-            boardClipboard.items = [];
-            boardClipboard.points = [];
+            const copieItems = [];
+            const copiePoints = [];
 
             // 1. On mémorise d'abord tous les points impliqués pour ne pas casser la géométrie
             const pointsToCopy = new Set();
@@ -22147,7 +22230,7 @@ function copierSelection() {
             // On sauvegarde ces points
             pointsToCopy.forEach(pid => {
                 const p = getObjectById('point', pid);
-                if (p) boardClipboard.points.push(JSON.parse(JSON.stringify(p)));
+                if (p) copiePoints.push(JSON.parse(JSON.stringify(p)));
             });
 
             // 2. On sauvegarde les formes
@@ -22155,14 +22238,23 @@ function copierSelection() {
                 if (item.type !== 'point') { // Les points sont déjà gérés
                     const obj = getObjectById(item.type, item.id);
                     if (obj && !obj.locked) {
-                        boardClipboard.items.push({ type: item.type, data: JSON.parse(JSON.stringify(obj)) });
+                        copieItems.push({ type: item.type, data: JSON.parse(JSON.stringify(obj)) });
                     }
                 }
             });
 
-            if (typeof showToast === 'function') showToast("📋 Éléments copiés");
-            return true;
+            if (copieItems.length || copiePoints.length) {
+                boardClipboard = { items: copieItems, points: copiePoints };
+                if (typeof showToast === 'function') showToast("📋 Éléments copiés");
+                return true;
+            }
+            // Tout était verrouillé : on n'a rien pris, et le presse-papier ne
+            // doit pas faire croire le contraire.
+            boardClipboard = { items: [], points: [] };
+            if (typeof showToast === 'function') showToast('Rien de copiable : la sélection est verrouillée');
+            return false;
         }
+        boardClipboard = { items: [], points: [] };
         if (typeof showToast === 'function') showToast('Rien à copier : sélectionnez d\'abord');
         return false;
     }

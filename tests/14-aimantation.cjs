@@ -1040,6 +1040,110 @@ module.exports = async function (browser) {
         if (activeWidgets.protractor) document.querySelector('.btn[data-widget="protractor"]').click();
     });
 
+    // ==================================================================
+    // LES PETITS CERCLES
+    //
+    // « Je sélectionne un cercle, je veux le copier ou le bouger, il se
+    // ragrandit — j'ai du mal à dessiner des petits cercles. » Une seule cause
+    // pour les deux plaintes : un cercle est fait de DEUX points, son centre et
+    // un point de son bord, et chacun se prend dans un rayon de quinze pixels.
+    //
+    //   — À LA CRÉATION : le second clic, tombant dans les quinze pixels du
+    //     premier, s'y aimantait — et la figure était alors refusée, un cercle
+    //     ne pouvant avoir son bord pour centre. Le geste s'évanouissait en
+    //     silence : aucun cercle de moins de quinze pixels n'était traçable.
+    //   — ENSUITE : sur un petit cercle les deux zones de prise se recouvrent
+    //     et couvrent la figure entière. Le clic destiné à prendre le cercle
+    //     attrapait un de ses points, et le tirer éloigne l'un de l'autre :
+    //     ça grandit.
+    // ==================================================================
+    const petitCercle = await page.evaluate(async () => {
+        circles.length = 0; points.length = 0; selectedItems = [];
+        panX = 0; panY = 0; zoom = 1; setMode('circle'); draw();
+        await new Promise(ok => setTimeout(ok, 120));
+        return true;
+    });
+    r.verifie('le tableau est prêt pour tracer', petitCercle, '');
+
+    await page.mouse.click(500, 400);
+    await page.waitForTimeout(150);
+    await page.mouse.click(510, 400);            // un rayon de DIX pixels
+    await page.waitForTimeout(250);
+    const leTrace = await page.evaluate(() => {
+        const c = circles[0];
+        if (!c) return null;
+        const a = points.find(x => x.id === c.center_id), b = points.find(x => x.id === c.edge_id);
+        return { r: Math.round(Math.hypot(b.x - a.x, b.y - a.y)) };
+    });
+    r.egal('un cercle de dix pixels de rayon se trace', leTrace && leTrace.r, 10);
+
+    // ON LE PREND PAR LE MILIEU, et l'on tire : c'est le geste de tous les
+    // jours. Le rayon ne doit pas bouger d'un pixel, et c'est LE CERCLE qui
+    // doit se trouver désigné — pas l'un de ses points.
+    await page.evaluate(() => { setMode('pointer'); selectedItems = []; draw(); });
+    await page.waitForTimeout(150);
+    await page.mouse.move(505, 400);
+    await page.mouse.down();
+    await page.mouse.move(645, 480, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    // NUL-SÛR : sans cercle, il faut le DIRE — c'est justement la panne qu'on
+    // corrige — et non tomber en emportant le reste du fichier.
+    const bouge = await page.evaluate(() => {
+        const c = circles[0];
+        if (!c) return { absent: true, choisi: selectedItems.map(x => x.type).join(',') };
+        const a = points.find(x => x.id === c.center_id), b = points.find(x => x.id === c.edge_id);
+        return { r: Math.round(Math.hypot(b.x - a.x, b.y - a.y)),
+                 cx: Math.round(a.x), cy: Math.round(a.y),
+                 choisi: selectedItems.map(x => x.type).join(',') };
+    });
+    r.egal('le tirer par le milieu ne change pas son rayon', bouge.r || null, 10);
+    r.egal('et c\'est le cercle qui est pris, non l\'un de ses points', bouge.choisi, 'circle');
+    r.verifie('il a bien suivi la main',
+        !bouge.absent && Math.abs(bouge.cx - 640) <= 2 && Math.abs(bouge.cy - 480) <= 2,
+        JSON.stringify(bouge));
+
+    // ==================================================================
+    // UNE COPIE QUI NE COPIE RIEN NE DOIT PAS RESSORTIR L'ANCIENNE
+    //
+    // « La copie d'objet par Ctrl+C me donne parfois en copie d'anciens
+    // objets. » Quand rien n'était sélectionné, la copie disait « Rien à
+    // copier » — une pastille qui passe en trois secondes — et laissait INTACT
+    // le presse-papier d'avant. Le collage suivant rendait donc ce qu'on avait
+    // copié dix minutes plus tôt. Et comme le presse-papier du tableau passe
+    // avant celui du système, rien ne permettait de s'apercevoir qu'il était
+    // périmé.
+    // ==================================================================
+    const pressePapier = await page.evaluate(async () => {
+        circles.length = 0; points.length = 0; selectedItems = [];
+        points.push({ id: nextId++, x: 300, y: 300, z: globalZ++ });
+        points.push({ id: nextId++, x: 340, y: 300, z: globalZ++ });
+        circles.push({ id: nextId++, center_id: points[0].id, edge_id: points[1].id,
+                       color: '#000', width: 3, z: globalZ++ });
+        selectedItems = [{ type: 'circle', id: circles[0].id }];
+        copierSelection();
+        const plein = boardClipboard.items.length;
+        // Le geste qui trompe : on désélectionne, et l'on refait Ctrl+C.
+        selectedItems = [];
+        copierSelection();
+        const apresLeVide = boardClipboard.items.length;
+        const avant = circles.length;
+        collerDuTableau();
+        await new Promise(ok => setTimeout(ok, 200));
+        return { plein, apresLeVide, avant, apres: circles.length };
+    });
+    r.egal('une copie qui prend quelque chose remplit le presse-papier',
+        pressePapier.plein, 1);
+    r.egal('une copie à vide le VIDE, au lieu de garder l\'ancienne',
+        pressePapier.apresLeVide, 0);
+    r.egal('et le collage qui suit ne ressort pas le vieil objet',
+        pressePapier.apres, pressePapier.avant);
+
+    await page.evaluate(() => {
+        circles.length = 0; points.length = 0; selectedItems = [];
+        setMode('pointer'); draw();
+    });
+
     r.verifie('aucune erreur JS', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();
