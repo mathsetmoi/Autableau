@@ -34084,7 +34084,11 @@ const CLE_DATE = 'board_reglages_date';
 // mur est ce qu'il y a de plus banal dans une classe — et une sixième a
 // encore à apprendre à le lire. Qui n'en veut pas l'éteint d'un double-clic
 // sur la date ; son choix est retenu et prime sur celui-ci.
-let reglagesDate = { format: 'long', heure: true, affichee: true, horloge: 'aiguilles' };
+// « dateDessus » : la date se range AU-DESSUS du cadran au lieu de se tenir à
+// côté. C'est une personnalisation, et non le mode par défaut — la ligne reste
+// ce qui prend le moins de hauteur en haut d'un tableau.
+let reglagesDate = { format: 'long', heure: true, affichee: true, horloge: 'aiguilles',
+                     dateDessus: false };
 let dernierTitreDate = '';
 
 try {
@@ -34096,7 +34100,10 @@ const FORMATS_DATE = {
     long: (d) => d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
     moyen: (d) => d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
     court: (d) => d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }),
-    chiffres: (d) => d.toLocaleDateString('fr-FR')
+    chiffres: (d) => d.toLocaleDateString('fr-FR'),
+    // L'année sur deux chiffres : le format qu'on écrit quand la place manque,
+    // et le seul qui tienne au-dessus d'un cadran sans l'élargir.
+    bref: (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 };
 
 // Un <input> ne s'élargit pas avec son contenu : « width: auto » lui donne
@@ -34238,6 +34245,14 @@ function majAffichageDate() {
     // Le cadran affiché sans texte à côté : la pastille vide n'aurait rien à
     // dire, on l'efface et il reste seul.
     if (champ) champ.style.display = champ.value.trim() ? '' : 'none';
+    // LA DATE AU-DESSUS DU CADRAN. Il faut les deux pour que l'empilement ait
+    // un sens : une date à poser, et un cadran sous lequel la poser. Sinon on
+    // range une colonne qui n'a qu'un étage.
+    if (cadre) {
+        cadre.classList.toggle('date-dessus', !!reglagesDate.dateDessus
+            && !!reglagesDate.affichee && !!reglagesDate.heure
+            && reglagesDate.horloge === 'aiguilles');
+    }
     majHorlogeAnalogique();
     ajusterLargeurDuTitre();
     majPoseDuTitre();
@@ -34449,6 +34464,12 @@ function majReglagesDate() {
     document.querySelectorAll('[data-horloge]').forEach(b => {
         b.classList.toggle('actif', b.dataset.horloge === (reglagesDate.horloge || 'chiffres'));
     });
+    // Sans cadran, « au-dessus du cadran » n'a rien à quoi s'appliquer.
+    const dessus = document.getElementById('rd-date-dessus');
+    if (dessus) {
+        dessus.style.display = (reglagesDate.horloge === 'aiguilles') ? '' : 'none';
+        dessus.classList.toggle('actif', !!reglagesDate.dateDessus);
+    }
     // Deux interrupteurs indépendants : l'horloge tient debout sans la date.
     const d = document.getElementById('rd-date');
     if (d) d.classList.toggle('actif', !!reglagesDate.affichee);
@@ -34533,6 +34554,13 @@ document.addEventListener('DOMContentLoaded', () => {
             majAffichageDate();
             majReglagesDate();
         });
+    });
+    const bDessus = document.getElementById('rd-date-dessus');
+    if (bDessus) bDessus.addEventListener('click', () => {
+        reglagesDate.dateDessus = !reglagesDate.dateDessus;
+        enregistrerReglagesDate();
+        majAffichageDate();
+        majReglagesDate();
     });
     const bDate = document.getElementById('rd-date');
     if (bDate) bDate.addEventListener('click', () => {

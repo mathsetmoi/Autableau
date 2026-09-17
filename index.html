@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=159">
+    <link rel="stylesheet" href="style.css?v=160">
 </head>
 
 <body>
@@ -595,7 +595,11 @@
         <!-- Sans « title » écrit ici : « updateUnsavedIndicator » dit où en est
              vraiment l'enregistrement, et l'écrase dès le chargement. -->
         <button id="etat-enregistrement" type="button">
-            <span class="etat-point"></span><span class="etat-mot" id="etat-mot">Enregistré</span>
+            <!-- Le mot vient de « updateUnsavedIndicator » — « Enregistré »,
+                 « Enregistré il y a 3 min », « Enregistrement… » — et il n'est
+                 plus montré : il vit dans l'infobulle. Écrit ici, il serait une
+                 phrase que personne ne lit. -->
+            <span class="etat-point"></span><span class="etat-mot" id="etat-mot"></span>
         </button>
         <!-- L'HORLOGE À AIGUILLES, à la place de la pastille rouge qui occupait
              ce coin. Celle-ci s'allumait au premier geste et ne s'éteignait
@@ -649,6 +653,11 @@
                 <button class="rp-choix" data-format="moyen">26 août 2026</button>
                 <button class="rp-choix" data-format="court">Mardi 26 août</button>
                 <button class="rp-choix" data-format="chiffres">26/08/2026</button>
+                <!-- « On pourrait avoir la date au-dessus, 02/06/26. » L'année
+                     sur deux chiffres : c'est le format qu'on écrit au tableau
+                     quand la place manque, et celui qui tient au-dessus d'un
+                     cadran sans l'élargir. -->
+                <button class="rp-choix" data-format="bref">26/08/26</button>
                 <!-- Les deux vont chacune de leur côté : l'horloge seule, sans
                      la date, est une demande courante en fin d'heure. -->
                 <div class="rp-titre">Afficher</div>
@@ -660,6 +669,14 @@
                 <div id="rd-forme-heure">
                     <button class="rp-choix rp-sous" data-horloge="chiffres">En chiffres</button>
                     <button class="rp-choix rp-sous" data-horloge="aiguilles">À aiguilles</button>
+                    <!-- ELLE NE PARAÎT QU'AVEC LE CADRAN, et c'est voulu : sans
+                         cadran, « au-dessus du cadran » promettrait un geste qui
+                         n'arrive pas — ce que ce tableau tient pour pire que de
+                         se taire. Son voisin « chiffres / aiguilles », lui, reste
+                         visible même l'heure éteinte : c'est un choix qu'on fait
+                         AVANT d'allumer, et caché, personne ne le trouvait. -->
+                    <button class="rp-choix rp-sous" id="rd-date-dessus"
+                        style="display:none;">Date au-dessus du cadran</button>
                 </div>
                 <div class="rp-titre">&nbsp;</div>
                 <button class="rp-choix" id="rd-remettre">Remettre la date du jour</button>
@@ -680,7 +697,20 @@
         <!-- Sans infobulle écrite ici : « majPastilleDeClasse » y nomme la
              classe du moment, ou dit qu'aucune n'est choisie. -->
         <button type="button" id="classe-pastille">
-            <span class="cp-ico">👥</span><span class="cp-nom">Classe</span><span class="cp-chevron">▾</span>
+            <!-- UN DESSIN, ET NON UN EMOJI. « Les petits bonhommes ne sont pas
+                 centrés. » L'encre d'un emoji ne s'assied pas au centre de sa
+                 boîte de ligne, et le décalage change avec la police système :
+                 aucune marge ne le rattrape partout. Il ignorait aussi la
+                 couleur, si bien que le survol annoncé par cette pastille
+                 n'arrivait jamais. Ce tracé-ci est centré sur (12, 12) dans sa
+                 boîte, et il prend « currentColor ». -->
+            <span class="cp-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg></span><span class="cp-nom">Classe</span><span class="cp-chevron">▾</span>
         </button>
         <div id="classe-menu" hidden></div>
     </div>
@@ -3369,7 +3399,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=277"></script>
+    <script src="script.js?v=278"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

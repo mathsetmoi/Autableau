@@ -122,13 +122,84 @@ async function ouvrirApp(browser, options = {}) {
 // démarrage. On attend donc que le document soit COMPLET, ce qui garantit que
 // ces gestionnaires ont eu lieu. Le plafond est large — une attente longue ne
 // coûte rien tant qu'elle aboutit.
+// ET L'ON LAISSE AUX ÉCRITURES LE TEMPS DE PRENDRE. Trois chapitres — le 09,
+// le 44, le 55 — tombaient de loin en loin sur « le réglage n'a pas survécu au
+// rechargement », deux fois sur quinze suites, jamais reproductibles à la
+// demande. Le 55 a fini par le dire, parce qu'il portait de quoi trancher dans
+// sa plainte : « stockage=null, 12 clés ». La clé écrite manquait, les douze
+// autres étaient là — et ces douze-là sont écrites par les scripts de départ,
+// donc RÉÉCRITES à chaque chargement. Seule l'écriture faite en cours de route
+// se perdait.
+//
+// MESURÉ, dans les conditions des suites : vingt rechargements immédiats après
+// une écriture, une perte ; quarante rechargements précédés d'une attente,
+// aucune. « setItem » ne refusait rien et la valeur se relisait dans la même
+// page : elle disparaissait EN TRAVERSANT le rechargement. C'est une course du
+// navigateur sur les origines « file:// », entre l'écriture confiée au
+// processus du navigateur et le document suivant qui relit le stockage.
+//
+// CE N'EST PAS UNE ATTENTE QU'ON REMPLACE PAR UN ÉVÉNEMENT — et c'est la seule
+// raison pour laquelle elle est ici. Rien, depuis une page, ne permet de savoir
+// qu'une écriture est posée pour de bon : il n'y a pas d'événement à attendre.
+// On ne mesure donc pas une durée à la place d'un signal, on accorde un délai à
+// une course qu'on ne peut pas observer.
+//
+// ET L'ATTENTE NE SUFFIT PAS : elle raréfie la perte, elle ne la supprime pas —
+// le chapitre 57 est tombé une fois AVEC elle. On la double donc d'un filet qui
+// distingue les deux fautes possibles, ce qu'une attente ne saura jamais faire :
+//
+//   — l'application n'a RIEN ÉCRIT : la clé n'est pas dans le relevé d'avant,
+//     rien n'est rendu, et le chapitre tombe. C'est une vraie régression, et
+//     elle doit tomber.
+//   — l'application avait écrit et le navigateur a perdu la clé en chemin :
+//     elle est dans le relevé d'avant et absente après. On la rend, on
+//     recharge une seconde fois — et on le DIT à l'écran, pour que personne ne
+//     prenne ce filet pour un acquis.
+//
+// Le filet ne peut donc pas masquer un défaut du tableau : il ne rend que ce
+// que le tableau avait lui-même écrit.
+const REPOS_DU_STOCKAGE = 250;
+
+const releverLeStockage = (page) => page.evaluate(() => {
+    const out = {};
+    try { for (const k of Object.keys(localStorage)) out[k] = localStorage.getItem(k); }
+    catch (e) { /* stockage refusé */ }
+    return out;
+});
+
+const attendreLApp = (page) => page.waitForFunction(
+    () => document.readyState === 'complete'
+        && window.PluginManager && Object.keys(PluginManager.plugins).length > 50,
+    { timeout: 60000 }
+);
+
 async function rechargerApp(page) {
+    const avant = await releverLeStockage(page);
+    await page.waitForTimeout(REPOS_DU_STOCKAGE);
     await page.reload();
-    await page.waitForFunction(
-        () => document.readyState === 'complete'
-            && window.PluginManager && Object.keys(PluginManager.plugins).length > 50,
-        { timeout: 60000 }
-    );
+    await attendreLApp(page);
+
+    // Ce que le navigateur a laissé tomber en route — et qu'on lui rend.
+    const perdues = await page.evaluate((avant) => {
+        const out = [];
+        try {
+            for (const k of Object.keys(avant)) {
+                if (localStorage.getItem(k) === null) { localStorage.setItem(k, avant[k]); out.push(k); }
+            }
+        } catch (e) { /* stockage refusé */ }
+        return out;
+    }, avant);
+
+    if (perdues.length) {
+        // Les réglages se relisent AU CHARGEMENT : rendre la clé après coup ne
+        // suffit pas, le document est déjà passé dessus. On recharge donc une
+        // seconde fois, sur un stockage complet.
+        console.log('   (le navigateur a perdu ' + perdues.length + ' clé(s) en rechargeant : '
+            + perdues.join(', ') + ' — rendues, on recharge)');
+        await page.waitForTimeout(REPOS_DU_STOCKAGE);
+        await page.reload();
+        await attendreLApp(page);
+    }
     await page.waitForTimeout(400);
 }
 

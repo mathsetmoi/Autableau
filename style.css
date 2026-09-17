@@ -5306,6 +5306,29 @@ body.dark-mode {
     pointer-events: auto;
 }
 
+/* LA DATE AU-DESSUS DU CADRAN.
+   « Pour l'horloge, on pourrait avoir le mode où on a l'horloge analogique et
+   la date au-dessus, 02/06/26. Mais ça peut être une personnalisation. »
+   Une grille plutôt qu'une colonne : la date et le point de l'enregistrement
+   partagent le premier étage — un point seul sur sa ligne aurait mangé de la
+   hauteur pour rien — et le cadran occupe le second, centré sous les deux. */
+.project-name-wrapper.date-dessus {
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-template-areas: "date etat" "horloge horloge";
+    justify-items: center;
+    align-items: center;
+    gap: 2px 4px;
+}
+
+.project-name-wrapper.date-dessus .project-name-input {
+    grid-area: date;
+    text-align: center;
+}
+
+.project-name-wrapper.date-dessus #etat-enregistrement { grid-area: etat; margin-left: 0; }
+.project-name-wrapper.date-dessus #titre-horloge-boite { grid-area: horloge; }
+
 /* Le temps du glissement, elle passe devant tout : on doit voir où on la pose. */
 .project-name-wrapper.se-deplace {
     z-index: 60;
@@ -9594,7 +9617,6 @@ body.en-lecture #board { outline: 3px solid rgba(108, 92, 231, 0.55); outline-of
 }
 
 #classe-pastille:hover { border-color: var(--accent, #6c5ce7); color: var(--accent, #6c5ce7); }
-#classe-pastille .cp-ico { font-size: 14px; }
 
 /* UNE ICÔNE, ET LE NOM AU SURVOL.
    « Pour les classes, je préférerais qu'une icône, et quand on passe dessus on
@@ -9615,7 +9637,15 @@ body.en-lecture #board { outline: 3px solid rgba(108, 92, 231, 0.55); outline-of
 #classe-pastille .cp-nom,
 #classe-pastille .cp-chevron { display: none; }
 
-#classe-pastille .cp-ico { font-size: 16px; line-height: 1; }
+/* L'ICÔNE EST UN DESSIN, ET C'EST CE QUI LA CENTRE — sans une seule règle.
+   « Les petits bonhommes ne sont pas centrés. » C'était un emoji : son encre ne
+   remplit pas sa boîte de ligne de façon symétrique, et le décalage change
+   d'une police système à l'autre. On ne le rattrape pas avec une marge, on
+   change de matière. La boîte d'un <svg> EST son dessin, et le « justify /
+   align: center » du bouton fait alors tout le travail.
+   J'avais d'abord ajouté ici une boîte de ligne nulle et un <svg> en bloc : un
+   sabotage a montré que ces deux règles ne déplaçaient rien du tout. Elles sont
+   parties — une règle qui ne fait rien finit par se faire croire nécessaire. */
 
 /* ON VOIT D'UN COUP D'ŒIL QU'UNE CLASSE EST CHOISIE, sans avoir à survoler :
    c'est ce que le nom disait, et qu'il ne faut pas perdre en le rangeant. Le
@@ -11248,6 +11278,19 @@ body:not(.focus-mode):not(.sans-tiroirs) #barre-ecran #ecran-sep {
     vertical-align: middle;
 }
 #etat-enregistrement:hover { color: var(--accent); border-color: var(--accent); }
+
+/* LE MOT DÉMÉNAGE, PAS L'ÉTAT.
+   « Le bouton "Enregistré" à côté de l'horloge, ça fait trop gros ; je mettrais
+   plutôt le "enregistré" autre part. » Le point dit déjà tout ce qu'on lit en
+   passant : vert, c'est enregistré ; creux, il n'y a rien à enregistrer ; bleu
+   qui bat, c'est en cours. Le reste — « il y a trois minutes », « rangé dans
+   Mes tableaux » — est une PHRASE, et elle est déjà dans l'infobulle, plus
+   complète que ce que le bouton montrait. La pastille passe de quatre-vingt-
+   quinze pixels à dix-neuf, et le clic ouvre toujours « Mes tableaux ».
+   C'est la règle de la barre du document : le mot coûte une barre qui traverse
+   l'écran, l'infobulle ne coûte rien tant qu'on ne la demande pas. */
+#etat-enregistrement { padding: 5px; }
+#etat-enregistrement .etat-mot { display: none; }
 
 #etat-enregistrement .etat-point {
     width: 7px;

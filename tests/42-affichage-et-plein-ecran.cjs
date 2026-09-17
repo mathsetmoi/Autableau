@@ -105,10 +105,14 @@ module.exports = async function (browser) {
     await page.waitForTimeout(450);
     const boutonsDeSortie = await page.evaluate(() => {
         const b = document.getElementById('barre-ecran');
-        // « Présenter » ne compte pas ici : il a sa propre condition — il
-        // n'existe que s'il y a une page à projeter, et ce tableau est nu.
+        // DEUX BOUTONS NE COMPTENT PAS ICI, parce qu'ils ne parlent pas de
+        // l'affichage mais de ce qu'il y a sur le tableau : « Présenter »
+        // n'existe que s'il y a une page à projeter, et la vignette du retour
+        // que s'il y a un document où revenir. Ce tableau-ci est nu : ni l'un
+        // ni l'autre n'a de raison d'être là, et c'est très bien ainsi.
+        const CONDITIONNELS = ['btn-ecran-presenter', 'btn-ecran-retour'];
         return [...b.querySelectorAll('button')]
-            .filter(x => x.id !== 'btn-ecran-presenter')
+            .filter(x => !CONDITIONNELS.includes(x.id))
             .map(x => ({ id: x.id, atteignable: x.getBoundingClientRect().width > 10 }));
     });
     // L'ORDRE EST CELUI DES FAMILLES, et non celui d'hier : « je ne comprends
