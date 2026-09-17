@@ -2931,6 +2931,24 @@
              pas à l'écran. Deux mots suffisent à le dire. -->
         <span class="barre-nom">Le document</span>
         <div class="style-group group-document">
+        <!-- LE CHEMIN DU RETOUR. Un morceau découpé dans un PDF n'a pas de
+             pages : posé à côté, il prend la barre, et le document d'origine
+             se retrouvait à quatre gestes — le chercher sous les morceaux, le
+             cliquer, re-projeter, revenir à la bonne page. Ce bouton ne paraît
+             que sur un morceau dont la source est encore là, et refait le
+             chemin d'un coup. Son infobulle ne nomme pas le fichier : elle
+             serait alors réécrite au chargement, et cette barre ne porte que
+             des icônes. Le nom et la page se disent dans la pastille, au
+             retour. -->
+        <button class="doc-btn" id="doc-retour" style="display:none;"
+            data-tooltip="Revenir au document d'origine, à la page d'où vient ce morceau">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="10" y="3" width="11" height="18" rx="2" />
+                <path d="M8 8L3 12l5 4" />
+                <path d="M3 12h9" />
+            </svg></button>
+        <i class="doc-sep" id="doc-retour-sep" style="display:none;"></i>
         <!-- LE PLEIN ÉCRAN N'AVAIT PAS DE BOUTON. La présentation existait
              depuis longtemps — tout s'efface, la page prend l'écran — mais on
              ne pouvait l'appeler qu'à la touche « D ». Invisible pour qui n'a
@@ -3346,7 +3364,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=275"></script>
+    <script src="script.js?v=276"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

@@ -14566,7 +14566,12 @@ function prendreUnMorceau(source, r, silencieux) {
         // les mêmes pixels, et l'on projetait du flou. Avec elle, il sait
         // redemander SA page au PDF, rendue à la finesse qu'il lui faut.
         cle: pd.cle || null,
-        source: source.id
+        source: source.id,
+        // ET COMMENT ON LE REGARDAIT. Poser un morceau referme le plein écran ;
+        // pour rendre le document « comme on l'avait laissé », il faut avoir
+        // noté qu'on le projetait — et le seul moment où c'est encore vrai,
+        // c'est celui du découpage.
+        projete: (typeof presentationEnCours !== 'undefined' && presentationEnCours === source.id)
     };
     morceauxEnAttente.push(morceau);
     if (silencieux) return morceau;
@@ -14982,7 +14987,8 @@ function poserLeMorceau(m, ou) {
         id: nextId++, x: centre.x - m.w / 2, y: centre.y - m.h / 2, w: m.w, h: m.h,
         cx: m.cx, cy: m.cy, cw: m.cw, ch: m.ch,
         src: m.src, fileName: m.nom + ' — morceau', z: globalZ++, ratioLocked: true,
-        pluginData: { id: 'morceau', source: m.source, nom: m.nom, page: m.page, pdfRef: m.pdfRef, cle: m.cle || null }
+        pluginData: { id: 'morceau', source: m.source, nom: m.nom, page: m.page, pdfRef: m.pdfRef, cle: m.cle || null,
+                      projete: !!m.projete }
     };
     quitterLaPresentationSiOnPoseDehors(objet);
     images.push(objet);
@@ -14997,6 +15003,77 @@ function poserLeMorceau(m, ou) {
     draw();
     return objet;
 }
+
+// ==============================================================================
+// REVENIR AU DOCUMENT D'OÙ VIENT LE MORCEAU
+//
+// « Quand je coupe dans un PDF et que je mets à côté, c'est relou de revenir au
+// PDF — qui d'ailleurs ne devient qu'une image, on ne peut plus naviguer
+// dedans. »
+//
+// C'est exact, et le retour coûtait quatre gestes. Poser un morceau referme le
+// plein écran — on ne pose pas à côté d'une page qu'on projette —, le morceau
+// devient le document tenu, et un morceau n'a pas de pages : les flèches s'en
+// vont avec lui. Il fallait alors retrouver le PDF sous les morceaux, le
+// cliquer, re-presser « Projeter », et retomber sur la bonne page.
+//
+// Or le morceau savait DÉJÀ tout : le fichier, le numéro de page, le document
+// dont il a été tiré — et, depuis maintenant, s'il était projeté à l'instant du
+// découpage. Il ne manquait que le chemin. Un bouton, et l'on rentre là d'où
+// l'on vient, à la page qu'il faut, comme on l'avait laissé.
+// ==============================================================================
+
+// Le document d'origine, s'il est encore sur le tableau. On cherche D'ABORD le
+// PDF par sa clé : un morceau redécoupé dans un morceau renvoie à son voisin
+// immédiat, alors que ce qu'on veut retrouver, c'est la page qu'on feuillette.
+function documentSourceDuMorceau(m) {
+    if (!m || !m.pluginData || m.pluginData.id !== 'morceau') return null;
+    const pd = m.pluginData;
+    if (pd.cle) {
+        const pdf = images.find(i => i !== m && i.pluginData
+            && i.pluginData.id === 'pdfDoc' && i.pluginData.cle === pd.cle);
+        if (pdf) return pdf;
+    }
+    // Sinon celui dans lequel on a taillé : un scan, une photo, un autre morceau.
+    if (pd.source === undefined || pd.source === null) return null;
+    const direct = getObjectById('image', pd.source);
+    return (direct && direct !== m) ? direct : null;
+}
+
+async function revenirAuDocumentDuMorceau() {
+    const m = (typeof documentDeLaBarre === 'function') ? documentDeLaBarre() : null;
+    const source = documentSourceDuMorceau(m);
+    if (!source) {
+        if (typeof showToast === 'function') showToast("Le document d'origine n'est plus sur le tableau");
+        return false;
+    }
+    const page = m.pluginData.page;
+    // Tenir un document, c'est l'avoir en main : on repose le crayon. Dans cet
+    // ordre — « setMode » vide la sélection, il ne doit pas effacer la nôtre.
+    if (mode !== 'pointer') setMode('pointer');
+    selectedItems = [{ type: 'image', id: source.id }];
+    if (typeof estUnPdfFeuilletable === 'function' && estUnPdfFeuilletable(source)
+        && page && source.pluginData.page !== page) {
+        await allerALaPage(source, page);
+    }
+    // COMME ON L'AVAIT LAISSÉ. Projeté s'il l'était quand on a découpé ; sinon
+    // simplement ramené sous les yeux — il a pu sortir de l'écran pendant qu'on
+    // rangeait les morceaux, et le sélectionner sans le montrer ne sert à rien.
+    if (m.pluginData.projete && typeof presenterLeDocument === 'function') presenterLeDocument();
+    else if (typeof cadrerSurLObjet === 'function') cadrerSurLObjet(source);
+    if (typeof majBarreDocument === 'function') majBarreDocument();
+    draw();
+    // LE NOM ET LA PAGE SE DISENT ICI, et non sur le bouton : cette barre ne
+    // porte que des icônes, et son infobulle ne peut pas changer sans devenir
+    // la phrase écrite que personne ne lit (voir le chapitre 54).
+    if (typeof showToast === 'function') {
+        const nom = m.pluginData.nom || source.fileName || 'le document';
+        showToast('↩ ' + nom + (page ? ' — page ' + page : ''));
+    }
+    return true;
+}
+window.revenirAuDocumentDuMorceau = revenirAuDocumentDuMorceau;
+window.documentSourceDuMorceau = documentSourceDuMorceau;
 
 // Celui qui réclame le plus de finesse tire les autres avec lui : ils
 // partagent la même page rendue.
@@ -15980,6 +16057,15 @@ function majBarreDocument() {
         bZones.style.display = unPdf ? 'inline-flex' : 'none';
         bZones.classList.toggle('actif', zonesActives);
     }
+    // LE CHEMIN DU RETOUR, et seulement quand il mène quelque part : sur un
+    // morceau, et si le document dont il vient est encore sur le tableau.
+    const bRetour = document.getElementById('doc-retour');
+    if (bRetour) {
+        const versOu = documentSourceDuMorceau(obj);
+        bRetour.style.display = versOu ? 'inline-flex' : 'none';
+        const sepRetour = document.getElementById('doc-retour-sep');
+        if (sepRetour) sepRetour.style.display = versOu ? 'block' : 'none';
+    }
     // Découper vaut pour tout ce qui est une image posée : un PDF, un scan,
     // une photo — et un morceau, qu'on redécoupe parfois en deux fois.
     const bDecouper = document.getElementById('doc-decouper');
@@ -16250,6 +16336,14 @@ function brancherBarreDocument() {
         const bouton = b('doc-reperer');
         if (!bouton) return;
         bouton.addEventListener('click', () => { repererLesExercices(); });
+    })();
+
+    // ↩ Revenir au document d'où vient le morceau, à sa page, et projeté s'il
+    // l'était quand on l'a découpé.
+    (function () {
+        const bouton = b('doc-retour');
+        if (!bouton) return;
+        bouton.addEventListener('click', () => { revenirAuDocumentDuMorceau(); });
     })();
 
     // DEUX GESTES, DEUX BOUTONS : la page en grand ou non, et les outils
