@@ -2970,6 +2970,13 @@ module.exports = async function (browser) {
         basculerLaDecoupe(false);
 
         presenterLeDocument();
+        // On laisse la projection avec des réglages INHABITUELS, posés à la
+        // main pour ne rien changer à l'écran : on veut voir s'ils sont rendus
+        // en la quittant. Passer par leurs boutons sortirait du tableau nu —
+        // « les outils par-dessus la page », c'est justement en sortir — et
+        // l'on n'éprouverait plus le scénario dont on parle.
+        presentationAvecBarres = true;
+        cadrageDePresentation = 'largeur';
         const enPresentation = !!presentationEnCours;
         const pagesAvant = pages.length, pageAvant = currentPageIndex;
         const tailleDOrigine = morceauxEnAttente.map(m => m.w);
@@ -3000,14 +3007,77 @@ module.exports = async function (browser) {
     r.verifie('la projection est quittée — mais pour montrer autre chose, en grand et sous les yeux',
         enPlein.apres === false && enPlein.agrandi && enPlein.visible, JSON.stringify(enPlein));
 
-    // ET LES BARRES SONT REVENUES AVEC. Quitter une projection, ce n'est pas
-    // seulement éteindre un drapeau : c'est rendre le mode Focus, le plein écran
-    // du navigateur et les outils. Un sabotage a montré que le drapeau
-    // s'éteignait TOUT SEUL en changeant de page — le document n'étant plus là,
-    // « documentPresente » le remet à zéro. On serait donc arrivé sur la page
-    // neuve avec toutes les barres encore effacées, et rien pour les rappeler.
-    r.egal('et l\'on n\'arrive pas sur la page neuve les barres effacées',
-        await page.evaluate(() => document.body.classList.contains('focus-mode')), false);
+    // ET L'ÉCRAN RESTE PROPRE.
+    //
+    // « J'aimerais rester en plein écran à la création de la page et m'y
+    // rendre. » La projection du DOCUMENT ne peut pas survivre — il reste sur sa
+    // page — mais le plein écran et les barres effacées, si. Sans cela, la
+    // classe voyait reparaître d'un coup les six barres d'outils qu'on lui
+    // épargnait, pour le seul motif qu'on tournait une page.
+    //
+    // CE N'EST PAS UN CUL-DE-SAC POUR AUTANT, et c'est ce que le contrôle
+    // précédent protégeait : on arrive sur un tableau nu, il faut donc qu'il
+    // reste de quoi en sortir ET de quoi revenir. La croix du coin rend tout,
+    // et les flèches de page y paraissent — ce sont les seules, puisqu'il n'y a
+    // plus de barre.
+    const ecranApres = await page.evaluate(() => {
+        const vu = (id) => {
+            const e = document.getElementById(id);
+            if (!e) return false;
+            const b = e.getBoundingClientRect();
+            return getComputedStyle(e).display !== 'none' && b.width > 4 && b.height > 4;
+        };
+        return {
+            nu: document.body.classList.contains('focus-mode'),
+            croix: vu('exit-focus-cross'),
+            pages: vu('ecran-pages'),
+            rang: (document.getElementById('ecran-page-rang') || {}).textContent
+        };
+    });
+    r.verifie('l\'écran reste propre : on ne rend pas les barres à la classe pour une page',
+        ecranApres.nu === true, JSON.stringify(ecranApres));
+    r.verifie('et ce n\'est pas un cul-de-sac : la croix rend tout, les flèches mènent aux pages',
+        ecranApres.croix && ecranApres.pages && ecranApres.rang === '2/2',
+        JSON.stringify(ecranApres));
+
+    // ET ELLES MÈNENT VRAIMENT : on les clique, comme un doigt sur un tableau.
+    // C'est tout leur objet — au tableau nu il n'y a plus de barre, et un doigt
+    // n'a pas de touche Page↑.
+    await page.evaluate(() => document.getElementById('btn-ecran-page-prec').click());
+    await page.waitForTimeout(300);
+    r.egal('le ◀ du coin ramène à la page du document',
+        await page.evaluate(() => ({
+            page: currentPageIndex,
+            rang: document.getElementById('ecran-page-rang').textContent,
+            pdf: images.some(o => o && o.pluginData && o.pluginData.id === 'pdfDoc')
+        })), { page: 0, rang: '1/2', pdf: true });
+    await page.evaluate(() => document.getElementById('btn-ecran-page-suiv').click());
+    await page.waitForTimeout(300);
+    r.egal('et le ▶ y retourne', await page.evaluate(() => currentPageIndex), 1);
+
+    // LA PROJECTION EST BIEN DÉMONTÉE, et pas seulement oubliée. Un sabotage a
+    // montré que le drapeau s'éteint TOUT SEUL en changeant de page — le
+    // document n'étant plus là, « documentPresente » le remet à zéro. Mais deux
+    // réglages, eux, ne se soignent pas : les barres par-dessus la page et le
+    // cadrage. Laissés tels quels, la projection SUIVANTE démarrerait avec les
+    // réglages de la précédente.
+    r.egal('les réglages de la projection sont rendus, non pas oubliés',
+        await page.evaluate(() => ({
+            enCours: presentationEnCours,
+            avecBarres: presentationAvecBarres,
+            cadrage: cadrageDePresentation
+        })), { enCours: null, avecBarres: false, cadrage: 'page' });
+
+    // ELLES NE PARAISSENT QUE LÀ OÙ ELLES SERVENT. Hors du tableau nu, le tiroir
+    // du bas et celui des morceaux portent déjà les pages, et ce coin a été
+    // désencombré exprès.
+    const horsDuTableauNu = await page.evaluate(() => {
+        if (document.body.classList.contains('focus-mode')) toggleFocusMode();
+        majLesPagesDeLEcran();
+        const rendu = getComputedStyle(document.getElementById('ecran-pages')).display;
+        return rendu;
+    });
+    r.egal('les barres revenues, les flèches du coin s\'en vont', horsDuTableauNu, 'none');
 
     // ET « PAGE↑ » RAMÈNE AU DOCUMENT, sans ouvrir le tiroir du bas.
     //

@@ -1480,6 +1480,8 @@ function arrangeToolbars() {
 function toggleFocusMode() {
     const enFocus = document.body.classList.toggle('focus-mode');
     if (typeof ajusterLargeurDuTitre === 'function') ajusterLargeurDuTitre();
+    // Les pages du coin ne servent qu'au tableau nu : c'est ici qu'on l'apprend.
+    if (typeof majLesPagesDeLEcran === 'function') majLesPagesDeLEcran();
     // Hors du Focus, les vraies barres d'outils sont revenues : la barre du
     // document n'a plus à retenir la page qu'on annotait.
     if (!enFocus && typeof docEnAnnotation !== 'undefined') docEnAnnotation = null;
@@ -1546,6 +1548,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-ecran-retour')?.addEventListener('click', () => {
         if (typeof revenirAuDocumentDavant === 'function') revenirAuDocumentDavant();
     });
+    // Les pages du coin, au doigt : même geste que les touches, écrit une fois.
+    const tournerLaPageDuTableau = (sens) => {
+        const vers = currentPageIndex + sens;
+        if (vers < 0 || vers >= pages.length) return;
+        loadPage(vers);
+        if (typeof majLaPageDuTiroir === 'function') majLaPageDuTiroir();
+        if (typeof showToast === 'function') showToast(`Page ${vers + 1} sur ${pages.length}`);
+    };
+    document.getElementById('btn-ecran-page-prec')?.addEventListener('click', () => tournerLaPageDuTableau(-1));
+    document.getElementById('btn-ecran-page-suiv')?.addEventListener('click', () => tournerLaPageDuTableau(1));
 
     document.getElementById('btn-voir-tout')?.addEventListener('click', () => {
         const boite = (typeof boiteDuTravail === 'function') ? boiteDuTravail() : null;
@@ -15248,6 +15260,29 @@ function peindreLaVignette(cnv, doc, page) {
     return true;
 }
 
+// LES PAGES DU TABLEAU, DANS LE COIN, ET SEULEMENT QUAND ELLES Y SERVENT.
+//
+// Au tableau nu, il ne reste aucune barre : les touches Page↑ / Page↓ sont le
+// seul chemin vers les pages — et un tableau de classe se touche du doigt. On
+// les montre donc là, mais à deux conditions réunies : plus d'une page, et
+// aucune barre pour les porter. Ailleurs, le tiroir du bas et celui des
+// morceaux les tiennent déjà, et ce coin a été désencombré exprès.
+function majLesPagesDeLEcran() {
+    const boite = document.getElementById('ecran-pages');
+    if (!boite || typeof pages === 'undefined') return;
+    const nu = document.body.classList.contains('focus-mode');
+    const utile = nu && pages.length > 1;
+    boite.style.display = utile ? 'flex' : 'none';
+    if (!utile) return;
+    const rang = document.getElementById('ecran-page-rang');
+    if (rang) rang.textContent = (currentPageIndex + 1) + '/' + pages.length;
+    const prec = document.getElementById('btn-ecran-page-prec');
+    const suiv = document.getElementById('btn-ecran-page-suiv');
+    if (prec) prec.disabled = currentPageIndex <= 0;
+    if (suiv) suiv.disabled = currentPageIndex >= pages.length - 1;
+}
+window.majLesPagesDeLEcran = majLesPagesDeLEcran;
+
 function majLaVignetteDeRetour() {
     const bouton = document.getElementById('btn-ecran-retour');
     if (!bouton) return;
@@ -15425,7 +15460,11 @@ function poserTousLesMorceaux() {
     let pageNeuve = false;
     if (typeof presentationEnCours !== 'undefined' && presentationEnCours
         && typeof createNewPage === 'function' && typeof loadPage === 'function') {
-        quitterLaPresentation();
+        // ON GARDE L'ÉCRAN. La projection du DOCUMENT ne peut pas survivre — il
+        // reste sur sa page —, mais le plein écran et les barres effacées, si :
+        // la classe voit la page changer, elle ne voit pas reparaître d'un coup
+        // les six barres d'outils qu'on lui épargnait.
+        quitterLaPresentationEnGardantLEcran();
         pages.push(createNewPage());
         loadPage(pages.length - 1);
         pageNeuve = true;
@@ -15523,6 +15562,9 @@ function majLeBoutonPoser() {
 
 function majLaPageDuTiroir() {
     majLeBoutonPoser();
+    // Les deux endroits qui comptent les pages se rafraîchissent ensemble : le
+    // tiroir, et le coin de l'écran quand il n'y a plus de barre.
+    if (typeof majLesPagesDeLEcran === 'function') majLesPagesDeLEcran();
     const ou = document.getElementById('bm-page');
     if (!ou || typeof pages === 'undefined') return;
     ou.textContent = (currentPageIndex + 1) + '/' + pages.length;
@@ -22343,6 +22385,32 @@ function quitterLaPresentation() {
     return true;
 }
 window.quitterLaPresentation = quitterLaPresentation;
+
+// QUITTER LA PROJECTION SANS RENDRE L'ÉCRAN.
+//
+// « J'aimerais rester en plein écran à la création de la page et m'y rendre. »
+//
+// « quitterLaPresentation » démonte TROIS choses à la fois : le voile et le
+// cadrage sur la page — dont on ne peut rien garder, le document n'étant plus
+// là —, mais AUSSI le plein écran du navigateur et le mode Focus. C'est bien
+// quand on revient travailler ; c'est une catastrophe au milieu d'un cours,
+// puisque la classe voit alors reparaître d'un coup les six barres d'outils
+// qu'on lui avait épargnées.
+//
+// On ne garde donc que ce qui a du sens sans document : l'écran propre. Le
+// drapeau « pleinEcranDeLaPresentation » reste levé — c'est toujours
+// l'application qui tient le plein écran du navigateur, et la prochaine vraie
+// sortie le rendra. Échap et le bouton du coin le rendent aussi, à tout moment.
+function quitterLaPresentationEnGardantLEcran() {
+    if (!presentationEnCours) return false;
+    presentationEnCours = null;
+    presentationAvecBarres = false;
+    cadrageDePresentation = 'page';
+    rendreLeModeDuDocument();
+    if (typeof draw === 'function') draw();
+    return true;
+}
+window.quitterLaPresentationEnGardantLEcran = quitterLaPresentationEnGardantLEcran;
 
 window.basculerPleinEcran = basculerPleinEcran;
 window.presenterLeDocument = presenterLeDocument;

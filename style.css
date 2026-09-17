@@ -1917,6 +1917,39 @@ body.focus-mode #right-drawer { transform: translateX(100%) !important; }
 
 #barre-ecran button:hover { background: var(--accent-soft); color: var(--accent); }
 
+/* LES PAGES DU TABLEAU, AU COIN, quand le tableau nu a rangé toutes les barres.
+   Deux flèches et un rang, dans le même habit que leurs voisines : c'est une
+   seule pastille, et non trois boutons qui se disputeraient le coin. */
+#ecran-pages {
+    display: none;
+    align-items: center;
+    gap: 2px;
+    padding: 0 4px;
+    border-radius: 7px;
+    background: var(--surface);
+    border: 1px solid var(--contour);
+    box-shadow: var(--contour-ombre);
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+#ecran-pages button {
+    width: 18px !important;
+    height: 22px !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 4px !important;
+    font-size: 10px;
+    line-height: 1;
+}
+
+#ecran-pages button:disabled { opacity: 0.3; cursor: default; }
+#ecran-pages button:not(:disabled):hover { background: var(--accent-soft) !important; color: var(--accent); }
+.dark-mode #ecran-pages { background: #2d3436; color: #f1f2f6; border-color: #4a5560; }
+
 /* LA VIGNETTE DU RETOUR. Plus large que ses voisines — c'est une page, pas une
    icône — et volontairement : dans une rangée de carrés, celle qui montre une
    image se distingue de celles qui portent un dessin. Elle ne paraît que s'il y

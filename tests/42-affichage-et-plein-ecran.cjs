@@ -110,7 +110,10 @@ module.exports = async function (browser) {
         // n'existe que s'il y a une page à projeter, et la vignette du retour
         // que s'il y a un document où revenir. Ce tableau-ci est nu : ni l'un
         // ni l'autre n'a de raison d'être là, et c'est très bien ainsi.
-        const CONDITIONNELS = ['btn-ecran-presenter', 'btn-ecran-retour'];
+        // Les pages du coin sont du même bois : elles ne paraissent qu'au
+        // tableau nu ET s'il y a plus d'une page. Ici il n'y en a qu'une.
+        const CONDITIONNELS = ['btn-ecran-presenter', 'btn-ecran-retour',
+                               'btn-ecran-page-prec', 'btn-ecran-page-suiv'];
         return [...b.querySelectorAll('button')]
             .filter(x => !CONDITIONNELS.includes(x.id))
             .map(x => ({ id: x.id, atteignable: x.getBoundingClientRect().width > 10 }));

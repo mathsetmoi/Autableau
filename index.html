@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=161">
+    <link rel="stylesheet" href="style.css?v=162">
 </head>
 
 <body>
@@ -775,6 +775,22 @@
              pixels rien ne les séparait. Celui-ci projette LA PAGE — une page
              sur un écran ; les quatre coins restent au geste qui agrandit
              vraiment la fenêtre. -->
+        <!-- LES PAGES DU TABLEAU, QUAND IL N'Y A PLUS DE BARRE.
+             « Quand aucune barre d'outils, si j'ai bien compris, juste les
+             touches des pages ; c'est bien ça ? Tu veux le mettre où ? »
+             Les touches suffisent au clavier — mais un tableau de classe se
+             touche du doigt, et un doigt n'a pas de Page↑. Sans ces deux
+             flèches, poser les exercices sur une page neuve devient un
+             cul-de-sac sur l'écran même où l'on s'en sert.
+             Elles ne paraissent QUE là où rien d'autre ne mène aux pages :
+             tableau nu, et plus d'une page. Le reste du temps, ce coin
+             n'a pas trois boutons de plus. -->
+        <span id="ecran-pages" style="display:none;">
+            <button id="btn-ecran-page-prec" data-tooltip="Page précédente du tableau">◀</button>
+            <!-- Vide : « majLesPagesDeLEcran » y met le rang. -->
+            <span id="ecran-page-rang"></span>
+            <button id="btn-ecran-page-suiv" data-tooltip="Page suivante du tableau">▶</button>
+        </span>
         <!-- LE CHEMIN DU RETOUR, ET IL MONTRE OÙ IL MÈNE.
              « On pourrait mettre aussi une petite vignette à côté du plein
              écran pour revenir au document d'avant. »
@@ -3399,7 +3415,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=281"></script>
+    <script src="script.js?v=282"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>
