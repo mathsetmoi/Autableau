@@ -7055,6 +7055,21 @@ function updateStyleBarContext() {
     // seule se met debout : une page est haute et étroite, là où le tableau
     // est large.
     const barStyle = document.getElementById('bar-style');
+
+    // LE CACHE BLANC N'A PAS DE STYLE, DONC PAS DE BARRE.
+    // « Pour le rectangle blanc du PDF, ne mets pas la barre de style du coup. »
+    // Elle s'ouvrait par-dessus la page avec la couleur, l'épaisseur, le
+    // pointillé et le remplissage — quatre réglages dont AUCUN ne s'applique :
+    // « styleDuRectangle » force le blanc opaque sans contour, c'est la
+    // définition même de l'outil. Une barre qui montre des réglages sans effet
+    // ne fait pas qu'encombrer, elle ment. Elle revient dès qu'on reprend un
+    // autre outil, puisque « setMode » baisse le drapeau.
+    if (typeof cacheBlanc !== 'undefined' && cacheBlanc) {
+        barStyle.classList.remove('visible');
+        barStyle.removeAttribute('data-dragged');
+        return;
+    }
+
     barStyle.className = barreStyleDebout ? 'toolbar visible vertical' : 'toolbar visible';
     if (barStyle.parentNode !== document.body) {
         document.body.appendChild(barStyle);
@@ -16609,6 +16624,10 @@ function brancherBarreDocument() {
     b('doc-outil-cache').addEventListener('click', () => {
         annoterLeDocument('rectangle');
         cacheBlanc = true;
+        // Le drapeau vient d'être levé APRÈS que « setMode » a ouvert la barre
+        // de style : on la fait rejuger. Elle se retire d'elle-même — la règle
+        // est écrite une seule fois, dans « updateStyleBarContext ».
+        if (typeof updateStyleBarContext === 'function') updateStyleBarContext();
         if (typeof majBarreDocument === 'function') majBarreDocument();
     });
 

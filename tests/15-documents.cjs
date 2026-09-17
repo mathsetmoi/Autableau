@@ -3353,6 +3353,60 @@ module.exports = async function (browser) {
     });
     r.egal('le bouton met le document EN ANNOTATION, il ne le resélectionne pas',
         enAnnotant, { annote: true, mode: 'rectangle', drapeau: true, choisi: '' });
+
+    // ET PAS DE BARRE DE STYLE AVEC LUI.
+    //
+    // « Pour le rectangle blanc du PDF, ne mets pas la barre de style du coup. »
+    // Elle s'ouvrait par-dessus la page avec la couleur, l'épaisseur, le
+    // pointillé et le remplissage — quatre réglages dont AUCUN ne s'applique :
+    // « styleDuRectangle » force le blanc opaque sans contour, c'est la
+    // définition de l'outil. Une barre qui montre des réglages sans effet ne
+    // fait pas qu'encombrer la page, elle ment.
+    //
+    // ON ÉPROUVE LES DEUX SENS, sans quoi « la barre est cachée » se
+    // confondrait avec « la barre ne paraît jamais » : elle doit revenir dès
+    // qu'on reprend un outil qui a, lui, quelque chose à régler.
+    const barreDuStyle = () => page.evaluate(() => {
+        const b = document.getElementById('bar-style');
+        return { visible: b.classList.contains('visible'),
+                 large: Math.round(b.getBoundingClientRect().width) };
+    });
+    const avecLeCache = await barreDuStyle();
+    r.verifie('le cache blanc n\'ouvre pas la barre de style : il n\'a rien à régler',
+        avecLeCache.visible === false, JSON.stringify(avecLeCache));
+
+    // LA BARRE DU DOCUMENT, ELLE, RESTE À L'ÉCRAN — c'est par elle qu'on est
+    // arrivé, et c'est par elle qu'on repart prendre le crayon. On regarde ce
+    // qui est MONTRÉ, et non la classe : j'avais d'abord lu « visible » dans la
+    // liste des classes, et un sabotage a montré que ce contrôle-là ne pouvait
+    // pas tomber — « majBarreDocument » repasse dans la seconde qui suit et
+    // remet la classe. Une règle de feuille de style qui cacherait la barre,
+    // elle, ne se serait jamais vue.
+    const barreDuDoc = await page.evaluate(() => {
+        const d = document.getElementById('bar-document');
+        const b = d.getBoundingClientRect();
+        return { affichee: getComputedStyle(d).display !== 'none'
+                           && getComputedStyle(d).visibility !== 'hidden',
+                 large: Math.round(b.width), haut: Math.round(b.height) };
+    });
+    r.verifie('mais la barre du document reste à l\'écran, pour en sortir',
+        barreDuDoc.affichee && barreDuDoc.large > 100 && barreDuDoc.haut > 10,
+        JSON.stringify(barreDuDoc));
+
+    const avecLeCrayon = await page.evaluate(async () => {
+        document.getElementById('doc-outil-crayon').click();
+        await new Promise(ok => setTimeout(ok, 250));
+        const b = document.getElementById('bar-style');
+        return { visible: b.classList.contains('visible'), drapeau: estUnCacheBlanc() };
+    });
+    r.egal('et elle revient avec le crayon, qui a une couleur et une épaisseur',
+        avecLeCrayon, { visible: true, drapeau: false });
+
+    // On revient au cache pour la suite du chapitre.
+    await page.evaluate(async () => {
+        document.getElementById('doc-outil-cache').click();
+        await new Promise(ok => setTimeout(ok, 250));
+    });
     await page.waitForTimeout(150);
     await page.mouse.click(250, 250);
     await page.waitForTimeout(150);

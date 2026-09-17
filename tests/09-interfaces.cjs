@@ -227,6 +227,39 @@ module.exports = async function (browser) {
         return { combien: boutons.length, muets, vides, mots };
     });
     r.verifie('la barre du document a bien ses boutons', barreDoc.combien > 10, String(barreDoc.combien));
+
+    // LES RÉGLAGES DE PAGE SONT DANS LE VOLET — SAUF LE ROGNAGE, ET C'EST ÉCRIT.
+    //
+    // Quadrillage, proportions et page entière ont quitté la barre pour le
+    // volet du document, où ils portent enfin leur nom. Leurs boutons RESTENT
+    // dans la page : le volet les clique plutôt que de réécrire leur
+    // comportement. Ils doivent donc exister sans jamais se montrer.
+    //
+    // LE ROGNAGE, LUI, EST REVENU DANS LA BARRE, exprès : c'est un MODE qu'on
+    // allume et qu'on éteint pendant qu'on tire les poignées, et non un réglage
+    // qu'on pose une fois. J'ai bien failli le retirer avec les autres, sur la
+    // foi d'un commentaire qui ne l'avait pas suivi — c'est le chapitre 15 qui
+    // l'a rattrapé. Cette garde-ci fige donc les DEUX moitiés de la règle :
+    // trois qui se cachent, un qui se montre. Une liste qui ne dirait que la
+    // première moitié se laisserait relire comme un oubli.
+    const reglagesDePage = await page.evaluate(() => {
+        const barre = document.getElementById('bar-document');
+        barre.classList.add('visible', 'ctx-document', 'doc-allege');
+        barre.classList.remove('annote');
+        const vu = (id) => {
+            const e = document.getElementById(id);
+            if (!e) return 'disparu';
+            return getComputedStyle(e).display !== 'none' ? 'montré' : 'caché';
+        };
+        return { grille: vu('doc-grille'), proportions: vu('doc-proportions'),
+                 entiere: vu('doc-entiere'), rogner: vu('doc-rogner') };
+    });
+    r.egal('les réglages de page se cachent derrière leur nom, dans le volet',
+        { grille: reglagesDePage.grille, proportions: reglagesDePage.proportions,
+          entiere: reglagesDePage.entiere },
+        { grille: 'caché', proportions: 'caché', entiere: 'caché' });
+    r.egal('mais le rognage reste dans la barre : c\'est un mode, pas un réglage',
+        reglagesDePage.rogner, 'montré');
     r.egal('aucun mot écrit : il ne reste que les icônes', barreDoc.mots, []);
     r.egal('et pas une seule icône muette : chacune porte son infobulle',
         barreDoc.muets, []);
