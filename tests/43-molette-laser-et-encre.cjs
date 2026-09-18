@@ -255,6 +255,156 @@ module.exports = async function (browser) {
         { clair: { change: false, apres: 'rouge-brique' },
           sombre: { change: false, apres: 'rouge-brique' } });
 
+    // =================================================================
+    // LE SURLIGNEUR MONTRE SON EMPREINTE, ET SON BOUT SE CHOISIT
+    //
+    // « Quand on utilise le surligneur, ce serait bien d'avoir un curseur rond
+    // à la bonne taille, et la possibilité que ce soit carré plutôt que rond
+    // (appui long sur l'icône). » Il traçait une bande six fois plus large que
+    // le trait réglé, derrière une croix de quelques pixels : on ne savait pas
+    // ce qu'on allait couvrir avant de l'avoir couvert.
+    // =================================================================
+    const lireLeCurseur = () => page.evaluate(() => {
+        updateCursor();
+        const brut = canvas.style.cursor;
+        const dedans = decodeURIComponent((brut.match(/utf8,([^']*)/) || [])[1] || '');
+        const pointe = (brut.match(/\)\s*(\d+)\s+(\d+)/) || []).slice(1).map(Number);
+        return { brut, dedans, pointe };
+    });
+
+    await page.evaluate(() => {
+        if (typeof quitterLaPresentation === 'function' && presentationEnCours) quitterLaPresentation();
+        images.length = 0; freehands.length = 0; selectedItems = [];
+        panX = 0; panY = 0; zoom = 1;
+        changerLeBoutDuSurligneur('rond');
+        activeStyle.lineWidth = 4; activeStyle.strokeColor = '#f1c40f';
+        setMode('highlighter');
+    });
+
+    const rond = await lireLeCurseur();
+    // 4 de trait, six fois plus large au surligneur : 24 px de large, donc 12 de rayon.
+    r.verifie('le surligneur montre un rond, et non une croix',
+        /<circle/.test(rond.dedans) && !/<rect/.test(rond.dedans), rond.dedans);
+    r.verifie('à la taille de ce qu\'il couvre vraiment',
+        /r="12"/.test(rond.dedans), rond.dedans);
+    r.verifie('de la couleur qu\'on a choisie', /%23f1c40f|#f1c40f/i.test(rond.dedans), rond.dedans);
+    r.egal('et l\'on vise son centre', rond.pointe, [14, 14]);
+
+    await page.evaluate(() => { zoom = 2; });
+    const zoome = await lireLeCurseur();
+    r.verifie('le tableau zoomé, le rond grandit d\'autant',
+        /r="24"/.test(zoome.dedans), zoome.dedans);
+    await page.evaluate(() => { zoom = 1; });
+
+    const carre = await page.evaluate(() => {
+        changerLeBoutDuSurligneur('carre');
+        updateCursor();
+        return { dedans: decodeURIComponent((canvas.style.cursor.match(/utf8,([^']*)/) || [])[1] || ''),
+                 memoire: localStorage.getItem('board_bout_surligneur') };
+    });
+    r.verifie('le bout carré donne un curseur carré, de même côté',
+        /<rect[^>]*width="24"/.test(carre.dedans) && !/<circle/.test(carre.dedans), carre.dedans);
+    r.egal('et le choix est retenu d\'une séance à l\'autre', carre.memoire, 'carre');
+
+    // ET LE MÊME CHOIX SE VOIT DANS LA BARRE DE STYLE. L'appui long sur
+    // l'icône partage celle-ci avec le déplacement de l'outil : un geste ne se
+    // devine pas, et il fallait une commande qu'on voie.
+    const barre = await page.evaluate(() => {
+        changerLeBoutDuSurligneur('rond');
+        setMode('highlighter'); selectedItems = []; updateStyleBarContext();
+        const b = document.getElementById('btn-bout-surligneur');
+        const vuAuSurligneur = getComputedStyle(b.closest('.style-group')).display;
+        const rond = b.querySelector('circle') ? 'rond' : (b.querySelector('rect') ? 'carre' : '?');
+        b.click();
+        const apres = { reglage: boutDuSurligneur,
+                        dessin: b.querySelector('rect') ? 'carre' : (b.querySelector('circle') ? 'rond' : '?') };
+        b.click();
+        const retour = boutDuSurligneur;
+        setMode('freehand'); updateStyleBarContext();
+        const vuAuCrayon = getComputedStyle(b.closest('.style-group')).display;
+        setMode('highlighter'); updateStyleBarContext();
+        return { vuAuSurligneur, vuAuCrayon, rond, apres, retour };
+    });
+    r.egal('le bouton du bout paraît quand on prend le surligneur', barre.vuAuSurligneur, 'flex');
+    r.egal('et se tait pour le crayon, qui n\'a pas de bout à choisir', barre.vuAuCrayon, 'none');
+    r.egal('son dessin montre le bout en cours', barre.rond, 'rond');
+    r.egal('un appui le change, et le dessin suit',
+        barre.apres, { reglage: 'carre', dessin: 'carre' });
+    r.egal('un second appui revient au rond', barre.retour, 'rond');
+
+    // Le trait emporte son bout : changer le réglage ne retaille pas ce qui
+    // est déjà surligné.
+    const traces = await page.evaluate(async () => {
+        const trait = async () => {
+            const c = document.getElementById('board');
+            c.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientX: 300, clientY: 400, bubbles: true, isPrimary: true }));
+            c.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 420, clientY: 400, bubbles: true, isPrimary: true }));
+            c.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: 420, clientY: 400, bubbles: true, isPrimary: true }));
+            await new Promise(ok => setTimeout(ok, 120));
+        };
+        freehands.length = 0;
+        changerLeBoutDuSurligneur('carre');
+        await trait();                       // celui-ci au bout carré
+        changerLeBoutDuSurligneur('rond');
+        await trait();                       // celui-là au bout rond
+        return freehands.map(f => ({ bout: f.bout, surligneur: !!f.isHighlighter }));
+    });
+    r.egal('deux traits de surligneur sont posés',
+        traces.map(t => t.surligneur), [true, true]);
+    r.egal('chacun garde le bout qu\'il avait au moment du geste',
+        traces.map(t => t.bout), ['carre', 'rond']);
+
+    // Et ce que l'on exporte porte le même bout que ce que l'on voit.
+    const exporte = await page.evaluate(() => {
+        const svg = generateSVGString({ x: 0, y: 0, w: 1400, h: 900 }, false);
+        return (svg.match(/stroke-linecap="(square|round)"/g) || []);
+    });
+    r.verifie('le SVG exporté distingue les deux bouts',
+        exporte.includes('stroke-linecap="square"') && exporte.includes('stroke-linecap="round"'),
+        JSON.stringify(exporte));
+
+    // ET C'EST BIEN L'ENCRE QUI CHANGE, pas seulement ce qu'on note sur le
+    // trait. Au coin du bout carré il y a de la couleur ; au même endroit, le
+    // bout rond n'en met pas — c'est toute la différence entre les deux, et
+    // elle se mesure là.
+    const coins = await page.evaluate(async (COIN) => {
+        const c = document.getElementById('board');
+        const g = c.getContext('2d', { willReadFrequently: true });
+        const encreAu = (x, y) => {
+            const d = g.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+            // Le fond est blanc : toute teinte posée l'assombrit quelque part.
+            return (d[0] < 245 || d[1] < 245 || d[2] < 245);
+        };
+        const poser = async (bout) => {
+            freehands.length = 0;
+            changerLeBoutDuSurligneur(bout);
+            const env = (t, x, y) => c.dispatchEvent(new PointerEvent(t,
+                { pointerId: 3, clientX: x, clientY: y, bubbles: true, isPrimary: true }));
+            env('pointerdown', 300, 400); env('pointermove', 420, 400); env('pointerup', 420, 400);
+            await new Promise(ok => setTimeout(ok, 150));
+            draw();
+            await new Promise(ok => setTimeout(ok, 150));
+            // Le trait fait 24 px de large (4 × 6) : son bout carré déborde de
+            // douze pixels au-delà du point d'arrivée, coins compris.
+            return { coin: encreAu(420 + COIN, 400 - COIN), milieu: encreAu(360, 400) };
+        };
+        const carre = await poser('carre');
+        const rond = await poser('rond');
+        freehands.length = 0; draw();
+        return { carre, rond };
+    }, 9);
+    r.verifie('les deux traits marquent bien le tableau',
+        coins.carre.milieu && coins.rond.milieu, JSON.stringify(coins));
+    r.verifie('le bout carré pose de l\'encre jusque dans son coin',
+        coins.carre.coin, JSON.stringify(coins));
+    r.verifie('le bout rond n\'en met pas au même endroit',
+        !coins.rond.coin, JSON.stringify(coins));
+
+    await page.evaluate(() => {
+        freehands.length = 0; selectedItems = []; setMode('pointer');
+        changerLeBoutDuSurligneur('rond'); draw();
+    });
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

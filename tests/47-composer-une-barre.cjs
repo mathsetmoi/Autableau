@@ -515,6 +515,79 @@ module.exports = async function (browser) {
         texts.length = 0; selectedItems = []; updateStyleBarContext(); draw();
     });
 
+    // ==================================================================
+    // TENIR SANS BOUGER RÈGLE L'OUTIL, TENIR ET GLISSER LE DÉPLACE
+    //
+    // Le fantôme paraissait dès la fin de l'attente, sans qu'on ait bougé d'un
+    // pixel : il passait sous le curseur, volait le survol du bouton, et TOUT
+    // appui long posé sur la même icône était abandonné avant d'avoir servi —
+    // c'est ainsi qu'on a découvert que le geste était déjà pris.
+    // ==================================================================
+    const geste = await page.evaluate(async () => {
+        // Le crayon : un outil qui n'a pas de réglage caché, donc rien ne vient
+        // lui disputer le geste.
+        const b = document.querySelector('#bar-tools .btn[data-mode="freehand"]');
+        const r = b.getBoundingClientRect();
+        const x = Math.round(r.x + r.width / 2), y = Math.round(r.y + r.height / 2);
+        const env = (type, cx, cy, cible) => (cible || window).dispatchEvent(new PointerEvent(type,
+            { pointerId: 7, clientX: cx, clientY: cy, bubbles: true, isPrimary: true, button: 0 }));
+        const fantomeVu = () => !!(dragGhost && getComputedStyle(dragGhost).display !== 'none');
+
+        draggedPluginTool = null; hideDragGhost();
+        env('pointerdown', x, y, b);
+        await new Promise(ok => setTimeout(ok, 550));
+        const immobile = { arme: !!outilArme, tenu: !!draggedPluginTool, fantome: fantomeVu() };
+
+        // Trois pixels ne sont pas un déplacement : un doigt posé tremble.
+        env('pointermove', x + 3, y + 2);
+        await new Promise(ok => setTimeout(ok, 60));
+        const tremblement = { tenu: !!draggedPluginTool, fantome: fantomeVu() };
+
+        env('pointermove', x + 60, y + 15);
+        await new Promise(ok => setTimeout(ok, 60));
+        const glisse = { tenu: !!draggedPluginTool, fantome: fantomeVu() };
+
+        env('pointerup', x + 60, y + 15, b);
+        draggedPluginTool = null; hideDragGhost(); outilArme = null;
+        return { immobile, tremblement, glisse };
+    });
+    r.verifie('tenir l\'icône arme le déplacement, mais ne sort pas le fantôme',
+        geste.immobile.arme && !geste.immobile.tenu && !geste.immobile.fantome,
+        JSON.stringify(geste.immobile));
+    r.verifie('et un tremblement de trois pixels ne le sort pas non plus',
+        !geste.tremblement.tenu && !geste.tremblement.fantome, JSON.stringify(geste.tremblement));
+    r.verifie('c\'est le vrai déplacement qui le sort, et l\'outil part avec',
+        geste.glisse.tenu && geste.glisse.fantome, JSON.stringify(geste.glisse));
+
+    // ET SUR UNE ICÔNE QUI CACHE UN RÉGLAGE, c'est le réglage qui gagne : on a
+    // tenu sans bouger, on ne voulait pas déplacer l'outil. Le déplacement
+    // armé est donc rendu, et un mouvement tardif n'emporte plus rien.
+    const arbitrage = await page.evaluate(async () => {
+        const b = document.getElementById('btn-surligneur');
+        const r = b.getBoundingClientRect();
+        const x = Math.round(r.x + r.width / 2), y = Math.round(r.y + r.height / 2);
+        const env = (type, cx, cy, cible) => (cible || window).dispatchEvent(new PointerEvent(type,
+            { pointerId: 8, clientX: cx, clientY: cy, bubbles: true, isPrimary: true, button: 0 }));
+        draggedPluginTool = null; hideDragGhost();
+        const vieux = document.getElementById('panneau-appui'); if (vieux) vieux.remove();
+
+        env('pointerdown', x, y, b);
+        await new Promise(ok => setTimeout(ok, 700));
+        const panneau = !!document.getElementById('panneau-appui');
+        const desarme = !outilArme;
+        env('pointermove', x + 80, y + 20);
+        await new Promise(ok => setTimeout(ok, 60));
+        const apres = !!draggedPluginTool;
+        env('pointerup', x + 80, y + 20, b);
+        const p = document.getElementById('panneau-appui'); if (p) p.remove();
+        draggedPluginTool = null; hideDragGhost(); outilArme = null;
+        return { panneau, desarme, apres };
+    });
+    r.verifie('sur une icône à réglage, tenir sans bouger ouvre le réglage',
+        arbitrage.panneau, JSON.stringify(arbitrage));
+    r.verifie('et rend le déplacement qu\'on n\'a pas demandé',
+        arbitrage.desarme && !arbitrage.apres, JSON.stringify(arbitrage));
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

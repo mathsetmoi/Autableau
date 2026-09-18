@@ -2092,6 +2092,7 @@ body.sans-tiroirs #donate-float-btn {
 #bar-style .group-edition,
 #bar-style.ctx-point .group-point,
 #bar-style.ctx-line .group-line,
+#bar-style.ctx-surligneur .group-surligneur,
 #bar-style.ctx-text .group-text,
 #bar-style.ctx-zindex .group-zindex,
 #bar-style.ctx-lock .group-lock,

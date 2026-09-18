@@ -4039,7 +4039,8 @@ function generateSVGString(rect, keepBg) {
                 if (obj.points.length > 1) {
                     let d = `M ${obj.points[0].x} ${obj.points[0].y} `;
                     for (let i = 1; i < obj.points.length; i++) d += `L ${obj.points[i].x} ${obj.points[i].y} `;
-                    svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${dash}" style="mix-blend-mode: multiply;" opacity="0.85" />`;
+                    const carre = boutDuTrait(obj) === 'carre';
+                    svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="${carre ? 'square' : 'round'}" stroke-linejoin="${carre ? 'miter' : 'round'}" stroke-dasharray="${dash}" style="mix-blend-mode: multiply;" opacity="0.85" />`;
                 }
             } else {
                 for (let i = 0; i < obj.points.length - 1; i++) {
@@ -5713,6 +5714,26 @@ function moveDragGhost(x, y) {
     dragGhost.style.top = `${Math.round(y - 22)}px`;
 }
 
+// LE FANTÔME ATTEND LE MOUVEMENT.
+//
+// Tenir une icône quatre dixièmes de seconde armait le déplacement de l'outil,
+// et le fantôme paraissait aussitôt — sans qu'on ait bougé d'un pixel. Il
+// passait alors sous le curseur, volait le survol du bouton, et le bouton
+// recevait un « pointerleave » : tout appui long POSÉ SUR LA MÊME ICÔNE était
+// abandonné avant d'avoir servi. Les deux gestes ne se distinguent donc plus
+// par leur durée mais par ce qu'ils font : tenir sans bouger règle l'outil,
+// tenir et glisser le déplace.
+//
+// L'outil armé est unique : on n'a qu'un doigt sur une icône à la fois, et
+// l'appui long des réglages doit pouvoir le désarmer quand il ouvre son
+// panneau.
+let outilArme = null;
+// Trois pixels de tremblement ne sont pas un déplacement : sur un tableau
+// tactile, un doigt posé ne tient jamais parfaitement immobile.
+const SEUIL_DE_DEPART_DOUTIL = 6;
+
+function desarmerLeGlisserDOutil() { outilArme = null; }
+
 function bindPluginDragGhost(button, toolId) {
     if (!button || button.dataset.dragGhostBound === 'true') return;
     button.dataset.dragGhostBound = 'true';
@@ -5743,36 +5764,46 @@ function bindPluginDragGhost(button, toolId) {
 
         e.stopPropagation();
         clearTimeout(holdTimer);
+        outilArme = null;
         holdTimer = setTimeout(() => {
-            draggedPluginTool = {
-                id: normalizedId,
-                el: button,
-                source: sourceContainer,
-                sourceKind,
-                sourceToolbarId,
-                isCopy
+            // Armé, et rien de plus : c'est le premier vrai déplacement qui
+            // sort le fantôme (voir « partir », plus bas).
+            outilArme = {
+                bouton: button, isCopy,
+                depart: { x: e.clientX, y: e.clientY },
+                outil: { id: normalizedId, el: button, source: sourceContainer, sourceKind, sourceToolbarId, isCopy }
             };
-
-            if (!isCopy) {
-                button.classList.add('is-held');
-                button.style.display = 'none';
-            }
-            setDragGhostFromButton(button, e.clientX, e.clientY);
-            setFloatingGhostState(false);
         }, 400);
     });
 
+    const partir = (e) => {
+        if (!outilArme || outilArme.bouton !== button) return;
+        if (Math.abs(e.clientX - outilArme.depart.x) <= SEUIL_DE_DEPART_DOUTIL
+            && Math.abs(e.clientY - outilArme.depart.y) <= SEUIL_DE_DEPART_DOUTIL) return;
+        draggedPluginTool = outilArme.outil;
+        if (!outilArme.isCopy) {
+            button.classList.add('is-held');
+            button.style.display = 'none';
+        }
+        outilArme = null;
+        setDragGhostFromButton(button, e.clientX, e.clientY);
+        setFloatingGhostState(false);
+    };
+    window.addEventListener('pointermove', partir);
+
     button.addEventListener('pointermove', () => {
-        if (!draggedPluginTool) clearTimeout(holdTimer);
+        if (!draggedPluginTool && !outilArme) clearTimeout(holdTimer);
     });
 
     const clearHold = () => {
         clearTimeout(holdTimer);
+        if (outilArme && outilArme.bouton === button) outilArme = null;
         if (!draggedPluginTool) button.classList.remove('is-held');
     };
 
     button.addEventListener('pointerup', clearHold);
     button.addEventListener('pointercancel', clearHold);
+    window.addEventListener('pointerup', clearHold);
 }
 
 function setFloatingGhostState(active) {
@@ -7249,7 +7280,12 @@ function updateStyleBarContext() {
     // --- NOUVEAU : On ajoute 'ctx-point' pour les outils segment, curve et polygon ---
     else if (targetType === 'point') barStyle.classList.add('ctx-point');
     else if (['segment', 'droite', 'demi-droite', 'curve', 'polygon'].includes(targetType)) barStyle.classList.add('ctx-line', 'ctx-point');
-    else if (['circle', 'rectangle', 'freehand', 'highlighter', 'multi', 'postit', 'compass', 'arc'].includes(targetType)) barStyle.classList.add('ctx-line');
+    else if (['circle', 'rectangle', 'freehand', 'highlighter', 'multi', 'postit', 'compass', 'arc'].includes(targetType)) {
+        barStyle.classList.add('ctx-line');
+        // Le bout ne se règle que le surligneur en main : il n'a rien à dire
+        // d'un rectangle ni d'un trait de crayon.
+        if (targetType === 'highlighter') barStyle.classList.add('ctx-surligneur');
+    }
     else if (targetType === 'text') barStyle.classList.add('ctx-text');
     else if (targetType === 'image') {
         // UN DOCUMENT TENU N'A QU'UNE BARRE. Il en paraissait TROIS empilées
@@ -7552,6 +7588,12 @@ document.getElementById('btn-z-up').addEventListener('click', () => { selectedIt
 document.getElementById('btn-z-down').addEventListener('click', () => { let minZ = 0;[points, segments, circles, rectangles, curves, polygons, freehands, images, texts].forEach(arr => { arr.forEach(o => { if (o.z !== undefined && o.z < minZ) minZ = o.z; }); }); selectedItems.forEach(item => { const obj = getObjectById(item.type, item.id); if (obj && !obj.locked) obj.z = minZ - 1; }); saveState(); draw(); showToast("Envoyé à l'arrière-plan"); });
 
 document.getElementById('btn-shape').addEventListener('click', () => { const shapes = ['circle', 'cross', 'square', 'pixel']; const icons = { 'circle': '<circle cx="12" cy="12" r="6"/>', 'cross': '<line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="3"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="3"/>', 'square': '<rect x="6" y="6" width="12" height="12"/>', 'pixel': '<rect x="10" y="10" width="4" height="4" fill="currentColor"/>' }; activeStyle.pointShape = shapes[(shapes.indexOf(activeStyle.pointShape) + 1) % shapes.length]; document.getElementById('icon-shape').innerHTML = icons[activeStyle.pointShape]; pushStyleToObject(); });
+// Le bout du surligneur : rond ou carré, d'un appui, là où l'on règle déjà
+// son épaisseur. Le même choix vit derrière l'appui long de l'icône.
+document.getElementById('btn-bout-surligneur')?.addEventListener('click', () => {
+    changerLeBoutDuSurligneur(boutDuSurligneur === 'carre' ? 'rond' : 'carre');
+});
+
 document.getElementById('btn-dash').addEventListener('click', () => { const dashes = ['solid', 'dashed', 'dotted']; const icons = { 'solid': '<line x1="4" y1="12" x2="20" y2="12" stroke-width="3"/>', 'dashed': '<line x1="4" y1="12" x2="20" y2="12" stroke-width="3" stroke-dasharray="6,4"/>', 'dotted': '<line x1="4" y1="12" x2="20" y2="12" stroke-width="3" stroke-dasharray="2,4"/>' }; activeStyle.lineDash = dashes[(dashes.indexOf(activeStyle.lineDash) + 1) % dashes.length]; document.getElementById('icon-dash').innerHTML = icons[activeStyle.lineDash]; pushStyleToObject(); });
 // L'EPAISSEUR SE LIT ET SE TAPE, comme la taille du texte. Le curseur seul ne
 // disait pas la valeur, et il s'arrete a dix : on peut aller au-dela en la
@@ -7873,6 +7915,82 @@ function getHandleAt(lx, ly, obj, type) {
     return null;
 }
 
+// ===================================================
+// LE BOUT DU SURLIGNEUR, ET LE CURSEUR QUI LE MONTRE
+//
+// « Quand on utilise le surligneur, ce serait bien d'avoir un curseur rond à
+// la bonne taille, et la possibilité que ce soit carré plutôt que rond (appui
+// long sur l'icône). »
+//
+// Le surligneur traçait une bande six fois plus large que le trait réglé,
+// derrière une croix de quelques pixels : on ne savait pas ce qu'on allait
+// couvrir avant de l'avoir couvert, et sur une ligne de texte serrée on
+// mordait sur celle du dessus. Le curseur montre donc la vraie empreinte.
+//
+// Et un vrai surligneur a un biseau : ses angles sont nets, le trait commence
+// et s'arrête franchement. Le bout rond arrondissait les débuts de mots.
+// ===================================================
+const CLE_BOUT_SURLIGNEUR = 'board_bout_surligneur';
+let boutDuSurligneur = 'rond';
+try {
+    const memoire = localStorage.getItem(CLE_BOUT_SURLIGNEUR);
+    if (memoire === 'carre' || memoire === 'rond') boutDuSurligneur = memoire;
+} catch (e) { /* stockage refusé */ }
+
+// Le bouton de la barre de style MONTRE le bout en cours, comme celui du
+// pointillé montre le trait en cours : l'icône est l'état.
+function majLeBoutDuSurligneur() {
+    const ico = document.getElementById('icon-bout-surligneur');
+    if (!ico) return;
+    ico.innerHTML = (boutDuSurligneur === 'carre')
+        ? '<rect x="5" y="5" width="14" height="14" />'
+        : '<circle cx="12" cy="12" r="7" />';
+}
+
+function changerLeBoutDuSurligneur(bout) {
+    if (bout !== 'rond' && bout !== 'carre') return boutDuSurligneur;
+    boutDuSurligneur = bout;
+    try { localStorage.setItem(CLE_BOUT_SURLIGNEUR, bout); } catch (e) { /* stockage refusé */ }
+    majLeBoutDuSurligneur();
+    if (typeof updateCursor === 'function') updateCursor();
+    return boutDuSurligneur;
+}
+window.changerLeBoutDuSurligneur = changerLeBoutDuSurligneur;
+// Le bouton de la barre part avec le bon dessin. L'appel est ICI et non auprès
+// du bouton : « boutDuSurligneur » se déclare plus bas dans le fichier que la
+// barre de style ne se branche, et l'y appeler le lisait avant qu'il existe —
+// tout le script s'arrêtait là.
+majLeBoutDuSurligneur();
+
+// Ce qui ne dit rien de son bout est rond : c'est ce que sont tous les traits
+// posés avant ce réglage, et ils ne doivent pas changer de forme en rouvrant.
+function boutDuTrait(obj) { return (obj && obj.bout === 'carre') ? 'carre' : 'rond'; }
+
+// La largeur qu'occupe vraiment le surligneur à l'écran, en pixels.
+function empreinteDuSurligneur() {
+    return activeStyle.lineWidth * 6 * EPAISSEUR_AU_TABLEAU * zoom;
+}
+
+// Le curseur du surligneur : sa vraie empreinte, de sa vraie couleur. Un
+// contour blanc doublé d'un contour sombre le garde visible aussi bien sur
+// un polycopié blanc que sur un tableau noir.
+function curseurDuSurligneur() {
+    const carre = boutDuSurligneur === 'carre';
+    // 128 px au plus : au-delà, les navigateurs refusent d'afficher le
+    // curseur — et l'on se retrouverait sans rien du tout.
+    const cote = Math.max(8, Math.min(128, Math.round(empreinteDuSurligneur())));
+    const t = cote + 4;                       // la place des deux contours
+    const c = t / 2;
+    const forme = carre
+        ? `<rect x="2" y="2" width="${cote}" height="${cote}" />`
+        : `<circle cx="${c}" cy="${c}" r="${cote / 2}" />`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${t}" viewBox="0 0 ${t} ${t}">`
+        + `<g fill="${activeStyle.strokeColor}" fill-opacity="0.45" stroke="#000" stroke-opacity="0.55" stroke-width="3">${forme}</g>`
+        + `<g fill="none" stroke="#fff" stroke-opacity="0.9" stroke-width="1">${forme}</g>`
+        + `</svg>`;
+    return `url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}') ${Math.round(c)} ${Math.round(c)}, crosshair`;
+}
+
 function updateCursor() {
     canvas.className = '';
     canvas.style.cursor = '';
@@ -7989,7 +8107,8 @@ function updateCursor() {
             canvas.style.cursor = `url('${svgUrl}') 6 ${Math.round(h / 2)}, text`;
         }
     }
-    else if (mode === 'freehand' || mode === 'laser' || mode === 'highlighter') canvas.classList.add('cursor-pencil');
+    else if (mode === 'highlighter') canvas.style.cursor = curseurDuSurligneur();
+    else if (mode === 'freehand' || mode === 'laser') canvas.classList.add('cursor-pencil');
     else if (mode === 'pointer') canvas.classList.add(hoveredObj ? 'cursor-grab' : 'cursor-default');
     else canvas.classList.add('cursor-crosshair');
 }
@@ -10009,6 +10128,9 @@ canvas.addEventListener('pointerdown', (e) => {
             width: isH ? (activeStyle.lineWidth * 6) : activeStyle.lineWidth,
             dash: activeStyle.lineDash,
             isHighlighter: isH,
+            // Le bout part AVEC le trait : changer le réglage ensuite ne doit
+            // pas retailler ce qui est déjà surligné.
+            bout: isH ? boutDuSurligneur : undefined,
             arrowStart: activeStyle.arrowStart,
             arrowEnd: activeStyle.arrowEnd,
             z: globalZ++
@@ -11655,7 +11777,9 @@ function draw() {
             if (o.isHighlighter) {
                 ctx.globalCompositeOperation = isDarkMode ? 'screen' : 'multiply';
                 ctx.lineWidth = (o.width || 3) * EPAISSEUR_AU_TABLEAU;
-                ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                const carre = boutDuTrait(o) === 'carre';
+                ctx.lineCap = carre ? 'square' : 'round';
+                ctx.lineJoin = carre ? 'miter' : 'round';
                 if (o.points.length > 1) {
                     ctx.beginPath();
                     ctx.moveTo(o.points[0].x, o.points[0].y);
@@ -12002,7 +12126,9 @@ function draw() {
 
                 if (obj.isHighlighter) {
                     ctx.lineWidth = (obj.width || 3) * EPAISSEUR_AU_TABLEAU;
-                    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                    const carre = boutDuTrait(obj) === 'carre';
+                    ctx.lineCap = carre ? 'square' : 'round';
+                    ctx.lineJoin = carre ? 'miter' : 'round';
                     if (obj.points.length > 1) {
                         ctx.beginPath();
                         ctx.moveTo(obj.points[0].x, obj.points[0].y);
@@ -34043,20 +34169,35 @@ function poserAppuiLong(bouton, action) {
 
     let minuteur = null;
     let declenche = false;
+    let depart = null;
 
-    const arreter = () => { clearTimeout(minuteur); minuteur = null; };
+    const arreter = () => { clearTimeout(minuteur); minuteur = null; depart = null; };
 
     bouton.addEventListener('pointerdown', (e) => {
         declenche = false;
         arreter();
+        depart = { x: e.clientX, y: e.clientY };
         minuteur = setTimeout(() => {
             declenche = true;
+            // Tenir sans bouger règle l'outil : le déplacement qu'on n'a pas
+            // fait n'a plus à attendre son tour.
+            if (typeof desarmerLeGlisserDOutil === 'function') desarmerLeGlisserDOutil();
             action(bouton, e);
         }, DUREE_APPUI_LONG);
     });
 
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev =>
-        bouton.addEventListener(ev, arreter));
+    // ON ABANDONNE SUR UN DÉPLACEMENT, ET NON SUR UN « LEAVE ». Le survol se
+    // perd pour mille raisons qui n'ont rien à voir avec le doigt — une
+    // vignette qui passe dessous, un bouton qui se cache. C'est la main qui
+    // dit si l'on tient encore.
+    window.addEventListener('pointermove', (e) => {
+        if (!depart) return;
+        if (Math.abs(e.clientX - depart.x) > SEUIL_DE_DEPART_DOUTIL
+            || Math.abs(e.clientY - depart.y) > SEUIL_DE_DEPART_DOUTIL) arreter();
+    });
+
+    ['pointerup', 'pointercancel'].forEach(ev => bouton.addEventListener(ev, arreter));
+    window.addEventListener('pointerup', arreter);
 
     // Un appui long ne doit pas déclencher AUSSI l'action courte du bouton
     bouton.addEventListener('click', (e) => {
@@ -34220,6 +34361,19 @@ document.addEventListener('DOMContentLoaded', () => {
     poserRaccourcisSurLesBoutons();
     // Les barres flottantes recopient les boutons : on repasse quand c'est fait
     window.addEventListener('load', () => setTimeout(poserRaccourcisSurLesBoutons, 800));
+
+    // Surligneur : rond comme un feutre, ou carré comme un biseau. Le réglage
+    // n'a de place nulle part ailleurs — il tient à l'outil, et à lui seul.
+    document.querySelectorAll('[data-mode="highlighter"]').forEach(bouton => {
+        poserAppuiLong(bouton, (b) => {
+            ouvrirPanneauAppui(b, 'Bout du surligneur', [
+                { nom: 'Rond', actif: boutDuSurligneur === 'rond',
+                  action: () => changerLeBoutDuSurligneur('rond') },
+                { nom: 'Carré', actif: boutDuSurligneur === 'carre',
+                  action: () => changerLeBoutDuSurligneur('carre') }
+            ]);
+        });
+    });
 
     // Fonds : choisir directement, au lieu de faire défiler huit fonds
     poserAppuiLong(document.getElementById('btn-cycle'), (bouton) => {

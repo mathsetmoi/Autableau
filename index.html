@@ -31,7 +31,7 @@
     <script src="./lib/localforage/localforage.min.js?v=1"></script>
     <script src="./lib/qrcode/qrcode.min.js?v=1"></script>
     <script src="./lib/fonts/nunito-base64.js?v=1"></script>
-    <link rel="stylesheet" href="style.css?v=163">
+    <link rel="stylesheet" href="style.css?v=164">
 </head>
 
 <body>
@@ -2085,7 +2085,8 @@
                     xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="stroke-icon">
                     <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
                 </svg></button>
-            <button class="btn" data-mode="highlighter" title="Surligneur"><svg xmlns="http://www.w3.org/2000/svg"
+            <button class="btn" id="btn-surligneur" data-mode="highlighter"
+                title="Surligneur — appui long : bout rond ou carré"><svg xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24" class="stroke-icon">
                     <path d="M4 21h16M7 14l3.5 3.5L19 9 15.5 5.5 7 14zM4 17l3 3M13 7.5l3.5 3.5" />
                 </svg></button>
@@ -2903,6 +2904,21 @@
                 </svg></button>
         </div>
 
+        <!-- LE BOUT DU SURLIGNEUR, LÀ OÙ ON RÈGLE SON ÉPAISSEUR. Il se choisit
+             aussi par un appui long sur l'icône de l'outil — mais un geste ne
+             se devine pas, et celui-là partage l'icône avec le déplacement de
+             l'outil. Ce bouton ne paraît que le surligneur en main : il n'a
+             rien à dire d'un rectangle ni d'un trait de crayon. -->
+        <div class="style-group group-surligneur">
+            <div class="divider"></div>
+            <button class="btn" id="btn-bout-surligneur"
+                title="Bout du surligneur : rond comme un feutre, carré comme un biseau"><svg
+                    xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="stroke-icon"
+                    id="icon-bout-surligneur">
+                    <circle cx="12" cy="12" r="7" />
+                </svg></button>
+        </div>
+
         <div class="style-group group-text">
             <div class="divider"></div>
             <!-- Le curseur seul ne disait pas la taille, et s'arrêtait à 12 :
@@ -3434,7 +3450,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=285"></script>
+    <script src="script.js?v=286"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

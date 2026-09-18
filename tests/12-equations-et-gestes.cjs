@@ -104,7 +104,8 @@ module.exports = async function (browser) {
     });
 
     // --- APPUI LONG ---
-    for (const [id, titre] of [['btn-cycle', 'Fond du tableau'], ['btn-axes', 'Axes'], ['btn-classes-menu', 'Mes classes']]) {
+    for (const [id, titre] of [['btn-cycle', 'Fond du tableau'], ['btn-axes', 'Axes'],
+                               ['btn-classes-menu', 'Mes classes'], ['btn-surligneur', 'Bout du surligneur']]) {
         const marque = await page.evaluate((x) => {
             const b = document.getElementById(x);
             return b ? b.dataset.appuiLong === 'oui' && b.classList.contains('a-appui-long') : false;
@@ -154,6 +155,47 @@ module.exports = async function (browser) {
     await page.mouse.up();
     await page.waitForTimeout(250);
     r.egal('un appui long ne déclenche pas l\'action courte', await page.evaluate(() => currentBgIndex), sansEffet);
+    await page.mouse.click(5, 400);
+    await page.waitForTimeout(200);
+
+    // ON ABANDONNE SUR UN DÉPLACEMENT, ET NON SUR UN « LEAVE ». Le survol se
+    // perd pour mille raisons qui n'ont rien à voir avec le doigt : c'est
+    // ainsi que le fantôme d'un outil, en passant sous le curseur, tuait
+    // l'appui long des icônes d'outils. C'est la main qui dit si l'on tient.
+    const malgreLeLeave = await page.evaluate(async () => {
+        const vieux = document.getElementById('panneau-appui'); if (vieux) vieux.remove();
+        const b = document.getElementById('btn-cycle');
+        const r = b.getBoundingClientRect();
+        const x = Math.round(r.x + r.width / 2), y = Math.round(r.y + r.height / 2);
+        const env = (t, cx, cy, cible) => (cible || window).dispatchEvent(new PointerEvent(t,
+            { pointerId: 9, clientX: cx, clientY: cy, bubbles: true, isPrimary: true, button: 0 }));
+        env('pointerdown', x, y, b);
+        b.dispatchEvent(new PointerEvent('pointerleave', { pointerId: 9, clientX: x, clientY: y, bubbles: false }));
+        await new Promise(ok => setTimeout(ok, 700));
+        const ouvert = !!document.getElementById('panneau-appui');
+        env('pointerup', x, y, b);
+        const p = document.getElementById('panneau-appui'); if (p) p.remove();
+        return ouvert;
+    });
+    r.verifie('le survol perdu n\'abandonne pas l\'appui long', malgreLeLeave, '');
+
+    const partiEnRoute = await page.evaluate(async () => {
+        const vieux = document.getElementById('panneau-appui'); if (vieux) vieux.remove();
+        const b = document.getElementById('btn-cycle');
+        const r = b.getBoundingClientRect();
+        const x = Math.round(r.x + r.width / 2), y = Math.round(r.y + r.height / 2);
+        const env = (t, cx, cy, cible) => (cible || window).dispatchEvent(new PointerEvent(t,
+            { pointerId: 9, clientX: cx, clientY: cy, bubbles: true, isPrimary: true, button: 0 }));
+        env('pointerdown', x, y, b);
+        await new Promise(ok => setTimeout(ok, 120));
+        env('pointermove', x + 50, y + 30);      // la main est partie ailleurs
+        await new Promise(ok => setTimeout(ok, 600));
+        const ouvert = !!document.getElementById('panneau-appui');
+        env('pointerup', x + 50, y + 30, b);
+        const p = document.getElementById('panneau-appui'); if (p) p.remove();
+        return ouvert;
+    });
+    r.verifie('mais la main qui s\'en va, si', !partiEnRoute, '');
     await page.mouse.click(5, 400);
     await page.waitForTimeout(200);
 
