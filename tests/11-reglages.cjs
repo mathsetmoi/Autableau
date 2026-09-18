@@ -781,12 +781,14 @@ module.exports = async function (browser) {
 
     r.verifie('sur un grand écran, le menu tient et ne défile pas',
         grand.deborde < 0 && !grand.defile && grand.derniereAtteignable, JSON.stringify(grand));
-    // QUATRE CENT CINQUANTE-SEPT, ET NON CINQ CENT TRENTE-HUIT. La rubrique
+    // QUATRE CENT QUATRE-VINGT-SIX, ET NON CINQ CENT TRENTE-HUIT. La rubrique
     // « Découvrir » portait trois entrées dont DEUX EXISTAIENT DÉJÀ DANS
     // L'AIDE : elles allongeaient un menu qui débordait de l'écran sans rien
     // offrir de neuf. Le chiffre est écrit ici pour qu'on s'aperçoive du jour
-    // où le menu se remet à grandir.
-    r.egal('et il fait la hauteur qu\'on lui connaît', grand.hauteur, 457);
+    // où le menu se remet à grandir — il a repris vingt-neuf pixels pour
+    // « Projeter le PDF à l'ouverture », et ce n'est pas rien : c'est une
+    // entrée de plus à lire avant de trouver la sienne.
+    r.egal('et il fait la hauteur qu\'on lui connaît', grand.hauteur, 486);
     r.verifie('sur un écran de six cents, il tient désormais sans défiler',
         moyen.deborde < 0 && !moyen.defile, JSON.stringify(moyen));
     r.verifie('sur un écran court, il ne dépasse plus le bord bas',
@@ -794,7 +796,7 @@ module.exports = async function (browser) {
     r.verifie('il se fait alors défiler, et la dernière entrée s\'atteint',
         petit.defile && petit.derniereAtteignable, JSON.stringify(petit));
     r.egal('et le menu offre partout les mêmes choix',
-        [grand.nChoix, moyen.nChoix, petit.nChoix], [11, 11, 11]);
+        [grand.nChoix, moyen.nChoix, petit.nChoix], [12, 12, 12]);
 
     // ON N'A RIEN PERDU : les deux entrées retirées du menu vivaient DÉJÀ dans
     // l'Aide. C'est ce qui autorisait à les retirer — et c'est donc cela qu'il

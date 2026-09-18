@@ -334,8 +334,19 @@ module.exports = async function (browser) {
         return vus;
     }, PIXEL);
 
-    const projeter = pleins.filter(v => /projeter/i.test(v.nom));
-    const agrandirLaFenetre = pleins.filter(v => /plein écran/i.test(v.nom));
+    // LE MENU DES RÉGLAGES N'EST PAS UNE PORTE. On y règle ce que
+    // l'application fera ; on n'y fait pas le geste — un réglage n'a donc pas
+    // sa place parmi les portes qu'on compte. Mais il doit parler la MÊME
+    // LANGUE qu'elles : un réglage qui promettrait un « plein écran » pour ce
+    // qui projette une page rouvrirait à lui seul la confusion qu'on vient de
+    // fermer, et par la petite porte.
+    const reglages = pleins.filter(v => /^rp-/.test(v.id));
+    const portes = pleins.filter(v => !/^rp-/.test(v.id));
+    r.verifie('un réglage ne promet jamais un « plein écran » : il parle de projeter',
+        reglages.every(v => !/plein écran/i.test(v.nom)), JSON.stringify(reglages));
+
+    const projeter = portes.filter(v => /projeter/i.test(v.nom));
+    const agrandirLaFenetre = portes.filter(v => /plein écran/i.test(v.nom));
     r.egal('un seul bouton pour agrandir la fenêtre du navigateur',
         agrandirLaFenetre.map(v => v.id), ['btn-ecran-plein']);
     r.egal('et deux portes vers la projection de la page, voulues et jumelles',

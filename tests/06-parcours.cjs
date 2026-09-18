@@ -172,10 +172,47 @@ module.exports = async function (browser) {
     r.verifie('la reprise ne s\'escamote pas par mégarde',
         await rep.page.evaluate(() => getComputedStyle(document.getElementById('restore-modal')).display) !== 'none');
 
+    // ON RÉPOND D'ABORD, LE FICHIER ATTEND. Un document lâché sur la question
+    // du démarrage passait outre : il se posait sur un tableau que personne
+    // n'avait choisi, et la question s'effaçait sans réponse — la séance de la
+    // veille n'était alors ni reprise ni rangée.
+    const PNG1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const enAttente = await rep.page.evaluate(async (b64) => {
+        const avant = images.length;
+        const octets = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const dt = new DataTransfer();
+        dt.items.add(new File([octets], 'photo.png', { type: 'image/png' }));
+        document.dispatchEvent(new DragEvent('drop',
+            { bubbles: true, cancelable: true, dataTransfer: dt, clientX: 400, clientY: 300 }));
+        await new Promise(res => setTimeout(res, 500));
+        return {
+            avant, pendant: images.length,
+            question: getComputedStyle(document.getElementById('restore-modal')).display,
+            garde: !!depotEnAttente
+        };
+    }, PNG1x1);
+    r.egal('un fichier lâché sur la question ne se pose pas encore',
+        enAttente.pendant, enAttente.avant);
+    r.verifie('et la question reste posée', enAttente.question !== 'none', JSON.stringify(enAttente));
+    r.verifie('le fichier attend sous le bras', enAttente.garde, JSON.stringify(enAttente));
+
     await rep.page.evaluate(() => confirmRestore());
     await rep.page.waitForTimeout(800);
-    const restaure = await rep.page.evaluate(() => ({ pages: pages.length, traces: freehands.length }));
+    const restaure = await rep.page.evaluate(() => {
+        const o = images[images.length - 1];
+        return {
+            pages: pages.length, traces: freehands.length,
+            images: images.length, garde: !!depotEnAttente,
+            // Il se pose LÀ OÙ ON L'A LÂCHÉ, et non au hasard : l'endroit du
+            // geste a attendu avec le fichier.
+            ecart: o ? Math.round(Math.abs((o.x + o.w / 2) - (400 - panX) / zoom))
+                     + Math.round(Math.abs((o.y + o.h / 2) - (300 - panY) / zoom)) : -1
+        };
+    });
     r.egal('« Restaurer » retrouve le travail', restaure.traces, 1);
+    r.verifie('et la réponse donnée, le fichier se pose enfin',
+        restaure.images === enAttente.avant + 1 && !restaure.garde, JSON.stringify(restaure));
+    r.egal('à l\'endroit même où on l\'avait lâché', restaure.ecart, 0);
 
     // « Nouveau tableau » ne doit pas détruire la session précédente
     await rep.page.evaluate(async () => { await writeAppLocal(); });

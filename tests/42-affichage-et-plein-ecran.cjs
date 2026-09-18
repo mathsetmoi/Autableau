@@ -447,6 +447,58 @@ module.exports = async function (browser) {
     r.egal('et elle retrouve sa place sous le tiroir au retour',
         place.ouvert.apres, place.ouvert.avant);
 
+    // ==================================================================
+    // LE POLYCOPIÉ QUI ARRIVE PART EN GRAND, SI ON L'A DEMANDÉ
+    // « On pourrait avoir dans les paramètres une option où, lorsque l'on fait
+    // glisser un PDF, cela se met en pleine largeur et en plein écran. » Deux
+    // gestes qui n'en font qu'un pour qui les enchaîne toujours — mais éteint
+    // par défaut : poser un document ne doit pas emporter l'écran.
+    // ==================================================================
+    const poserUnPdf = (octets, nom) => page.evaluate(async ({ octets, nom }) => {
+        if (presentationEnCours) quitterLaPresentation();
+        poserLAffichage(0);
+        images.length = 0; selectedItems = []; panX = 0; panY = 0; zoom = 1;
+        await poserPdfFeuilletable(new File([new Uint8Array(octets)], nom, { type: 'application/pdf' }));
+        await new Promise(ok => setTimeout(ok, 1500));
+        return { etat: etatDuPleinEcran(), cadrage: cadrageDePresentation,
+                 focus: document.body.classList.contains('focus-mode') };
+    }, { octets, nom });
+
+    const reglageEteint = await page.evaluate(() => {
+        const auDepart = pdfDeposeEnGrand;
+        // Et l'on repart de l'état éteint, quoi qu'on ait trouvé.
+        if (pdfDeposeEnGrand) basculerLePdfEnGrand();
+        majReglagesBarre();
+        const b = document.getElementById('rp-pdf-en-grand');
+        return { auDepart, actif: !!(b && b.classList.contains('actif')), regle: pdfDeposeEnGrand };
+    });
+    r.egal('le réglage existe, et il est éteint par défaut',
+        reglageEteint, { auDepart: false, actif: false, regle: false });
+
+    const sansLOption = await poserUnPdf(octets, 'pose.pdf');
+    r.egal('éteint, un PDF posé reste sur le tableau', sansLOption.etat, 0);
+
+    const allume = await page.evaluate(() => {
+        const b = document.getElementById('rp-pdf-en-grand');
+        b.click();                       // le bouton des réglages, pas la fonction
+        return { actif: b.classList.contains('actif'), regle: pdfDeposeEnGrand };
+    });
+    r.egal('le bouton des réglages l\'allume, et se marque',
+        allume, { actif: true, regle: true });
+
+    const avecLOption = await poserUnPdf(octets, 'grand.pdf');
+    r.egal('allumé, le PDF part en grand tout seul, sur toute la largeur',
+        { etat: avecLOption.etat, cadrage: avecLOption.cadrage, focus: avecLOption.focus },
+        { etat: 1, cadrage: 'largeur', focus: true });
+
+    const retenu = await page.evaluate(() => {
+        if (presentationEnCours) quitterLaPresentation();
+        images.length = 0; selectedItems = []; majBarreDocument();
+        return localStorage.getItem('board_pdf_en_grand');
+    });
+    r.egal('et le choix est retenu d\'une séance à l\'autre', retenu, 'oui');
+    await page.evaluate(() => { if (pdfDeposeEnGrand) basculerLePdfEnGrand(); });
+
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

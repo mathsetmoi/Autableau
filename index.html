@@ -2276,6 +2276,13 @@
                         title="Un trait posé sur un texte ou une image le suit quand on le déplace">Encre accrochée à l'objet</button>
                     <button class="rp-choix" id="rp-zones"
                         title="Sur un PDF vectoriel, repérer les lignes et les cases à remplir : l'outil Texte les éclaire, et le clic y pose le bloc à la bonne taille">Repérer les zones à remplir</button>
+                    <!-- LE POLYCOPIÉ DÉPOSÉ PART EN GRAND. On dépose le PDF,
+                         puis on le met en plein écran pour la classe : deux
+                         gestes qui n'en font qu'un pour qui enchaîne toujours
+                         les deux. Éteint par défaut — poser un document ne doit
+                         pas emporter l'écran sans qu'on l'ait demandé. -->
+                    <button class="rp-choix" id="rp-pdf-en-grand"
+                        title="Projeter le PDF dès qu'il arrive, sur toute la largeur — qu'on le dépose ou qu'on l'importe">Projeter le PDF à l'ouverture</button>
 
                     <div class="rp-titre">Encombrement</div>
                     <button class="rp-choix" id="rp-tiroirs-auto"
@@ -3427,7 +3434,7 @@
     <!-- Le fond de carte du monde (Natural Earth, domaine public) est livré
          avec l'application : la géographie doit marcher sans connexion. -->
     <script src="./lib/maps/monde.js?v=1"></script>
-    <script src="script.js?v=284"></script>
+    <script src="script.js?v=285"></script>
     <script src="pc-figures.js?v=1"></script>
     <script src="plugin.js?v=106"></script>
     <script src="./lib/documents/documents.js?v=2"></script>

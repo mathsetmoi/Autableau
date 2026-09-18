@@ -1681,6 +1681,8 @@ function fermerLePremierEcran(pourquoi) {
         }, 400);
     }
     if (typeof updateUnsavedIndicator === 'function') updateUnsavedIndicator();
+    // Le fichier lâché pendant qu'on lisait la question se pose maintenant.
+    if (typeof traiterLeDepotEnAttente === 'function') traiterLeDepotEnAttente();
 }
 window.fermerLePremierEcran = fermerLePremierEcran;
 
@@ -1745,6 +1747,8 @@ function confirmRestore() {
     localforage.getItem(AUTO_SAVE_KEY).then((saved) => {
         if (saved) { restoreState(saved); showToast("Session restaurée !"); }
         document.getElementById('restore-modal').style.display = 'none';
+        // Le fichier lâché pendant qu'on lisait la question se pose maintenant.
+        if (typeof traiterLeDepotEnAttente === 'function') traiterLeDepotEnAttente();
     });
 }
 
@@ -1754,6 +1758,8 @@ function cancelRestore() {
     const fermer = () => {
         document.getElementById('restore-modal').style.display = 'none';
         initPages();
+        // Le fichier lâché pendant qu'on lisait la question se pose maintenant.
+        if (typeof traiterLeDepotEnAttente === 'function') traiterLeDepotEnAttente();
     };
 
     localforage.getItem(AUTO_SAVE_KEY).then((saved) => {
@@ -6139,6 +6145,31 @@ document.addEventListener('drop', masquerLeVoileDeDepot, true);
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') masquerLeVoileDeDepot(); }, true);
 window.addEventListener('blur', masquerLeVoileDeDepot);
 
+// LE DÉPÔT ATTEND QU'ON AIT RÉPONDU. « Ça le fait même si on a au début
+// l'écran qui demande si on veut recharger la session précédente, du coup le
+// message disparaît. » Le fichier arrivait sur un tableau pas encore choisi :
+// la question s'effaçait sans réponse, la séance d'hier n'était ni reprise ni
+// mise de côté, et le PDF se posait sur des pages que personne n'avait
+// ouvertes. On garde donc le fichier sous le bras, et on le pose dès que la
+// porte est franchie.
+function unEcranDeDepartEstLa() {
+    return ['restore-modal', 'premier-ecran'].some(id => {
+        const el = document.getElementById(id);
+        return !!(el && el.getClientRects().length);
+    });
+}
+
+let depotEnAttente = null;
+
+function traiterLeDepotEnAttente() {
+    if (!depotEnAttente) return false;
+    const garde = depotEnAttente;
+    depotEnAttente = null;
+    deposerDesFichiers(garde.fichiers, garde.x, garde.y);
+    return true;
+}
+window.traiterLeDepotEnAttente = traiterLeDepotEnAttente;
+
 document.addEventListener('drop', (e) => {
     e.preventDefault();
     if (dropOverlay) dropOverlay.style.display = 'none';
@@ -6156,12 +6187,29 @@ document.addEventListener('drop', (e) => {
     }
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        if (unEcranDeDepartEstLa()) {
+            depotEnAttente = { fichiers: Array.from(e.dataTransfer.files), x: e.clientX, y: e.clientY };
+            if (typeof showToast === 'function') {
+                showToast(depotEnAttente.fichiers.length > 1
+                    ? 'Vos fichiers attendent : répondez d\'abord à la question du démarrage'
+                    : `« ${depotEnAttente.fichiers[0].name} » attend : répondez d'abord à la question du démarrage`);
+            }
+            return;
+        }
+        deposerDesFichiers(e.dataTransfer.files, e.clientX, e.clientY);
+    }
+});
+
+// Ce qu'on fait d'une poignée de fichiers, qu'ils viennent d'être lâchés ou
+// qu'ils aient attendu la réponse du démarrage.
+function deposerDesFichiers(fichiers, clientX, clientY) {
+    if (fichiers && fichiers.length > 0) {
         let imageDropCount = 0;
         let pdfDropped = false;
 
         // On boucle sur TOUS les fichiers déposés !
-        for (let i = 0; i < e.dataTransfer.files.length; i++) {
-            const file = e.dataTransfer.files[i];
+        for (let i = 0; i < fichiers.length; i++) {
+            const file = fichiers[i];
 
             // Si c'est un PDF
             if (file.type === 'application/pdf') {
@@ -6176,7 +6224,7 @@ document.addEventListener('drop', (e) => {
 
             // Si c'est un document texte (Word, LibreOffice, texte brut)
             if (window.LecteurDocuments && window.LecteurDocuments.estUnDocument(file)) {
-                importerDocument(file, { x: e.clientX, y: e.clientY });
+                importerDocument(file, { x: clientX, y: clientY });
                 continue;
             }
 
@@ -6209,8 +6257,8 @@ document.addEventListener('drop', (e) => {
                         // Décalage pour éviter que les images ne se superposent parfaitement
                         const offset = currentOffsetIndex * (30 / zoom);
 
-                        const lx = (e.clientX - panX) / zoom + offset;
-                        const ly = (e.clientY - panY) / zoom + offset;
+                        const lx = (clientX - panX) / zoom + offset;
+                        const ly = (clientY - panY) / zoom + offset;
 
                         images.push(poserEnRognage({
                             id: nextId++,
@@ -6239,7 +6287,7 @@ document.addEventListener('drop', (e) => {
             showToast(imageDropCount > 1 ? `🖼️ ${imageDropCount} images importées !` : "🖼️ Image importée !");
         }
     }
-});
+}
 
 // --- DRAG BARRES ---
 // --- DRAG BARRES ---
@@ -13297,6 +13345,23 @@ function reglerImportPdf(feuilletable) {
     try { localStorage.setItem('board_pdf_feuilletable', importPdfFeuilletable ? '1' : '0'); } catch (e) { /* stockage refusé */ }
 }
 
+// LE POLYCOPIÉ QUI ARRIVE PEUT PARTIR EN GRAND TOUT DE SUITE. « On pourrait
+// avoir dans les paramètres une option où, lorsque l'on fait glisser un PDF,
+// cela se met en pleine largeur et en plein écran. » C'est la suite de gestes
+// de tous les jours — on dépose le polycopié, puis on le met en grand pour la
+// classe — et elle tient alors en un seul. Éteint par défaut : poser un
+// document ne doit pas emporter l'écran sans qu'on l'ait demandé.
+const CLE_PDF_EN_GRAND = 'board_pdf_en_grand';
+let pdfDeposeEnGrand = false;
+try { pdfDeposeEnGrand = localStorage.getItem(CLE_PDF_EN_GRAND) === 'oui'; } catch (e) { /* stockage refusé */ }
+
+function basculerLePdfEnGrand() {
+    pdfDeposeEnGrand = !pdfDeposeEnGrand;
+    try { localStorage.setItem(CLE_PDF_EN_GRAND, pdfDeposeEnGrand ? 'oui' : 'non'); } catch (e) { /* stockage refusé */ }
+    return pdfDeposeEnGrand;
+}
+window.basculerLePdfEnGrand = basculerLePdfEnGrand;
+
 // ==============================================================================
 // UN DOCUMENT POSÉ MESURE CE QU'IL MESURE
 //
@@ -13777,6 +13842,15 @@ async function poserPdfFeuilletable(file) {
             appliquerLaTailleDuDocument(pose);
         }).catch(() => { /* pas de texte : on garde la taille en cours */ });
         showToast(`📄 « ${file.name} » posé — ${doc.numPages} page(s), utilisez ◀ ▶ pour feuilleter`);
+
+        // Et il part en grand tout de suite si c'est le réglage : toute la
+        // largeur, comme on le veut devant une classe. Le cadrage est demandé
+        // explicitement — la bascule habituelle de « presenterLeDocument »
+        // ouvrirait sur la page entière, avec ses deux bandes blanches.
+        if (pdfDeposeEnGrand && typeof presenterLeDocument === 'function') {
+            selectedItems = [{ type: 'image', id: pose.id }];
+            presenterLeDocument('largeur');
+        }
     } catch (e) {
         console.error(e);
         showToast('PDF illisible : ' + (e.message || e));
@@ -22253,7 +22327,7 @@ function cleDePresentation(e) {
 // Le geste demandé : plein écran, interface effacée, le document occupe tout
 // l'espace, et l'on est en mode page — on fait glisser la page dans son cadre
 // et la molette la zoome.
-function presenterLeDocument() {
+function presenterLeDocument(cadrageVoulu) {
     const doc = documentAPresenter();
     if (!doc) {
         showToast("Aucun document à présenter : importez d'abord un PDF ou une image");
@@ -22265,10 +22339,11 @@ function presenterLeDocument() {
     // Une page A4 sur un écran 16/9 laisse forcément du vide sur les côtés —
     // c'est de la géométrie. Qui veut vraiment tout l'écran prend la largeur
     // et défile.
+    // Un appelant peut demander son cadrage — c'est le cas du PDF qu'on ouvre
+    // d'emblée en grand : on veut toute la largeur, pas la bascule habituelle.
     const dejaLa = presentationEnCours === doc.id;
-    cadrageDePresentation = dejaLa
-        ? (cadrageDePresentation === 'page' ? 'largeur' : 'page')
-        : 'page';
+    cadrageDePresentation = cadrageVoulu ? cadrageVoulu
+        : (dejaLa ? (cadrageDePresentation === 'page' ? 'largeur' : 'page') : 'page');
     presentationEnCours = doc.id;
 
     // CE QUE LA PRÉSENTATION OUVRE, ELLE LE REFERME. Le plein écran du
@@ -35073,6 +35148,8 @@ function majReglagesBarre() {
     if (bEncre) bEncre.classList.toggle('actif', encreAccrochee);
     const bZones = document.getElementById('rp-zones');
     if (bZones) bZones.classList.toggle('actif', zonesActives);
+    const bPdfGrand = document.getElementById('rp-pdf-en-grand');
+    if (bPdfGrand) bPdfGrand.classList.toggle('actif', pdfDeposeEnGrand);
     const bTiroirs = document.getElementById('rp-tiroirs-auto');
     if (bTiroirs) bTiroirs.classList.toggle('actif', tiroirsAuto);
     const bCourte = document.getElementById('rp-barre-courte');
@@ -35490,6 +35567,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof showToast === 'function') {
             showToast(actif ? 'Zones à remplir repérées : prenez l\'outil Texte'
                             : 'Zones à remplir : repérage éteint');
+        }
+    });
+
+    const bPdfGrand = document.getElementById('rp-pdf-en-grand');
+    if (bPdfGrand) bPdfGrand.addEventListener('click', () => {
+        const actif = basculerLePdfEnGrand();
+        majReglagesBarre();
+        if (typeof showToast === 'function') {
+            showToast(actif ? 'Un PDF sera projeté dès son arrivée, sur toute la largeur'
+                            : 'Un PDF se posera sur le tableau, sans être projeté');
         }
     });
 
