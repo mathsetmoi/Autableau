@@ -1139,6 +1139,66 @@ module.exports = async function (browser) {
     r.egal('et le collage qui suit ne ressort pas le vieil objet',
         pressePapier.apres, pressePapier.avant);
 
+    // ==================================================================
+    // UN SEUL COLLAGE PAR CTRL+V
+    //
+    // « Toujours un souci du presse-papier qui cumule les presse-papiers
+    // précédents. » Ctrl+V empruntait DEUX chemins : la touche posait le
+    // presse-papier du tableau, puis le navigateur envoyait son événement
+    // « paste » et le second gestionnaire posait PAR-DESSUS ce que contenait
+    // le presse-papier du système — souvent une image copiée ailleurs, ou une
+    // heure plus tôt. Un seul geste rendait deux choses.
+    // ==================================================================
+    const deuxChemins = await page.evaluate(async () => {
+        circles.length = 0; points.length = 0; texts.length = 0; images.length = 0;
+        selectedItems = []; setMode('pointer');
+        points.push({ id: nextId++, x: 300, y: 300, z: globalZ++ });
+        points.push({ id: nextId++, x: 340, y: 300, z: globalZ++ });
+        circles.push({ id: nextId++, center_id: points[0].id, edge_id: points[1].id,
+                       color: '#000', width: 3, z: globalZ++ });
+        selectedItems = [{ type: 'circle', id: circles[0].id }];
+        copierSelection();
+
+        // Le presse-papier du système, lui, garde un texte d'avant.
+        const dt = new DataTransfer();
+        dt.setData('text/plain', 'un texte copié ailleurs');
+
+        const avant = { cercles: circles.length, textes: texts.length };
+        // Le geste complet, tel que le navigateur l'envoie : la touche, puis
+        // l'événement de collage qui en découle.
+        window.dispatchEvent(new KeyboardEvent('keydown',
+            { key: 'v', ctrlKey: true, bubbles: true, cancelable: true }));
+        const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+        window.dispatchEvent(ev);
+        await new Promise(ok => setTimeout(ok, 250));
+
+        return { avant, cercles: circles.length, textes: texts.length, retenu: ev.defaultPrevented };
+    });
+    r.egal('un Ctrl+V pose LA copie du tableau, une fois',
+        deuxChemins.cercles - deuxChemins.avant.cercles, 1);
+    r.egal('et ne pose rien du presse-papier de l\'ordinateur par-dessus',
+        deuxChemins.textes, deuxChemins.avant.textes);
+    r.verifie('le collage du système est retenu, pas seulement ignoré',
+        deuxChemins.retenu, JSON.stringify(deuxChemins));
+
+    // ET QUAND LE TABLEAU N'A RIEN, LE SYSTÈME REPREND LA MAIN : on n'a pas
+    // fermé une porte pour en ouvrir une autre.
+    const duSysteme = await page.evaluate(async () => {
+        circles.length = 0; points.length = 0; texts.length = 0; selectedItems = [];
+        copierSelection();                    // à vide : le presse-papier du tableau se vide
+        const dt = new DataTransfer();
+        dt.setData('text/plain', 'un texte copié ailleurs');
+        window.dispatchEvent(new KeyboardEvent('keydown',
+            { key: 'v', ctrlKey: true, bubbles: true, cancelable: true }));
+        window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        await new Promise(ok => setTimeout(ok, 250));
+        const etat = { textes: texts.length, pose: texts.length ? texts[texts.length - 1].content : null };
+        texts.length = 0; draw();
+        return etat;
+    });
+    r.verifie('le tableau vide, c\'est le presse-papier de l\'ordinateur qui sert',
+        /un texte copié ailleurs/.test(duSysteme.pose || ''), JSON.stringify(duSysteme));
+
     await page.evaluate(() => {
         circles.length = 0; points.length = 0; selectedItems = [];
         setMode('pointer'); draw();

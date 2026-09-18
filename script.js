@@ -23264,7 +23264,18 @@ window.addEventListener('keydown', (e) => {
     if (isCtrl && e.key.toLowerCase() === 'x') { couperSelection(); }
 
     // 📥 CTRL + V : Coller
-    if (isCtrl && e.key.toLowerCase() === 'v') { collerDuTableau(); }
+    //
+    // RIEN ICI. Le raccourci posait le presse-papier DU TABLEAU, puis le
+    // navigateur envoyait son événement « paste » et le second gestionnaire
+    // posait PAR-DESSUS ce que contenait le presse-papier du système — souvent
+    // une image copiée dix minutes plus tôt, ou dans un autre logiciel. Un
+    // seul Ctrl+V rendait donc deux choses, et l'on voyait s'empiler les
+    // presse-papiers précédents.
+    //
+    // Les deux chemins n'en font plus qu'un : le collage vit tout entier dans
+    // « paste », qui essaie le tableau d'abord et le système ensuite. Un
+    // drapeau entre les deux n'aurait fait que déplacer le problème — il reste
+    // levé le jour où l'événement ne vient pas.
 });
 
 // Les quatre gestes, écrits une fois : les raccourcis les appellent, les
@@ -27525,6 +27536,16 @@ window.addEventListener('paste', (e) => {
 
     // « e.originalEvent » vient de jQuery : sans presse-papiers, cette ligne
     // levait une exception et le collage échouait sans un mot.
+    // LE TABLEAU PASSE AVANT. Ce qu'on vient de copier SUR le tableau est ce
+    // qu'on veut recoller ; le presse-papier de l'ordinateur, lui, garde ce
+    // qu'on y a mis la dernière fois — parfois dans un autre logiciel, parfois
+    // il y a une heure. C'est ici, et nulle part ailleurs, qu'on choisit :
+    // servir les deux, c'était coller deux choses pour un seul geste.
+    if (typeof collerDuTableau === 'function' && collerDuTableau()) {
+        e.preventDefault();
+        return;
+    }
+
     const dtSource = e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData) || null;
     if (!dtSource) {
         if (typeof showToast === 'function') showToast("Le navigateur n'a pas transmis le presse-papiers");
