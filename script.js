@@ -10791,7 +10791,23 @@ canvas.addEventListener('pointermove', (e) => {
         requestAnimationFrame(draw); return;
     }
 
-    if (e.buttons === 0 && !activePointers.has(e.pointerId)) { libererLeCalque(); isPanningView = false; isDraggingObjs = false; isDrawingFreehand = false; isSelectingBox = false; isDrawingEllipse = false; boiteEllipse = null; boiteTexte = null; draggedHandle = null; textResizeHint = null; activeGuides = { x: [], y: [] }; }
+    // LE FILET DU SURVOL : plus rien sous le pointeur, on range ce qui traînait.
+    // Il JETAIT le trait en cours — baisser le drapeau sans rien enregistrer —
+    // et ce qu'on venait d'écrire n'existait plus nulle part. À la souris il
+    // faut relâcher le bouton hors de la fenêtre pour y tomber ; un stylet
+    // Wacom y tombe en écrivant, lui qui annonce « buttons: 0 » à faible
+    // pression et survole entre deux lettres sous un autre identifiant.
+    if (e.buttons === 0 && !activePointers.has(e.pointerId)) {
+        const traitPose = poserLeTraitEnCours();
+        const gesteEnCours = traitPose || isDraggingObjs || isSelectingBox || isDrawingEllipse
+            || isPanningView || !!draggedHandle || !!boiteTexte;
+        libererLeCalque(); isPanningView = false; isDraggingObjs = false; isDrawingFreehand = false; isSelectingBox = false; isDrawingEllipse = false; boiteEllipse = null; boiteTexte = null; draggedHandle = null; textResizeHint = null; activeGuides = { x: [], y: [] };
+        // Un geste interrompu laissait à l'écran ce qu'il affichait — cadre de
+        // sélection, guides, poignées — jusqu'au prochain repeint. On repeint
+        // SEULEMENT dans ce cas : le stylet survole le tableau en permanence, et
+        // le repeindre à chaque frisson coûterait tout le tableau, sans raison.
+        if (gesteEnCours) draw();
+    }
 
     if (mode === 'laser' && currentLaserStroke) {
         // Lissage du tracé : on suit le pointeur avec un filtre passe-bas
@@ -11200,6 +11216,29 @@ canvas.addEventListener('pointerup', handlePointerUp); canvas.addEventListener('
 // Le lien sur lequel on vient d'appuyer, et d'où.
 let lienPresse = null;
 
+// LE TRAIT EN COURS SE POSE, IL NE SE JETTE JAMAIS. Le relâchement normal
+// l'enregistrait ; le filet de sécurité du survol, lui, se contentait de
+// baisser le drapeau — et ce qui venait d'être écrit n'existait plus nulle
+// part. Écrit une seule fois, les deux chemins passent par ici.
+function poserLeTraitEnCours() {
+    if (!isDrawingFreehand || !currentFreehand) return false;
+    isDrawingFreehand = false;
+    libererLeCalque();
+    if (currentFreehand.points.length > 1) {
+        freehands.push(currentFreehand);
+        // Écrit sur un PDF feuilletable : le trait est de CETTE page
+        noterLaPageDuTrait(currentFreehand);
+        // Un trait posé franchement sur un texte ou une image lui appartient
+        const hote = accrocherLeTrait(currentFreehand);
+        if (hote && typeof showToast === 'function') {
+            showToast(hote.type === 'text' ? 'Trait accroché au texte' : 'Trait accroché à l\'image');
+        }
+        saveState();
+    }
+    currentFreehand = null;
+    return true;
+}
+
 function handlePointerUp(e) {
     // LE LIEN S'OUVRE AU RELÂCHER, et seulement si l'on n'a pas glissé : sinon
     // déplacer un bloc qui porte une adresse ouvrirait un onglet à chaque fois.
@@ -11221,6 +11260,15 @@ function handlePointerUp(e) {
     // enfoncé n'est donc qu'un survol sortant (passage sous la barre d'outils, un
     // panneau, sortie de fenêtre) et ne doit rien valider — sinon le 2e point d'un
     // segment/cercle/rectangle se posait tout seul à l'endroit du survol.
+    //
+    // ET ON VÉRIFIE ENFIN CETTE CAPTURE, au lieu de la supposer. « buttons » ne
+    // dit pas la vérité d'un stylet : une tablette Wacom envoie des pointerout
+    // en plein tracé, bouton annoncé enfoncé. Le trait était coupé net — son
+    // début restait comme une trace, et la suite de la lettre ne s'écrivait
+    // plus, jusqu'au prochain contact. Tant que le tableau tient le pointeur,
+    // le stylet est toujours posé : il n'y a rien à finir.
+    if (e.type === 'pointerout' && typeof canvas.hasPointerCapture === 'function'
+        && canvas.hasPointerCapture(e.pointerId)) return;
     if (e.type === 'pointerout' && !e.buttons) return;
 
     if (zoneGeste) { finirGesteDeZone(); activePointers.delete(e.pointerId); return; }
@@ -11467,22 +11515,7 @@ function handlePointerUp(e) {
     if (glissePage) { glissePage = null; saveState(); }
 
     if (isDraggingObjs || draggedHandle) { saveState(); isDraggingObjs = false; draggedHandle = null; textResizeHint = null; activeGuides = { x: [], y: [] }; }
-    if (isDrawingFreehand) {
-        isDrawingFreehand = false;
-        libererLeCalque();
-        if (currentFreehand.points.length > 1) {
-            freehands.push(currentFreehand);
-            // Écrit sur un PDF feuilletable : le trait est de CETTE page
-            noterLaPageDuTrait(currentFreehand);
-            // Un trait posé franchement sur un texte ou une image lui appartient
-            const hote = accrocherLeTrait(currentFreehand);
-            if (hote && typeof showToast === 'function') {
-                showToast(hote.type === 'text' ? 'Trait accroché au texte' : 'Trait accroché à l\'image');
-            }
-            saveState();
-        }
-        currentFreehand = null;
-    }
+    poserLeTraitEnCours();
     // Le geste est fini : ce qu'on vient de tracer appartient-il au document ?
     if (typeof accrocherLesNouvellesFormes === 'function') accrocherLesNouvellesFormes(idAvantLeGeste);
     idAvantLeGeste = null;
