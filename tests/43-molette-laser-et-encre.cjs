@@ -474,14 +474,20 @@ module.exports = async function (browser) {
     r.egal('chacun garde le bout qu\'il avait au moment du geste',
         traces.map(t => t.bout), ['carre', 'rond']);
 
-    // Et ce que l'on exporte porte le même bout que ce que l'on voit.
+    // Et ce que l'on exporte porte le même bout que ce que l'on voit. Le bout
+    // carré n'est plus un simple stroke-linecap — il tournerait avec la
+    // tangente locale, comme au tableau — mais un tampon rempli, jamais
+    // tourné : c'est un remplissage plein (pas de trait) qui le distingue du
+    // bout rond, resté un trait à bout arrondi.
     const exporte = await page.evaluate(() => {
         const svg = generateSVGString({ x: 0, y: 0, w: 1400, h: 900 }, false);
-        return (svg.match(/stroke-linecap="(square|round)"/g) || []);
+        return {
+            carre: /fill="[^"]+" stroke="none" style="mix-blend-mode: multiply/.test(svg),
+            rond: /stroke-linecap="round" stroke-linejoin="round"/.test(svg)
+        };
     });
     r.verifie('le SVG exporté distingue les deux bouts',
-        exporte.includes('stroke-linecap="square"') && exporte.includes('stroke-linecap="round"'),
-        JSON.stringify(exporte));
+        exporte.carre && exporte.rond, JSON.stringify(exporte));
 
     // ET C'EST BIEN L'ENCRE QUI CHANGE, pas seulement ce qu'on note sur le
     // trait. Au coin du bout carré il y a de la couleur ; au même endroit, le
@@ -520,6 +526,36 @@ module.exports = async function (browser) {
         coins.carre.coin, JSON.stringify(coins));
     r.verifie('le bout rond n\'en met pas au même endroit',
         !coins.rond.coin, JSON.stringify(coins));
+
+    // LE CARRÉ EFFECTUE UNE ROTATION — sur un trait oblique, un bout carré
+    // qui tourne avec la tangente locale devient un losange : son coin pointe
+    // dans la direction du geste, et les coins d'un vrai carré (à axes fixes)
+    // restent vides. On trace un trait à 45°, et on regarde un coin du carré
+    // à axes fixes, à l'écart de la pointe que ferait un losange.
+    const oblique = await page.evaluate(async () => {
+        freehands.length = 0; selectedItems = [];
+        setMode('highlighter'); changerLeBoutDuSurligneur('carre');
+        const c = document.getElementById('board');
+        const g = c.getContext('2d', { willReadFrequently: true });
+        const encreAu = (x, y) => {
+            const d = g.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+            return (d[0] < 245 || d[1] < 245 || d[2] < 245);
+        };
+        const env = (t, x, y) => c.dispatchEvent(new PointerEvent(t,
+            { pointerId: 4, clientX: x, clientY: y, bubbles: true, isPrimary: true }));
+        env('pointerdown', 300, 300); env('pointermove', 400, 400); env('pointerup', 400, 400);
+        await new Promise(ok => setTimeout(ok, 150));
+        draw();
+        await new Promise(ok => setTimeout(ok, 150));
+        // Trait de 24 px (4 × 6), demi-largeur 12 : le coin du carré à axes
+        // fixes est à peu près (410, 390) — à l'écart de la pointe qu'un
+        // losange tourné projetterait vers (408, 408).
+        const coinDuCarre = encreAu(410, 390);
+        freehands.length = 0; draw();
+        return { coinDuCarre };
+    });
+    r.verifie('sur un trait oblique, le bout carré garde ses coins à axes fixes',
+        oblique.coinDuCarre, JSON.stringify(oblique));
 
     await page.evaluate(() => {
         freehands.length = 0; selectedItems = []; setMode('pointer');

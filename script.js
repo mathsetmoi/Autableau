@@ -4037,10 +4037,20 @@ function generateSVGString(rect, keepBg) {
         } else if (item.type === 'freehand') {
             if (obj.isHighlighter) {
                 if (obj.points.length > 1) {
-                    let d = `M ${obj.points[0].x} ${obj.points[0].y} `;
-                    for (let i = 1; i < obj.points.length; i++) d += `L ${obj.points[i].x} ${obj.points[i].y} `;
                     const carre = boutDuTrait(obj) === 'carre';
-                    svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="${carre ? 'square' : 'round'}" stroke-linejoin="${carre ? 'miter' : 'round'}" stroke-dasharray="${dash}" style="mix-blend-mode: multiply;" opacity="0.85" />`;
+                    if (carre) {
+                        // Le même nez, jamais tourné : voir le commentaire de
+                        // « traceSurligneurCarre » — un tampon carré traîné le long
+                        // du chemin, en un seul chemin SVG rempli d'un coup.
+                        const d = sousCheminsDuNezCarre(obj.points, w / 2)
+                            .map(hull => `M ${hull.map(p => `${p.x} ${p.y}`).join(' L ')} Z`)
+                            .join(' ');
+                        svg += `<path d="${d}" fill="${color}" stroke="none" style="mix-blend-mode: multiply;" opacity="0.85" />`;
+                    } else {
+                        let d = `M ${obj.points[0].x} ${obj.points[0].y} `;
+                        for (let i = 1; i < obj.points.length; i++) d += `L ${obj.points[i].x} ${obj.points[i].y} `;
+                        svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${dash}" style="mix-blend-mode: multiply;" opacity="0.85" />`;
+                    }
                 }
             } else {
                 for (let i = 0; i < obj.points.length - 1; i++) {
@@ -7231,6 +7241,62 @@ majLeBoutDuSurligneur();
 // Ce qui ne dit rien de son bout est rond : c'est ce que sont tous les traits
 // posés avant ce réglage, et ils ne doivent pas changer de forme en rouvrant.
 function boutDuTrait(obj) { return (obj && obj.bout === 'carre') ? 'carre' : 'rond'; }
+
+// LE CARRÉ EFFECTUE UNE ROTATION — un trait mis « au carré » (lineCap/lineJoin
+// 'square'/'miter') tourne ses bouts avec la tangente locale du tracé : sur
+// un trait oblique, le carré devient un losange. Un vrai marqueur à nez carré
+// garde son nez droit, quelle que soit la direction du geste.
+//
+// On pose donc ce nez comme un tampon carré JAMAIS TOURNÉ, traîné le long du
+// chemin. Le tampon glissé sur un segment couvre l'enveloppe convexe de ses
+// deux positions aux extrémités — un rectangle si le segment est horizontal
+// ou vertical, un hexagone sinon — et l'ensemble des segments se remplit
+// d'un seul tenant : la jointure entre deux segments partage le même tampon
+// à leur point commun, donc jamais de trou, et un seul remplissage évite de
+// doubler l'opacité du surligneur (multiply/screen) là où deux segments se
+// recouvrent.
+function envelopeConvexe(pts) {
+    const p = pts.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+    const croix = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const bas = [];
+    for (const pt of p) {
+        while (bas.length >= 2 && croix(bas[bas.length - 2], bas[bas.length - 1], pt) <= 0) bas.pop();
+        bas.push(pt);
+    }
+    const haut = [];
+    for (let i = p.length - 1; i >= 0; i--) {
+        const pt = p[i];
+        while (haut.length >= 2 && croix(haut[haut.length - 2], haut[haut.length - 1], pt) <= 0) haut.pop();
+        haut.push(pt);
+    }
+    bas.pop(); haut.pop();
+    return bas.concat(haut);
+}
+function coinsDuNezCarre(p, demiLargeur) {
+    const h = demiLargeur;
+    return [{ x: p.x - h, y: p.y - h }, { x: p.x + h, y: p.y - h },
+            { x: p.x + h, y: p.y + h }, { x: p.x - h, y: p.y + h }];
+}
+// Les sous-chemins (un par segment, plus un pour un point isolé) du nez
+// carré : à qui les trace (canvas) comme à qui écrit du SVG.
+function sousCheminsDuNezCarre(points, demiLargeur) {
+    const chemins = [];
+    if (points.length === 1) { chemins.push(coinsDuNezCarre(points[0], demiLargeur)); return chemins; }
+    for (let i = 0; i < points.length - 1; i++) {
+        const hull = envelopeConvexe(coinsDuNezCarre(points[i], demiLargeur).concat(coinsDuNezCarre(points[i + 1], demiLargeur)));
+        if (hull.length) chemins.push(hull);
+    }
+    return chemins;
+}
+function traceSurligneurCarre(ctx, points, demiLargeur) {
+    ctx.beginPath();
+    sousCheminsDuNezCarre(points, demiLargeur).forEach(hull => {
+        ctx.moveTo(hull[0].x, hull[0].y);
+        for (let j = 1; j < hull.length; j++) ctx.lineTo(hull[j].x, hull[j].y);
+        ctx.closePath();
+    });
+    ctx.fill();
+}
 
 // Les traits de surligneur qu'on tient sous la main — la sélection, si elle
 // n'est faite que de ceux-là. Le bouton du bout les retaille alors, comme
@@ -11812,19 +11878,26 @@ function draw() {
             setContextDash(ctx, o.dash, EPAISSEUR_AU_TABLEAU);
             if (o.isHighlighter) {
                 ctx.globalCompositeOperation = isDarkMode ? 'screen' : 'multiply';
-                ctx.lineWidth = (o.width || 3) * EPAISSEUR_AU_TABLEAU;
                 const carre = boutDuTrait(o) === 'carre';
-                ctx.lineCap = carre ? 'square' : 'round';
-                ctx.lineJoin = carre ? 'miter' : 'round';
-                if (o.points.length > 1) {
-                    ctx.beginPath();
-                    ctx.moveTo(o.points[0].x, o.points[0].y);
-                    for (let i = 1; i < o.points.length - 1; i++) {
-                        ctx.quadraticCurveTo(o.points[i].x, o.points[i].y,
-                            (o.points[i].x + o.points[i + 1].x) / 2, (o.points[i].y + o.points[i + 1].y) / 2);
+                if (carre) {
+                    if (o.points.length > 1) {
+                        ctx.fillStyle = o.color;
+                        traceSurligneurCarre(ctx, o.points, ((o.width || 3) * EPAISSEUR_AU_TABLEAU) / 2);
                     }
-                    ctx.lineTo(o.points[o.points.length - 1].x, o.points[o.points.length - 1].y);
-                    ctx.stroke();
+                } else {
+                    ctx.lineWidth = (o.width || 3) * EPAISSEUR_AU_TABLEAU;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    if (o.points.length > 1) {
+                        ctx.beginPath();
+                        ctx.moveTo(o.points[0].x, o.points[0].y);
+                        for (let i = 1; i < o.points.length - 1; i++) {
+                            ctx.quadraticCurveTo(o.points[i].x, o.points[i].y,
+                                (o.points[i].x + o.points[i + 1].x) / 2, (o.points[i].y + o.points[i + 1].y) / 2);
+                        }
+                        ctx.lineTo(o.points[o.points.length - 1].x, o.points[o.points.length - 1].y);
+                        ctx.stroke();
+                    }
                 }
                 ctx.globalCompositeOperation = 'source-over';
             } else {
@@ -12161,20 +12234,27 @@ function draw() {
                 setContextDash(ctx, obj.dash, EPAISSEUR_AU_TABLEAU);
 
                 if (obj.isHighlighter) {
-                    ctx.lineWidth = (obj.width || 3) * EPAISSEUR_AU_TABLEAU;
                     const carre = boutDuTrait(obj) === 'carre';
-                    ctx.lineCap = carre ? 'square' : 'round';
-                    ctx.lineJoin = carre ? 'miter' : 'round';
-                    if (obj.points.length > 1) {
-                        ctx.beginPath();
-                        ctx.moveTo(obj.points[0].x, obj.points[0].y);
-                        for (let i = 1; i < obj.points.length - 1; i++) {
-                            let xc = (obj.points[i].x + obj.points[i + 1].x) / 2;
-                            let yc = (obj.points[i].y + obj.points[i + 1].y) / 2;
-                            ctx.quadraticCurveTo(obj.points[i].x, obj.points[i].y, xc, yc);
+                    if (carre) {
+                        if (obj.points.length > 1) {
+                            ctx.fillStyle = renderColor;
+                            traceSurligneurCarre(ctx, obj.points, ((obj.width || 3) * EPAISSEUR_AU_TABLEAU) / 2);
                         }
-                        ctx.lineTo(obj.points[obj.points.length - 1].x, obj.points[obj.points.length - 1].y);
-                        ctx.stroke();
+                    } else {
+                        ctx.lineWidth = (obj.width || 3) * EPAISSEUR_AU_TABLEAU;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        if (obj.points.length > 1) {
+                            ctx.beginPath();
+                            ctx.moveTo(obj.points[0].x, obj.points[0].y);
+                            for (let i = 1; i < obj.points.length - 1; i++) {
+                                let xc = (obj.points[i].x + obj.points[i + 1].x) / 2;
+                                let yc = (obj.points[i].y + obj.points[i + 1].y) / 2;
+                                ctx.quadraticCurveTo(obj.points[i].x, obj.points[i].y, xc, yc);
+                            }
+                            ctx.lineTo(obj.points[obj.points.length - 1].x, obj.points[obj.points.length - 1].y);
+                            ctx.stroke();
+                        }
                     }
                 } else {
                     drawSmoothFreehand(ctx, obj.points, obj.width || 3, EPAISSEUR_AU_TABLEAU);
