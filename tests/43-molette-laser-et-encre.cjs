@@ -313,7 +313,8 @@ module.exports = async function (browser) {
         changerLeBoutDuSurligneur('rond');
         setMode('highlighter'); selectedItems = []; updateStyleBarContext();
         const b = document.getElementById('btn-bout-surligneur');
-        const vuAuSurligneur = getComputedStyle(b.closest('.style-group')).display;
+        const montre = (el) => !!(el && el.getClientRects().length);
+        const vuAuSurligneur = montre(b);
         const rond = b.querySelector('circle') ? 'rond' : (b.querySelector('rect') ? 'carre' : '?');
         b.click();
         const apres = { reglage: boutDuSurligneur,
@@ -321,16 +322,134 @@ module.exports = async function (browser) {
         b.click();
         const retour = boutDuSurligneur;
         setMode('freehand'); updateStyleBarContext();
-        const vuAuCrayon = getComputedStyle(b.closest('.style-group')).display;
+        const vuAuCrayon = montre(b);
         setMode('highlighter'); updateStyleBarContext();
         return { vuAuSurligneur, vuAuCrayon, rond, apres, retour };
     });
-    r.egal('le bouton du bout paraît quand on prend le surligneur', barre.vuAuSurligneur, 'flex');
-    r.egal('et se tait pour le crayon, qui n\'a pas de bout à choisir', barre.vuAuCrayon, 'none');
+    r.verifie('le bouton du bout paraît quand on prend le surligneur', barre.vuAuSurligneur, '');
+    r.verifie('et se tait pour le crayon, qui n\'a pas de bout à choisir', !barre.vuAuCrayon, '');
     r.egal('son dessin montre le bout en cours', barre.rond, 'rond');
     r.egal('un appui le change, et le dessin suit',
         barre.apres, { reglage: 'carre', dessin: 'carre' });
     r.egal('un second appui revient au rond', barre.retour, 'rond');
+
+    // ET LA BARRE REND CE QUI NE SERT PAS. « Pourquoi avoir les options
+    // extrémité de ligne (flèche) et pointillés, ils ne servent pas ? » Les
+    // pointes de flèche sont écartées à chaque rendu d'un trait de surligneur,
+    // et le pointillé est invisible par construction : quatre pixels de trou
+    // sous une bande de vingt-quatre, dont les bouts débordent de douze de
+    // chaque côté. On le MESURE plutôt que de le croire — c'est ce qui
+    // autorise à retirer les commandes.
+    const inutiles = await page.evaluate(async () => {
+        const c = document.getElementById('board');
+        const g = c.getContext('2d', { willReadFrequently: true });
+        const encre = (x, y) => { const d = g.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+                                  return d[0] < 245 || d[1] < 245 || d[2] < 245; };
+        const tracer = async () => {
+            freehands.length = 0;
+            const env = (t, x, y) => c.dispatchEvent(new PointerEvent(t,
+                { pointerId: 4, clientX: x, clientY: y, bubbles: true, isPrimary: true }));
+            env('pointerdown', 300, 400);
+            for (let x = 310; x <= 500; x += 10) env('pointermove', x, 400);
+            env('pointerup', 500, 400);
+            await new Promise(ok => setTimeout(ok, 150)); draw();
+            await new Promise(ok => setTimeout(ok, 150));
+            let trous = 0;
+            for (let x = 312; x <= 488; x++) if (!encre(x, 400)) trous++;
+            return trous;
+        };
+        panX = 0; panY = 0; zoom = 1; setMode('highlighter'); selectedItems = [];
+        activeStyle.lineWidth = 4; activeStyle.strokeColor = '#f1c40f';
+        changerLeBoutDuSurligneur('rond');
+
+        activeStyle.lineDash = 'solid'; activeStyle.arrowStart = 0; activeStyle.arrowEnd = 0;
+        const plein = await tracer();
+        activeStyle.lineDash = 'dashed';
+        const pointille = await tracer();
+        activeStyle.lineDash = 'solid'; activeStyle.arrowStart = 2; activeStyle.arrowEnd = 2;
+        await tracer();
+        // Une pointe de flèche dépasserait franchement au-dessus de la bande,
+        // qui ne monte qu'à douze pixels du trait.
+        const pointe = [18, 22, 26].some(d => encre(500, 400 - d));
+
+        activeStyle.lineDash = 'solid'; activeStyle.arrowStart = 0; activeStyle.arrowEnd = 0;
+        freehands.length = 0; draw();
+        return { plein, pointille, pointe };
+    });
+    r.egal('la bande pleine ne laisse aucun trou', inutiles.plein, 0);
+    r.egal('et le pointillé n\'en fait pas davantage : il ne se voit pas',
+        inutiles.pointille, 0);
+    r.verifie('la flèche demandée ne pose aucune pointe', !inutiles.pointe, JSON.stringify(inutiles));
+
+    const rendus = await page.evaluate(() => {
+        // ON MESURE CE QUI EST MONTRÉ, et non le « display » du bouton : un
+        // enfant de parent caché garde le sien, et l'on croirait le voir.
+        const vu = (id) => !!document.getElementById(id).getClientRects().length;
+        setMode('highlighter'); selectedItems = []; updateStyleBarContext();
+        const auSurligneur = { dash: vu('btn-dash'), debut: vu('btn-arrow-start'), fin: vu('btn-arrow-end') };
+        setMode('freehand'); updateStyleBarContext();
+        const auCrayon = { dash: vu('btn-dash'), debut: vu('btn-arrow-start'), fin: vu('btn-arrow-end') };
+        setMode('highlighter'); updateStyleBarContext();
+        return { auSurligneur, auCrayon };
+    });
+    r.egal('la barre du surligneur ne montre plus ces trois-là',
+        rendus.auSurligneur, { dash: false, debut: false, fin: false });
+    r.verifie('le crayon, lui, les garde : chez lui elles agissent',
+        Object.values(rendus.auCrayon).every(v => v === true), JSON.stringify(rendus.auCrayon));
+
+    // UN SURLIGNAGE DÉJÀ POSÉ QU'ON REPREND : la barre parle de LUI. Sans
+    // cela, le bouton du bout paraissait au-dessus d'un trait sélectionné et
+    // ne touchait que le suivant — et les trois commandes mortes revenaient.
+    const repris = await page.evaluate(async () => {
+        freehands.length = 0;
+        const c = document.getElementById('board');
+        setMode('highlighter'); changerLeBoutDuSurligneur('rond');
+        const env = (t, x, y) => c.dispatchEvent(new PointerEvent(t,
+            { pointerId: 5, clientX: x, clientY: y, bubbles: true, isPrimary: true }));
+        env('pointerdown', 300, 500); env('pointermove', 420, 500); env('pointerup', 420, 500);
+        await new Promise(ok => setTimeout(ok, 150));
+        const trait = freehands[0];
+        setMode('pointer');
+        selectedItems = [{ type: 'freehand', id: trait.id }];
+        updateStyleBarContext();
+        const vu = (id) => !!document.getElementById(id).getClientRects().length;
+        const barre = { bout: vu('btn-bout-surligneur'), dash: vu('btn-dash') };
+        document.getElementById('btn-bout-surligneur').click();
+        const apres = trait.bout;
+        const dessin = document.getElementById('icon-bout-surligneur').querySelector('rect') ? 'carre' : 'rond';
+        selectedItems = []; freehands.length = 0; setMode('pointer'); updateStyleBarContext(); draw();
+        return { barre, apres, dessin };
+    });
+    r.egal('reprendre un surlignage montre son bout, et tait les trois autres',
+        repris.barre, { bout: true, dash: false });
+    r.egal('et le bouton retaille CE trait-là', repris.apres, 'carre');
+    r.egal('le dessin du bouton montre alors le bout du trait repris', repris.dessin, 'carre');
+
+    // ET UN TRAIT DE CRAYON N'EST PAS UN SURLIGNAGE. Les deux sont des
+    // « freehand » : sans y regarder de plus près, reprendre un trait au
+    // crayon lui retirerait ses flèches et son pointillé, qui chez lui
+    // marchent très bien.
+    const auCrayonRepris = await page.evaluate(async () => {
+        freehands.length = 0;
+        const c = document.getElementById('board');
+        setMode('freehand');
+        const env = (t, x, y) => c.dispatchEvent(new PointerEvent(t,
+            { pointerId: 6, clientX: x, clientY: y, bubbles: true, isPrimary: true }));
+        env('pointerdown', 300, 600); env('pointermove', 420, 600); env('pointerup', 420, 600);
+        await new Promise(ok => setTimeout(ok, 150));
+        const trait = freehands[0];
+        setMode('pointer');
+        selectedItems = [{ type: 'freehand', id: trait.id }];
+        updateStyleBarContext();
+        const vu = (id) => !!document.getElementById(id).getClientRects().length;
+        const etat = { surligneur: trait.isHighlighter === true, bout: vu('btn-bout-surligneur'),
+                       dash: vu('btn-dash'), fin: vu('btn-arrow-end') };
+        selectedItems = []; freehands.length = 0; setMode('pointer'); updateStyleBarContext(); draw();
+        return etat;
+    });
+    r.egal('reprendre un trait de crayon lui laisse tout ce qui lui sert',
+        auCrayonRepris,
+        { surligneur: false, bout: false, dash: true, fin: true });
 
     // Le trait emporte son bout : changer le réglage ne retaille pas ce qui
     // est déjà surligné.
@@ -342,7 +461,8 @@ module.exports = async function (browser) {
             c.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: 420, clientY: 400, bubbles: true, isPrimary: true }));
             await new Promise(ok => setTimeout(ok, 120));
         };
-        freehands.length = 0;
+        freehands.length = 0; selectedItems = [];
+        setMode('highlighter');     // le bloc ne dépend pas de l'outil que le précédent a laissé
         changerLeBoutDuSurligneur('carre');
         await trait();                       // celui-ci au bout carré
         changerLeBoutDuSurligneur('rond');
@@ -376,7 +496,8 @@ module.exports = async function (browser) {
             return (d[0] < 245 || d[1] < 245 || d[2] < 245);
         };
         const poser = async (bout) => {
-            freehands.length = 0;
+            freehands.length = 0; selectedItems = [];
+            setMode('highlighter');
             changerLeBoutDuSurligneur(bout);
             const env = (t, x, y) => c.dispatchEvent(new PointerEvent(t,
                 { pointerId: 3, clientX: x, clientY: y, bubbles: true, isPrimary: true }));

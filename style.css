@@ -2100,6 +2100,20 @@ body.sans-tiroirs #donate-float-btn {
     display: flex;
 }
 
+/* LE SURLIGNEUR REND CE QUI NE LUI SERT PAS. « Pourquoi avoir les options
+   extrémité de ligne (flèche) et pointillés, ils ne servent pas ? » — et c'est
+   exact, deux fois. Les pointes de flèche sont explicitement écartées à chaque
+   rendu d'un trait de surligneur. Le pointillé, lui, est invisible par
+   construction : ses trous font quatre pixels quand la bande en fait vingt-
+   quatre, et les bouts du trait, ronds ou carrés, débordent de douze pixels de
+   chaque côté — ils les recouvrent entièrement. Une commande sans effet ne
+   fait pas qu'encombrer, elle ment. */
+#bar-style.ctx-surligneur #btn-dash,
+#bar-style.ctx-surligneur #btn-arrow-start,
+#bar-style.ctx-surligneur #btn-arrow-end {
+    display: none;
+}
+
 /* Le ✕ vit dans un second « group-document », tout au bout de la barre : il
    ferme LE DOCUMENT, il n'avait rien à faire derrière un texte sélectionné. */
 

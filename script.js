@@ -7178,6 +7178,94 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- GESTION SELECTION ET STYLES ---
+// ===================================================
+// LE BOUT DU SURLIGNEUR, ET LE CURSEUR QUI LE MONTRE
+//
+// « Quand on utilise le surligneur, ce serait bien d'avoir un curseur rond à
+// la bonne taille, et la possibilité que ce soit carré plutôt que rond (appui
+// long sur l'icône). »
+//
+// Le surligneur traçait une bande six fois plus large que le trait réglé,
+// derrière une croix de quelques pixels : on ne savait pas ce qu'on allait
+// couvrir avant de l'avoir couvert, et sur une ligne de texte serrée on
+// mordait sur celle du dessus. Le curseur montre donc la vraie empreinte.
+//
+// Et un vrai surligneur a un biseau : ses angles sont nets, le trait commence
+// et s'arrête franchement. Le bout rond arrondissait les débuts de mots.
+// ===================================================
+const CLE_BOUT_SURLIGNEUR = 'board_bout_surligneur';
+let boutDuSurligneur = 'rond';
+try {
+    const memoire = localStorage.getItem(CLE_BOUT_SURLIGNEUR);
+    if (memoire === 'carre' || memoire === 'rond') boutDuSurligneur = memoire;
+} catch (e) { /* stockage refusé */ }
+
+// Le bouton de la barre de style MONTRE le bout en cours, comme celui du
+// pointillé montre le trait en cours : l'icône est l'état.
+function majLeBoutDuSurligneur() {
+    const ico = document.getElementById('icon-bout-surligneur');
+    if (!ico) return;
+    const tenus = surligneursSelectionnes();
+    const carre = tenus.length ? tenus.every(t => boutDuTrait(t) === 'carre')
+                               : (boutDuSurligneur === 'carre');
+    ico.innerHTML = carre
+        ? '<rect x="5" y="5" width="14" height="14" />'
+        : '<circle cx="12" cy="12" r="7" />';
+}
+
+function changerLeBoutDuSurligneur(bout) {
+    if (bout !== 'rond' && bout !== 'carre') return boutDuSurligneur;
+    boutDuSurligneur = bout;
+    try { localStorage.setItem(CLE_BOUT_SURLIGNEUR, bout); } catch (e) { /* stockage refusé */ }
+    majLeBoutDuSurligneur();
+    if (typeof updateCursor === 'function') updateCursor();
+    return boutDuSurligneur;
+}
+window.changerLeBoutDuSurligneur = changerLeBoutDuSurligneur;
+// Le bouton de la barre part avec le bon dessin. L'appel est ICI et non auprès
+// du bouton : « boutDuSurligneur » se déclare plus bas dans le fichier que la
+// barre de style ne se branche, et l'y appeler le lisait avant qu'il existe —
+// tout le script s'arrêtait là.
+majLeBoutDuSurligneur();
+
+// Ce qui ne dit rien de son bout est rond : c'est ce que sont tous les traits
+// posés avant ce réglage, et ils ne doivent pas changer de forme en rouvrant.
+function boutDuTrait(obj) { return (obj && obj.bout === 'carre') ? 'carre' : 'rond'; }
+
+// Les traits de surligneur qu'on tient sous la main — la sélection, si elle
+// n'est faite que de ceux-là. Le bouton du bout les retaille alors, comme
+// l'épaisseur et la couleur agissent sur ce qui est sélectionné.
+function surligneursSelectionnes() {
+    if (typeof selectedItems === 'undefined' || !selectedItems.length) return [];
+    const traits = selectedItems.map(i => i.type === 'freehand' ? getObjectById('freehand', i.id) : null);
+    return traits.every(t => t && t.isHighlighter) ? traits : [];
+}
+
+// La largeur qu'occupe vraiment le surligneur à l'écran, en pixels.
+function empreinteDuSurligneur() {
+    return activeStyle.lineWidth * 6 * EPAISSEUR_AU_TABLEAU * zoom;
+}
+
+// Le curseur du surligneur : sa vraie empreinte, de sa vraie couleur. Un
+// contour blanc doublé d'un contour sombre le garde visible aussi bien sur
+// un polycopié blanc que sur un tableau noir.
+function curseurDuSurligneur() {
+    const carre = boutDuSurligneur === 'carre';
+    // 128 px au plus : au-delà, les navigateurs refusent d'afficher le
+    // curseur — et l'on se retrouverait sans rien du tout.
+    const cote = Math.max(8, Math.min(128, Math.round(empreinteDuSurligneur())));
+    const t = cote + 4;                       // la place des deux contours
+    const c = t / 2;
+    const forme = carre
+        ? `<rect x="2" y="2" width="${cote}" height="${cote}" />`
+        : `<circle cx="${c}" cy="${c}" r="${cote / 2}" />`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${t}" viewBox="0 0 ${t} ${t}">`
+        + `<g fill="${activeStyle.strokeColor}" fill-opacity="0.45" stroke="#000" stroke-opacity="0.55" stroke-width="3">${forme}</g>`
+        + `<g fill="none" stroke="#fff" stroke-opacity="0.9" stroke-width="1">${forme}</g>`
+        + `</svg>`;
+    return `url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}') ${Math.round(c)} ${Math.round(c)}, crosshair`;
+}
+
 function updateStyleBarContext() {
     // LA BARRE DE STYLE NE PARLE PLUS DU DOCUMENT. Les deux avaient fusionné,
     // et choisir le crayon pendant qu'on tenait un polycopié y déversait tous
@@ -7282,9 +7370,21 @@ function updateStyleBarContext() {
     else if (['segment', 'droite', 'demi-droite', 'curve', 'polygon'].includes(targetType)) barStyle.classList.add('ctx-line', 'ctx-point');
     else if (['circle', 'rectangle', 'freehand', 'highlighter', 'multi', 'postit', 'compass', 'arc'].includes(targetType)) {
         barStyle.classList.add('ctx-line');
-        // Le bout ne se règle que le surligneur en main : il n'a rien à dire
-        // d'un rectangle ni d'un trait de crayon.
-        if (targetType === 'highlighter') barStyle.classList.add('ctx-surligneur');
+        // LE SURLIGNEUR N'EST PAS UN TRAIT COMME UN AUTRE. « Pourquoi avoir
+        // les options extrémité de ligne (flèche) et pointillés, ils ne
+        // servent pas ? » Ils ne servent en effet à rien : les deux pointes de
+        // flèche sont explicitement écartées à chaque rendu, et le pointillé
+        // est invisible par construction — ses trous font quatre pixels quand
+        // la bande en fait vingt-quatre, et les bouts du trait les recouvrent
+        // entièrement. Ils s'en vont donc, et le bout du surligneur prend leur
+        // place : le même endroit, mais un réglage qui agit.
+        //
+        // Cela vaut aussi pour un surlignage DÉJÀ POSÉ qu'on reprend : la
+        // barre parle alors de lui, pas du trait qu'on tracera ensuite.
+        if (targetType === 'highlighter' || surligneursSelectionnes().length) {
+            barStyle.classList.add('ctx-surligneur');
+            majLeBoutDuSurligneur();
+        }
     }
     else if (targetType === 'text') barStyle.classList.add('ctx-text');
     else if (targetType === 'image') {
@@ -7591,6 +7691,18 @@ document.getElementById('btn-shape').addEventListener('click', () => { const sha
 // Le bout du surligneur : rond ou carré, d'un appui, là où l'on règle déjà
 // son épaisseur. Le même choix vit derrière l'appui long de l'icône.
 document.getElementById('btn-bout-surligneur')?.addEventListener('click', () => {
+    // Un surlignage déjà posé : c'est LUI qu'on retaille. Sans cela le bouton
+    // mentirait — il paraît au-dessus d'un trait sélectionné et ne toucherait
+    // que le suivant.
+    const tenus = surligneursSelectionnes();
+    if (tenus.length) {
+        const carre = tenus.every(t => boutDuTrait(t) === 'carre');
+        tenus.forEach(t => { t.bout = carre ? 'rond' : 'carre'; });
+        majLeBoutDuSurligneur();
+        if (typeof saveState === 'function') saveState();
+        draw();
+        return;
+    }
     changerLeBoutDuSurligneur(boutDuSurligneur === 'carre' ? 'rond' : 'carre');
 });
 
@@ -7913,82 +8025,6 @@ function getHandleAt(lx, ly, obj, type) {
         if (Math.abs(unrotatedX - startX) <= hw && Math.abs(unrotatedY - (startY + h / 2)) <= hw) return 'L';
     }
     return null;
-}
-
-// ===================================================
-// LE BOUT DU SURLIGNEUR, ET LE CURSEUR QUI LE MONTRE
-//
-// « Quand on utilise le surligneur, ce serait bien d'avoir un curseur rond à
-// la bonne taille, et la possibilité que ce soit carré plutôt que rond (appui
-// long sur l'icône). »
-//
-// Le surligneur traçait une bande six fois plus large que le trait réglé,
-// derrière une croix de quelques pixels : on ne savait pas ce qu'on allait
-// couvrir avant de l'avoir couvert, et sur une ligne de texte serrée on
-// mordait sur celle du dessus. Le curseur montre donc la vraie empreinte.
-//
-// Et un vrai surligneur a un biseau : ses angles sont nets, le trait commence
-// et s'arrête franchement. Le bout rond arrondissait les débuts de mots.
-// ===================================================
-const CLE_BOUT_SURLIGNEUR = 'board_bout_surligneur';
-let boutDuSurligneur = 'rond';
-try {
-    const memoire = localStorage.getItem(CLE_BOUT_SURLIGNEUR);
-    if (memoire === 'carre' || memoire === 'rond') boutDuSurligneur = memoire;
-} catch (e) { /* stockage refusé */ }
-
-// Le bouton de la barre de style MONTRE le bout en cours, comme celui du
-// pointillé montre le trait en cours : l'icône est l'état.
-function majLeBoutDuSurligneur() {
-    const ico = document.getElementById('icon-bout-surligneur');
-    if (!ico) return;
-    ico.innerHTML = (boutDuSurligneur === 'carre')
-        ? '<rect x="5" y="5" width="14" height="14" />'
-        : '<circle cx="12" cy="12" r="7" />';
-}
-
-function changerLeBoutDuSurligneur(bout) {
-    if (bout !== 'rond' && bout !== 'carre') return boutDuSurligneur;
-    boutDuSurligneur = bout;
-    try { localStorage.setItem(CLE_BOUT_SURLIGNEUR, bout); } catch (e) { /* stockage refusé */ }
-    majLeBoutDuSurligneur();
-    if (typeof updateCursor === 'function') updateCursor();
-    return boutDuSurligneur;
-}
-window.changerLeBoutDuSurligneur = changerLeBoutDuSurligneur;
-// Le bouton de la barre part avec le bon dessin. L'appel est ICI et non auprès
-// du bouton : « boutDuSurligneur » se déclare plus bas dans le fichier que la
-// barre de style ne se branche, et l'y appeler le lisait avant qu'il existe —
-// tout le script s'arrêtait là.
-majLeBoutDuSurligneur();
-
-// Ce qui ne dit rien de son bout est rond : c'est ce que sont tous les traits
-// posés avant ce réglage, et ils ne doivent pas changer de forme en rouvrant.
-function boutDuTrait(obj) { return (obj && obj.bout === 'carre') ? 'carre' : 'rond'; }
-
-// La largeur qu'occupe vraiment le surligneur à l'écran, en pixels.
-function empreinteDuSurligneur() {
-    return activeStyle.lineWidth * 6 * EPAISSEUR_AU_TABLEAU * zoom;
-}
-
-// Le curseur du surligneur : sa vraie empreinte, de sa vraie couleur. Un
-// contour blanc doublé d'un contour sombre le garde visible aussi bien sur
-// un polycopié blanc que sur un tableau noir.
-function curseurDuSurligneur() {
-    const carre = boutDuSurligneur === 'carre';
-    // 128 px au plus : au-delà, les navigateurs refusent d'afficher le
-    // curseur — et l'on se retrouverait sans rien du tout.
-    const cote = Math.max(8, Math.min(128, Math.round(empreinteDuSurligneur())));
-    const t = cote + 4;                       // la place des deux contours
-    const c = t / 2;
-    const forme = carre
-        ? `<rect x="2" y="2" width="${cote}" height="${cote}" />`
-        : `<circle cx="${c}" cy="${c}" r="${cote / 2}" />`;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${t}" viewBox="0 0 ${t} ${t}">`
-        + `<g fill="${activeStyle.strokeColor}" fill-opacity="0.45" stroke="#000" stroke-opacity="0.55" stroke-width="3">${forme}</g>`
-        + `<g fill="none" stroke="#fff" stroke-opacity="0.9" stroke-width="1">${forme}</g>`
-        + `</svg>`;
-    return `url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}') ${Math.round(c)} ${Math.round(c)}, crosshair`;
 }
 
 function updateCursor() {
