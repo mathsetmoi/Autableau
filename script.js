@@ -4040,7 +4040,10 @@ function generateSVGString(rect, keepBg) {
                     let d = `M ${obj.points[0].x} ${obj.points[0].y} `;
                     for (let i = 1; i < obj.points.length; i++) d += `L ${obj.points[i].x} ${obj.points[i].y} `;
                     const carre = boutDuTrait(obj) === 'carre';
-                    svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="${carre ? 'square' : 'round'}" stroke-linejoin="${carre ? 'miter' : 'round'}" stroke-dasharray="${dash}" style="mix-blend-mode: multiply;" opacity="0.85" />`;
+                    // Jointure toujours arrondie : voir le commentaire du tracé au
+                    // tableau — la pointe (miter) faisait tourner le carré à chaque
+                    // virage du tracé à main levée.
+                    svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="${carre ? 'square' : 'round'}" stroke-linejoin="round" stroke-dasharray="${dash}" style="mix-blend-mode: multiply;" opacity="0.85" />`;
                 }
             } else {
                 for (let i = 0; i < obj.points.length - 1; i++) {
@@ -11815,7 +11818,12 @@ function draw() {
                 ctx.lineWidth = (o.width || 3) * EPAISSEUR_AU_TABLEAU;
                 const carre = boutDuTrait(o) === 'carre';
                 ctx.lineCap = carre ? 'square' : 'round';
-                ctx.lineJoin = carre ? 'miter' : 'round';
+                // Jointure toujours arrondie, même au bout carré : une jointure en
+                // pointe (miter) sur un tracé à main levée fait des pics à chaque
+                // micro-virage — le carré semblait tourner en dessinant, immobile
+                // seulement en ligne droite. Le bout, lui, reste carré : il ne
+                // vient que des deux extrémités du tracé, jamais de ses coudes.
+                ctx.lineJoin = 'round';
                 if (o.points.length > 1) {
                     ctx.beginPath();
                     ctx.moveTo(o.points[0].x, o.points[0].y);
@@ -12164,7 +12172,10 @@ function draw() {
                     ctx.lineWidth = (obj.width || 3) * EPAISSEUR_AU_TABLEAU;
                     const carre = boutDuTrait(obj) === 'carre';
                     ctx.lineCap = carre ? 'square' : 'round';
-                    ctx.lineJoin = carre ? 'miter' : 'round';
+                    // Jointure toujours arrondie : voir le commentaire du tracé en
+                    // cours, plus haut — la jointure en pointe faisait tourner le
+                    // carré à chaque virage du tracé à main levée.
+                    ctx.lineJoin = 'round';
                     if (obj.points.length > 1) {
                         ctx.beginPath();
                         ctx.moveTo(obj.points[0].x, obj.points[0].y);
