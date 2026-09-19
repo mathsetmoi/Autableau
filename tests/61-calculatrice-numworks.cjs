@@ -7,7 +7,7 @@
 // éprouve — on n'a pas le réseau sur un serveur d'intégration, et ce n'est pas
 // notre code. Ce qu'on tient :
 //
-//   — l'outil est dans la rubrique « Maths - Numérique », et son bouton ouvre
+//   — l'outil est dans la rubrique « Maths - Algèbre », et son bouton ouvre
 //     le choix du modèle ;
 //   — le choix pose une fenêtre web sur le tableau, à l'adresse de NOTRE page,
 //     avec le modèle demandé, et cette fenêtre part avec la séance ;
@@ -38,8 +38,8 @@ module.exports = async function (browser) {
         return { plugin: !!p, bouton: !!btn, categorie: btn && btn.dataset.category,
                  pluginId: btn && btn.dataset.pluginId };
     });
-    r.egal('l\'outil est enregistré, avec son bouton dans « Maths - Numérique »',
-        outil, { plugin: true, bouton: true, categorie: 'Maths - Numérique', pluginId: 'numworksTool' });
+    r.egal('l\'outil est enregistré, avec son bouton dans « Maths - Algèbre »',
+        outil, { plugin: true, bouton: true, categorie: 'Maths - Algèbre', pluginId: 'numworksTool' });
 
     const choix = await page.evaluate(async () => {
         htmlPostits.length = 0;

@@ -4,7 +4,7 @@
 > est un fork d'[Au Tableau](https://github.com/remy-live/Autableau) de Rémy
 > Devoddere. Elle y ajoute **Mes tableaux dans mon Drive** — un dossier par
 > classe, un tableau par séance, rangés dans un dossier synchronisé par Google
-> Drive pour ordinateur — ajoute la **calculatrice NumWorks** (collège ou lycée) parmi les outils, et corrige deux choses : l'encre écrite à côté d'un
+> Drive pour ordinateur — ajoute la **calculatrice NumWorks** (collège ou lycée) parmi les outils, et corrige trois choses : le tableau qui se repeignait plusieurs fois par image en se déplaçant (l'écriture semblait disparaître sur tablette), l'encre écrite à côté d'un
 > morceau de document qui disparaissait, et un tableau neuf qui n'enregistrait
 > rien. Le reste est le travail de l'auteur, sous la même licence.
 
@@ -81,7 +81,7 @@ jour de l'auteur se reprennent avec `git merge upstream/main`.
 
 ## La calculatrice NumWorks, collège ou lycée
 
-Rubrique **Maths - Numérique**, bouton **Calculatrice NumWorks** : on choisit
+Rubrique **Maths - Algèbre**, bouton **Calculatrice NumWorks** : on choisit
 le modèle — la scientifique du collège ou la graphique du lycée — et la
 calculatrice se pose sur le tableau, en français, dans une fenêtre qui se
 déplace, se redimensionne, se met en grand et part avec la séance. On la
@@ -124,6 +124,9 @@ recharge la page.
 | `plugin.js` | Les quatre-vingt-six outils |
 | `style.css` | L'apparence |
 | `lib/` | Les bibliothèques fournies (voir `NOTICE.md`) |
+| `lib/dossier/` | Mes tableaux dans mon Drive (ce fork) |
+| `lib/numworks/` | La calculatrice NumWorks, collège ou lycée (ce fork) |
+| `lib/tableau/` | Un seul dessin par image quand le doigt ou le stylet bouge (ce fork) |
 | `tests/` | La suite de non-régression |
 
 Après toute modification d'un de ces fichiers, penser à incrémenter le `?v=` de
