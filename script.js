@@ -12052,7 +12052,7 @@ function draw() {
             // ce qui était écrit sur la partie retirée continuait de se voir,
             // étalé autour de la page comme des bavures. Une page rognée montre
             // ce qu'elle montre, l'encre comprise.
-            const cadreHote = cadreQuiRogneCetObjet(obj);
+            const cadreHote = cadreQuiRogneCetObjet(obj, item.type);
             if (cadreHote) {
                 ctx.save();
                 ctx.beginPath();
@@ -16424,11 +16424,67 @@ window.revenirAuCadrage = revenirAuCadrage;
 // montre : l'encre qu'on a posée dessus ne déborde pas de son cadre. On ne
 // coupe QUE sur une page rognée — sur une page entière, un trait qui dépasse
 // dans la marge est un trait qu'on a voulu là.
-function cadreQuiRogneCetObjet(obj) {
+// L'ENCRE POSÉE À CÔTÉ D'UN DOCUMENT N'EST PAS SUR LE DOCUMENT.
+// « Ce qui est affiché dans le tableau disparaît. » Un exercice découpé, et
+// l'on écrit la correction juste à côté, sur le tableau. La marge d'accrochage
+// est large — il le faut, pour qu'un mot entouré en débordant suive bien sa
+// page — et elle rattachait ces traits au morceau. Or le cadre d'un morceau
+// coupe l'encre qui lui est accrochée : c'est ainsi que ce qui a été écrit sur
+// la partie retirée d'une page ne bave pas autour. Écrits À CÔTÉ, ces traits
+// étaient entièrement hors du cadre : coupés en entier, invisibles dès le
+// relâcher du stylet — et le fragment le plus éloigné, lui, restait.
+//
+// On note donc, à l'accrochage, si ce qu'on pose est sur la page ou à côté.
+// Ce qui est posé à côté suit toujours le document quand on le déplace ; mais
+// rien ne le coupe, jamais.
+function partDansLeCadre(type, obj, cadre) {
+    const dedans = (x, y) => x >= cadre.x && x <= cadre.x + cadre.w && y >= cadre.y && y <= cadre.y + cadre.h;
+    if (type === 'freehand' && obj.points && obj.points.length) {
+        return obj.points.filter(p => dedans(p.x, p.y)).length / obj.points.length;
+    }
+    const b = (typeof getItemLogicalBounds === 'function') ? getItemLogicalBounds(type, obj) : null;
+    if (!b) return 1;   // on ne sait pas : on ne change rien à ce qui se faisait
+    return dedans(b.bx + b.bw / 2, b.by + b.bh / 2) ? 1 : 0;
+}
+
+function noterSiPoseACote(surObjet, type, obj) {
+    if (!surObjet || surObjet.type !== 'image' || !obj) return;
+    const hote = (typeof getObjectById === 'function') ? getObjectById('image', surObjet.id) : null;
+    if (!hote) return;
+    surObjet.aCote = partDansLeCadre(type, obj, hote) < 0.5;
+}
+window.noterSiPoseACote = noterSiPoseACote;
+
+function boiteToucheLeCadre(b, cadre) {
+    return !(b.bx + b.bw < cadre.x || b.bx > cadre.x + cadre.w
+        || b.by + b.bh < cadre.y || b.by > cadre.y + cadre.h);
+}
+
+// Là où serait la page ENTIÈRE, rognage défait : le cadre montré n'en est
+// qu'une fenêtre, et l'on retrouve le reste en prolongeant à l'échelle.
+function cadreDeLaPageEntiere(hote) {
+    const nat = hote && imageCache[hote.src];
+    if (!nat || !nat.naturalWidth || !(hote.cw > 0) || !(hote.ch > 0)) return null;
+    const kx = hote.w / hote.cw, ky = hote.h / hote.ch;
+    return { x: hote.x - (hote.cx || 0) * kx, y: hote.y - (hote.cy || 0) * ky,
+             w: nat.naturalWidth * kx, h: nat.naturalHeight * ky };
+}
+
+function cadreQuiRogneCetObjet(obj, type) {
     if (!obj || !obj.surObjet || obj.surObjet.type !== 'image') return null;
+    if (obj.surObjet.aCote) return null;
     const hote = (typeof getObjectById === 'function') ? getObjectById('image', obj.surObjet.id) : null;
     if (!hote || hote.angle || hote.rotation) return null;
     if (!documentEstRogne(hote)) return null;
+    // Les tableaux d'avant cette note ne disent pas où l'encre avait été posée.
+    // On regarde où elle est : ce qui ne touche même pas la page entière n'a
+    // jamais pu être écrit dessus — c'est du tableau, on le montre. Ce qui
+    // tombe sur la page, cadre ou partie retirée, s'arrête au cadre comme avant.
+    if (obj.surObjet.aCote === undefined && type) {
+        const b = getItemLogicalBounds(type, obj);
+        const page = cadreDeLaPageEntiere(hote);
+        if (b && page && !boiteToucheLeCadre(b, page)) return null;
+    }
     return hote;
 }
 window.cadreQuiRogneCetObjet = cadreQuiRogneCetObjet;
@@ -21914,6 +21970,7 @@ function accrocherLeTrait(trait) {
     const h = hoteDuTrait(trait);
     if (!h) return null;
     trait.surObjet = { type: h.type, id: h.id };
+    noterSiPoseACote(trait.surObjet, 'freehand', trait);
     return h;
 }
 
@@ -22100,7 +22157,10 @@ function accrocherLaForme(type, o) {
     if (!milieu) return null;
     const porteur = documentPorteur(milieu.x, milieu.y);
     if (!porteur) return null;
-    if (encreAccrochee) o.surObjet = { type: 'image', id: porteur.id };
+    if (encreAccrochee) {
+        o.surObjet = { type: 'image', id: porteur.id };
+        noterSiPoseACote(o.surObjet, type, o);
+    }
     if (porteur.pluginData && porteur.pluginData.id === 'pdfDoc' && porteur.pluginData.pages > 1) {
         const marque = { id: porteur.id, page: porteur.pluginData.page };
         o.surPage = marque;
