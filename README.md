@@ -4,7 +4,7 @@
 > est un fork d'[Au Tableau](https://github.com/remy-live/Autableau) de Rémy
 > Devoddere. Elle y ajoute **Mes tableaux dans mon Drive** — un dossier par
 > classe, un tableau par séance, rangés dans un dossier synchronisé par Google
-> Drive pour ordinateur — ajoute la **calculatrice NumWorks** (collège ou lycée) parmi les outils, et corrige trois choses : le tableau qui se repeignait plusieurs fois par image en se déplaçant (l'écriture semblait disparaître sur tablette), l'encre écrite à côté d'un
+> Drive pour ordinateur — ajoute la **calculatrice NumWorks** (collège ou lycée) parmi les outils, et corrige quatre choses : l'écriture qui disparaissait par endroits quand on déplaçait la vue (le tri spatial perdait des traits), le tableau qui se repeignait plusieurs fois par image, l'encre écrite à côté d'un
 > morceau de document qui disparaissait, et un tableau neuf qui n'enregistrait
 > rien. Le reste est le travail de l'auteur, sous la même licence.
 

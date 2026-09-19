@@ -239,7 +239,15 @@ class Quadtree {
 
         this.objects.push(obj);
 
-        if (this.objects.length > this.maxObjects && this.depth < this.maxDepth) {
+        // ON NE SE DIVISE QU'UNE FOIS. Un nœud déjà divisé garde ce qui chevauche
+        // ses lignes médianes ; quand cela dépassait seize objets, il se
+        // redivisait — et « split » recréait quatre enfants NEUFS, en jetant
+        // ceux qui existaient avec tout ce qu'ils contenaient. Ces objets-là
+        // n'étaient plus retrouvés, donc plus dessinés. Comme les médianes
+        // suivent la vue, la perte allait et venait avec le déplacement :
+        // « l'écriture disparaît puis apparaît ». Sept cents traits au stylet
+        // suffisaient pour que seize d'entre eux traversent une médiane.
+        if (this.objects.length > this.maxObjects && this.depth < this.maxDepth && this.nodes.length === 0) {
             this.split();
         }
     }
