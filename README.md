@@ -4,7 +4,7 @@
 > est un fork d'[Au Tableau](https://github.com/remy-live/Autableau) de Rémy
 > Devoddere. Elle y ajoute **Mes tableaux dans mon Drive** — un dossier par
 > classe, un tableau par séance, rangés dans un dossier synchronisé par Google
-> Drive pour ordinateur — et corrige deux choses : l'encre écrite à côté d'un
+> Drive pour ordinateur — ajoute la **calculatrice NumWorks** (collège ou lycée) parmi les outils, et corrige deux choses : l'encre écrite à côté d'un
 > morceau de document qui disparaissait, et un tableau neuf qui n'enregistrait
 > rien. Le reste est le travail de l'auteur, sous la même licence.
 
@@ -78,6 +78,20 @@ redemande à chaque ouverture le droit d'écrire dans le dossier : un clic sur
 **Rouvrir** dans le tiroir, ou sur le bandeau qui le propose. Le code est dans
 `lib/dossier/mon-dossier.js`, et n'a rien changé à `script.js` : les mises à
 jour de l'auteur se reprennent avec `git merge upstream/main`.
+
+## La calculatrice NumWorks, collège ou lycée
+
+Rubrique **Maths - Numérique**, bouton **Calculatrice NumWorks** : on choisit
+le modèle — la scientifique du collège ou la graphique du lycée — et la
+calculatrice se pose sur le tableau, en français, dans une fenêtre qui se
+déplace, se redimensionne, se met en grand et part avec la séance. On la
+manipule à la souris, au doigt ou au clavier (cliquer dessus d'abord).
+
+C'est l'émulateur de NumWorks lui-même, servi par leur site : il faut le
+réseau la première fois, ensuite le navigateur le garde en cache. La page
+`lib/numworks/calculatrice.html` pose leur composant avec les bons réglages ;
+quand NumWorks met à jour son émulateur, les adresses qu'elle contient sont à
+relire dans le code source de leurs pages (c'est écrit en tête du fichier).
 
 ## Ce qu'il y a dedans
 

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<!--
+  LA CALCULATRICE NUMWORKS, DANS UN CADRE — EN FRANÇAIS, COLLÈGE OU LYCÉE.
+
+  NumWorks propose un émulateur « prêt à intégrer » :
+      https://www.numworks.com/simulator/embed/
+  Il n'existe qu'en anglais, et que pour la calculatrice graphique (lycée).
+  Cette page est la même, à deux détails près : la langue est le français,
+  et le modèle se choisit — « ?modele=college » pour la calculatrice
+  scientifique, « ?modele=lycee » (ou rien) pour la graphique.
+
+  Tout ce qui fait tourner la calculatrice vient de NumWorks (cdn.numworks.com)
+  et reste à eux : cette page ne fait que poser leur composant <simulator>
+  avec les bons réglages. Il faut donc le réseau la première fois ; ensuite le
+  navigateur garde les fichiers en cache.
+
+  QUAND NUMWORKS MET À JOUR SON ÉMULATEUR, les adresses ci-dessous changent
+  (elles portent une empreinte). On les relit dans le code source de
+  https://www.numworks.com/fr/emulateur/graphique/ et de
+  https://www.numworks.com/fr/emulateur/scientifique/ — les balises <link>,
+  <script>, et le script « epsilon-… » ou « scandium-… ».
+-->
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Calculatrice NumWorks</title>
+    <link rel="stylesheet" href="https://cdn.numworks.com/02668837.css">
+    <link rel="stylesheet" href="https://cdn.numworks.com/b68cc635.css">
+    <link rel="stylesheet" href="https://cdn.numworks.com/6ce97696.css">
+    <link rel="stylesheet" href="https://cdn.numworks.com/89729b2e.css">
+    <script src="https://cdn.numworks.com/36087e01.js"></script>
+    <style>
+        /* Le cadre est la fenêtre : la calculatrice prend toute la place, sans
+           ombre ni marge, et se met à l'échelle de la largeur qu'on lui donne. */
+        html, body { height: 100%; margin: 0; background: #f5f6fa; overflow: hidden; }
+        body { display: flex; align-items: center; justify-content: center; }
+        .container { width: 100%; padding: 0; }
+        #simulator-viewer .row { margin: 0; }
+        #simulator-viewer .col-device { width: 100%; padding: 0; float: none; }
+        #simulator-viewer .col-text { display: none; }
+        .calculator-container { max-width: 100%; margin: 0 auto; }
+        /* Le mot d'attente, si NumWorks ne répond pas. */
+        #nw-attente {
+            position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+            text-align: center; padding: 24px; color: #636e72; font: 14px/1.5 system-ui, sans-serif;
+            background: #f5f6fa; z-index: 1;
+        }
+        #nw-attente[hidden] { display: none; }
+    </style>
+</head>
+<body>
+    <div id="nw-attente">La calculatrice arrive de numworks.com…<br><small>Sans réseau, elle ne peut pas venir.</small></div>
+    <div class="container">
+        <div id="main">
+            <div id="simulator-viewer">
+                <div class="row">
+                    <div class="col-device text-center">
+                        <simulator
+                            ref="simulator"
+                            version="999.999.999"
+                            lang="fr"
+                            type-identifier="calculator-graphing"
+                            v-bind:background-without-shadow="true"
+                            v-bind:no-dismiss-loader="true"
+                            v-bind:always-receive-keyboard-events="true"
+                        ></simulator>
+                    </div>
+                    <div class="col-text text-center">
+                        <canvas class="calculator-mirror show-fullscreen" width="320" height="240"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        // Les deux calculatrices, et le programme de chacune. Le composant de
+        // NumWorks choisit le moteur d'après « type-identifier » ; le programme
+        // (Epsilon pour la graphique, Scandium pour la scientifique) doit être
+        // chargé AVANT leur application, comme sur leur propre page.
+        var MODELES = {
+            lycee:   { type: 'calculator-graphing',   programme: 'https://cdn.numworks.com/epsilon-8884771a.js' },
+            college: { type: 'calculator-scientific', programme: 'https://cdn.numworks.com/scandium-5824be27.js' }
+        };
+        var params = new URLSearchParams(location.search);
+        var modele = MODELES[params.get('modele')] ? params.get('modele') : 'lycee';
+        var langue = /^[a-z]{2}$/.test(params.get('lang') || '') ? params.get('lang') : 'fr';
+        var sim = document.querySelector('simulator');
+        sim.setAttribute('type-identifier', MODELES[modele].type);
+        sim.setAttribute('lang', langue);
+        document.documentElement.lang = langue;
+        document.title = modele === 'college' ? 'Calculatrice NumWorks (collège)' : 'Calculatrice NumWorks (lycée)';
+        window.NW_MODELE = modele;
+        window.NW_PROGRAMME = MODELES[modele].programme;
+
+        // LE PROGRAMME DE LA CALCULATRICE SE CHARGE À PART. L'application de
+        // NumWorks (le script qui suit) doit être lue AVANT que la page soit
+        // prête : elle attend cet instant, puis guette l'arrivée du programme —
+        // « Epsilon » ou « Scandium » — et ne monte la calculatrice qu'alors.
+        // Le programme, lui, peut donc venir quand il veut ; on l'appelle ici
+        // sans bloquer l'analyse de la page (un « document.write » le ferait,
+        // et le navigateur menace de bloquer ce qu'on écrit ainsi sur un réseau
+        // lent — juste quand on en a besoin).
+        var attente = document.getElementById('nw-attente');
+        var programme = document.createElement('script');
+        programme.src = MODELES[modele].programme;
+        programme.onerror = pasArrivee;
+        document.head.appendChild(programme);
+
+        // La calculatrice est là dès que son programme a démarré — le composant
+        // de NumWorks retire alors « loading » de son cadre. Le mot d'attente
+        // s'en va ; s'il reste une minute, c'est que NumWorks n'a pas répondu.
+        var essais = 0;
+        var guet = setInterval(function () {
+            var calc = document.querySelector('.calculator');
+            if (calc && !calc.classList.contains('loading')) { attente.hidden = true; clearInterval(guet); return; }
+            if (++essais > 600) { clearInterval(guet); pasArrivee(); }
+        }, 100);
+
+        function pasArrivee() {
+            clearInterval(guet);
+            attente.hidden = false;
+            attente.innerHTML = 'La calculatrice n’est pas arrivée.<br><small>Vérifiez la connexion à numworks.com, puis rechargez la fenêtre.</small>';
+        }
+    })();
+    </script>
+    <script src="https://cdn.numworks.com/9a427d0a.js"></script>
+    <script src="https://cdn.numworks.com/886fb633.js"></script>
+</body>
+</html>
