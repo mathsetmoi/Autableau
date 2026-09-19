@@ -11476,7 +11476,7 @@ body.sans-tiroirs #etat-enregistrement { display: none; }
 .source-tableaux {
     display: flex;
     gap: 4px;
-    margin: 8px 12px 0;
+    margin: 0 0 8px;
     padding: 3px;
     border-radius: 8px;
     background: var(--accent-soft);
