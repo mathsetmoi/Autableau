@@ -1229,9 +1229,13 @@ window.demanderUneLigne = demanderUneLigne;
 function clearBoardAndPages() {
     images = []; polygons = []; curves = []; circles = []; arcs = [];
     rectangles = []; segments = []; freehands = []; points = []; texts = [];
-    pages = [];
+    // UN TABLEAU NEUF A UNE PAGE. Il n'en avait plus aucune : `saveCurrentPage`
+    // n'existe pas, et `syncPage` ne fait rien sans page. Tout ce qu'on
+    // écrivait ensuite restait à l'écran mais n'entrait dans aucune page —
+    // l'enregistrement local, la copie de sécurité et le Drive recevaient un
+    // tableau vide, et un rechargement perdait le cours.
+    pages = [createNewPage()];
     currentPageIndex = 0;
-    if (typeof saveCurrentPage === 'function') saveCurrentPage();
     const pageIndicator = document.getElementById('page-indicator');
     if (pageIndicator) pageIndicator.innerText = '1/1';
     if (typeof closeAllPopups === 'function') closeAllPopups();
