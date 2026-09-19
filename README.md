@@ -1,5 +1,13 @@
 # Au Tableau !
 
+> **Cette copie** ([mathsetmoi/Autableau](https://github.com/mathsetmoi/Autableau))
+> est un fork d'[Au Tableau](https://github.com/remy-live/Autableau) de Rémy
+> Devoddere. Elle y ajoute **Mes tableaux dans mon Drive** — un dossier par
+> classe, un tableau par séance, rangés dans un dossier synchronisé par Google
+> Drive pour ordinateur — et corrige deux choses : l'encre écrite à côté d'un
+> morceau de document qui disparaissait, et un tableau neuf qui n'enregistrait
+> rien. Le reste est le travail de l'auteur, sous la même licence.
+
 Un tableau interactif pour la classe. Il s'ouvre dans un navigateur, il n'a
 besoin de rien d'autre, et il fonctionne sans connexion.
 
@@ -39,6 +47,37 @@ le rendre en un clic.
 
 Sans cela, l'application rappelle au bout de sept jours qu'aucune copie n'a été
 faite.
+
+## Mes tableaux dans mon Drive
+
+« Mes tableaux » vit dans le navigateur du poste. Pour retrouver ses séances
+d'un ordinateur à l'autre, classe par classe, le tiroir de droite a une seconde
+source : **Mon Drive**.
+
+1. Installer **Google Drive pour ordinateur** (ou OneDrive, ou une clé USB : tout
+   dossier du disque convient). Le Drive apparaît alors comme un lecteur, par
+   exemple `G:Mon Drive`.
+2. Dans le tiroir de droite, onglet **Tableaux**, choisir **Mon Drive**, puis
+   **Choisir le dossier de mon Drive** — par exemple `G:Mon DriveAu Tableau`.
+3. Créer un dossier par classe (bouton **Nouveau dossier**), puis un tableau par
+   séance (**Nouveau tableau**) : le fichier est créé dans la classe et tout ce
+   qu'on y écrit s'y enregistre tout seul, au plus toutes les dix secondes.
+
+Un tableau ouvert depuis le Drive s'y réenregistre : le bandeau « Vous
+travaillez sur » le dit, avec l'heure de la dernière écriture. On ouvre une
+séance d'un double-clic, on la renomme, on la glisse dans une autre classe, on
+la supprime (Drive garde une corbeille trente jours). Le bouton **Enregistrer
+dans votre Drive…** range dans le Drive un tableau qui n'y est pas encore.
+
+Chaque séance est un fichier `.prof`, le format d'export d'un seul tableau :
+l'import ordinaire (**Ouvrir un seul tableau**) sait donc les lire, et une
+séance modifiée sur un autre poste est signalée à la réouverture.
+
+Comme la sauvegarde automatique, cela demande Chrome ou Edge, et le navigateur
+redemande à chaque ouverture le droit d'écrire dans le dossier : un clic sur
+**Rouvrir** dans le tiroir, ou sur le bandeau qui le propose. Le code est dans
+`lib/dossier/mon-dossier.js`, et n'a rien changé à `script.js` : les mises à
+jour de l'auteur se reprennent avec `git merge upstream/main`.
 
 ## Ce qu'il y a dedans
 

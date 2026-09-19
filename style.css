@@ -11467,3 +11467,77 @@ body.sans-tiroirs #etat-enregistrement { display: none; }
     line-height: 1.5;
     color: var(--muted, #636e72);
 }
+
+/* ==============================================================================
+   MES TABLEAUX DANS MON DRIVE — lib/dossier/mon-dossier.js
+   Le tiroir « Tableaux » a deux sources : cet ordinateur, ou un dossier du
+   Drive. Le choix est un sélecteur à deux positions au-dessus de l'arbre.
+   ============================================================================== */
+.source-tableaux {
+    display: flex;
+    gap: 4px;
+    margin: 8px 12px 0;
+    padding: 3px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+}
+.source-tableaux[hidden] { display: none; }
+.source-btn {
+    flex: 1;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.source-btn.active {
+    background: var(--bg, #fff);
+    border-color: rgba(108, 92, 231, 0.35);
+    color: var(--accent, #6c5ce7);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+#dossier-container {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    overflow-y: auto;
+}
+#right-drawer.mode-dossier #dossier-container { display: flex; }
+#right-drawer.mode-dossier #file-tree-container,
+#right-drawer.mode-dossier #exp-lot,
+#right-drawer.mode-dossier #trash-section { display: none !important; }
+.dossier-entete {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.dossier-nom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    min-width: 0;
+    flex: 1;
+}
+.dossier-nom:hover { background: var(--surface-hover); }
+.dossier-nom.selected { background: var(--accent-hover); color: var(--accent); font-weight: 600; }
+.dossier-nom .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dossier-arbre { flex: 1; }
+.dossier-ligne .folder-toggle svg { transition: transform 0.2s; }
+.dossier-ligne .folder-toggle.open svg { transform: rotate(90deg); }
+.dossier-compte { font-size: 11px; color: var(--muted, #636e72); margin-left: 6px; }
+.dossier-ouvert { color: #00b894; margin-left: 6px; font-size: 10px; }
+.dossier-message { font-size: 12.5px; color: var(--muted, #636e72); line-height: 1.45; margin: 8px 0; }
+.dossier-bouton { width: 100%; margin-top: 6px; padding: 8px 10px; }
+.dossier-ligne.drag-over { outline: 2px dashed var(--accent, #6c5ce7); outline-offset: -2px; }
