@@ -171,8 +171,13 @@ module.exports = async function (browser) {
         window.calqueUtilisable = vrai;
         return { courts, longs };
     });
+    // Trente images de mouvement, puis le faisceau qui s'efface : au moins un
+    // dessin court par image. Il y en avait deux — celui du mouvement et celui
+    // de l'effacement, dans la même image — jusqu'à ce qu'un seul dessin par
+    // image suffise (lib/tableau/un-dessin-par-image.js) ; le seuil comptait
+    // ce doublon.
     r.verifie('le faisceau se pose sur une image figée, au lieu de tout repeindre',
-        balayage.courts > 50 && balayage.longs <= 3, JSON.stringify(balayage));
+        balayage.courts >= 30 && balayage.longs <= 3, JSON.stringify(balayage));
 
     // LA PHOTO NE CONTIENT AUCUN FAISCEAU. Prise avec un trait dessus, il y
     // resterait gravé et ne s'effacerait jamais.
