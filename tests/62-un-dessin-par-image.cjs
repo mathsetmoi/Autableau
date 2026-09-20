@@ -32,6 +32,11 @@ module.exports = async function (browser) {
         await page.evaluate(() => typeof draw === 'function' && draw.__unDessinParImage === true
             && typeof draw.origine === 'function' && !!draw.compte));
 
+    // « Glisser sans tout repeindre » se pose PAR-DESSUS le filtre et, pendant
+    // un déplacement, ne lui transmet plus les demandes : c'est le filtre seul
+    // qu'on éprouve ici, on le remet donc en première ligne le temps du test.
+    await page.evaluate(() => { window.__glisser = draw; if (draw.dessous) window.draw = draw.dessous; });
+
     // Un tableau avec de quoi peindre, et l'outil Main pour se déplacer.
     await page.evaluate(() => {
         freehands.length = 0; selectedItems = []; panX = 100; panY = 100; zoom = 1;
@@ -117,7 +122,7 @@ module.exports = async function (browser) {
     r.egal('deux demandes d\'animation dans une image : un dessin', direct.parRaf, 1, JSON.stringify(direct));
     r.egal('deux appels directs juste après : deux dessins, jamais sautés', direct.directs, 2, JSON.stringify(direct));
 
-    await page.evaluate(() => { freehands.length = 0; selectedItems = []; setMode('pointer'); draw(); });
+    await page.evaluate(() => { freehands.length = 0; selectedItems = []; setMode('pointer'); draw(); if (window.__glisser) window.draw = window.__glisser; });
     r.verifie('aucune erreur de page', erreurs.length === 0, erreurs.join(' | '));
     await context.close();
     return r.bilan();

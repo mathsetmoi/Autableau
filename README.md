@@ -4,7 +4,7 @@
 > est un fork d'[Au Tableau](https://github.com/remy-live/Autableau) de Rémy
 > Devoddere. Elle y ajoute **Mes tableaux dans mon Drive** — un dossier par
 > classe, un tableau par séance, rangés dans un dossier synchronisé par Google
-> Drive pour ordinateur — ajoute la **calculatrice NumWorks** (collège ou lycée) parmi les outils, et corrige quatre choses : l'écriture qui disparaissait par endroits quand on déplaçait la vue (le tri spatial perdait des traits), le tableau qui se repeignait plusieurs fois par image, l'encre écrite à côté d'un
+> Drive pour ordinateur — ajoute la **calculatrice NumWorks** (collège ou lycée) parmi les outils, rend le déplacement de la vue fluide (la photo du dernier rendu glisse pendant le geste, on repeint quand la main s'arrête), et corrige quatre choses : l'écriture qui disparaissait par endroits quand on déplaçait la vue (le tri spatial perdait des traits), le tableau qui se repeignait plusieurs fois par image, l'encre écrite à côté d'un
 > morceau de document qui disparaissait, et un tableau neuf qui n'enregistrait
 > rien. Le reste est le travail de l'auteur, sous la même licence.
 
@@ -126,7 +126,7 @@ recharge la page.
 | `lib/` | Les bibliothèques fournies (voir `NOTICE.md`) |
 | `lib/dossier/` | Mes tableaux dans mon Drive (ce fork) |
 | `lib/numworks/` | La calculatrice NumWorks, collège ou lycée (ce fork) |
-| `lib/tableau/` | Un seul dessin par image quand le doigt ou le stylet bouge (ce fork) |
+| `lib/tableau/` | Le déplacement de la vue : un seul dessin par image, et la photo du tableau qui glisse pendant le geste (ce fork) |
 | `tests/` | La suite de non-régression |
 
 Après toute modification d'un de ces fichiers, penser à incrémenter le `?v=` de
