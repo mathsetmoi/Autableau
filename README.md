@@ -58,10 +58,18 @@ source : **Mon Drive**.
    dossier du disque convient). Le Drive apparaît alors comme un lecteur, par
    exemple `G:Mon Drive`.
 2. Dans le tiroir de droite, onglet **Tableaux**, choisir **Mon Drive**, puis
-   **Choisir le dossier de mon Drive** — par exemple `G:Mon DriveAu Tableau`.
+   **+ Ajouter un dossier** — par exemple `G:Mon DriveAu Tableau`.
 3. Créer un dossier par classe (bouton **Nouveau dossier**), puis un tableau par
    séance (**Nouveau tableau**) : le fichier est créé dans la classe et tout ce
    qu'on y écrit s'y enregistre tout seul, au plus toutes les dix secondes.
+
+**Plusieurs emplacements, et l'on passe de l'un à l'autre d'un clic.** Mon
+Drive, un Drive partagé, une clé USB, un dossier du disque : le **+** les
+ajoute à la liste, en tête du tiroir. La ligne en évidence est le dossier
+ouvert ; un clic sur une autre montre son arbre à elle, un double-clic la
+renomme (le dossier, lui, garde son nom), la croix la retire de la liste sans
+toucher au dossier ni aux tableaux. Le tableau ouvert reste ouvert quand on
+regarde ailleurs, et continue de s'enregistrer dans son fichier à lui.
 
 Un tableau ouvert depuis le Drive s'y réenregistre : le bandeau « Vous
 travaillez sur » le dit, avec l'heure de la dernière écriture. On ouvre une
@@ -74,8 +82,9 @@ l'import ordinaire (**Ouvrir un seul tableau**) sait donc les lire, et une
 séance modifiée sur un autre poste est signalée à la réouverture.
 
 Comme la sauvegarde automatique, cela demande Chrome ou Edge, et le navigateur
-redemande à chaque ouverture le droit d'écrire dans le dossier : un clic sur
-**Rouvrir** dans le tiroir, ou sur le bandeau qui le propose. Le code est dans
+redemande à chaque ouverture le droit d'écrire dans un dossier — une fois par
+emplacement, sur un geste : le clic sur son nom suffit, ou celui du bandeau qui
+le propose. Le code est dans
 `lib/dossier/mon-dossier.js`, et n'a rien changé à `script.js` : les mises à
 jour de l'auteur se reprennent avec `git merge upstream/main`.
 

@@ -118,6 +118,10 @@ module.exports = async function (browser) {
         await window.__fauxRacine.getDirectoryHandle('2nde 3', { create: true });
         await window.__fauxRacine.getDirectoryHandle('Terminale spé', { create: true });
         await MonDossier.adopterLeDossier(window.__fauxRacine, false);
+        // Le vrai navigateur retient l'emplacement (et son identifiant) dans
+        // son stockage ; le faux dossier, lui, ne s'y range pas. On garde donc
+        // l'identifiant de côté, pour le lui rendre après le rechargement.
+        sessionStorage.setItem('__id_emplacement', MonDossier.etat.actif || '');
         const tiroir = document.getElementById('right-drawer');
         if (!tiroir.classList.contains('open')) toggleRightDrawer();
         await new Promise(ok => setTimeout(ok, 200));
@@ -234,8 +238,12 @@ module.exports = async function (browser) {
         const propose = modal && modal.style.display === 'flex';
         if (propose) { confirmRestore(); await new Promise(ok => setTimeout(ok, 800)); }
         const avant = { propose, lie: MonDossier.lie(), attendu: MonDossier.etat.lienAttendu ? MonDossier.etat.lienAttendu.chemin : null };
-        // Le vrai navigateur retrouve le dossier dans son stockage ; le faux
-        // ne s'y range pas. On le lui rend, et l'on rouvre — comme le bouton.
+        // Le vrai navigateur retrouve la liste des emplacements dans son
+        // stockage ; le faux dossier ne s'y range pas. On la lui rend, telle
+        // qu'elle serait revenue, et l'on rouvre — comme le bouton.
+        const id = sessionStorage.getItem('__id_emplacement');
+        MonDossier.etat.emplacements = [{ id, nom: 'Au Tableau', handle: window.__fauxRacine }];
+        MonDossier.etat.actif = id;
         MonDossier.etat.racine = window.__fauxRacine;
         await MonDossier.rouvrir();
         await new Promise(ok => setTimeout(ok, 300));
