@@ -88,6 +88,23 @@ le propose. Le code est dans
 `lib/dossier/mon-dossier.js`, et n'a rien changé à `script.js` : les mises à
 jour de l'auteur se reprennent avec `git merge upstream/main`.
 
+## Écrire au stylet
+
+Avec une tablette graphique (Wacom, par exemple), trois choses sont réglées
+dans `lib/tableau/stylet.js` :
+
+- **tous les échantillons de la tablette sont posés**, y compris ceux que le
+  navigateur groupe entre deux images — une boucle rapide reste une boucle ;
+- **le survol que la tablette envoie sous un autre nom** pendant qu'on écrit
+  ne coupe plus le trait ;
+- **la pression a un plancher** (20 %) et ses sauts sont adoucis : un contact
+  léger ne fait plus un cheveu, le trait s'affine aux extrémités sans
+  disparaître.
+
+Côté Windows, dans les réglages de la tablette, laisser **Windows Ink** activé :
+sans lui, le navigateur ne reçoit pas la pression et voit le stylet comme une
+souris.
+
 ## La calculatrice NumWorks, collège ou lycée
 
 Rubrique **Maths - Algèbre**, bouton **Calculatrice NumWorks** : on choisit
@@ -135,7 +152,7 @@ recharge la page.
 | `lib/` | Les bibliothèques fournies (voir `NOTICE.md`) |
 | `lib/dossier/` | Mes tableaux dans mon Drive (ce fork) |
 | `lib/numworks/` | La calculatrice NumWorks, collège ou lycée (ce fork) |
-| `lib/tableau/` | Le déplacement de la vue : un seul dessin par image, et la photo du tableau qui glisse pendant le geste (ce fork) |
+| `lib/tableau/` | Le déplacement de la vue (un dessin par image, la photo qui glisse) et le stylet (échantillons groupés, faux survol filtré, pression adoucie) — ce fork |
 | `tests/` | La suite de non-régression |
 
 Après toute modification d'un de ces fichiers, penser à incrémenter le `?v=` de
