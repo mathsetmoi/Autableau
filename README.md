@@ -100,6 +100,11 @@ dans `lib/tableau/stylet.js` :
 - **la pression a un plancher** (20 %) et ses sauts sont adoucis : un contact
   léger ne fait plus un cheveu, le trait s'affine aux extrémités sans
   disparaître.
+- **la gomme du stylet efface** (`lib/tableau/gomme-du-stylet.js`) : on
+  retourne le stylet, on frotte, l'encre touchée s'en va — traits, segments,
+  figures —, et l'outil d'avant revient au relâcher. Une photo, un texte ou
+  un objet verrouillé sous le frottement restent en place. Un frottement fait
+  un seul pas d'annulation.
 
 Côté Windows, dans les réglages de la tablette, laisser **Windows Ink** activé :
 sans lui, le navigateur ne reçoit pas la pression et voit le stylet comme une
@@ -152,7 +157,7 @@ recharge la page.
 | `lib/` | Les bibliothèques fournies (voir `NOTICE.md`) |
 | `lib/dossier/` | Mes tableaux dans mon Drive (ce fork) |
 | `lib/numworks/` | La calculatrice NumWorks, collège ou lycée (ce fork) |
-| `lib/tableau/` | Le déplacement de la vue (un dessin par image, la photo qui glisse) et le stylet (échantillons groupés, faux survol filtré, pression adoucie) — ce fork |
+| `lib/tableau/` | Le déplacement de la vue (un dessin par image, la photo qui glisse) et le stylet (échantillons groupés, faux survol filtré, pression adoucie, gomme du stylet) — ce fork |
 | `tests/` | La suite de non-régression |
 
 Après toute modification d'un de ces fichiers, penser à incrémenter le `?v=` de
