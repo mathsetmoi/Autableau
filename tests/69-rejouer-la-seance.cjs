@@ -12,7 +12,7 @@
 //   — LE LECTEUR. Une page sans un outil, un bouton de lecture, le film
 //     rejoué pas à pas — et les mains liées : rien ne s'écrit, ni sur le
 //     tableau, ni dans le navigateur de l'élève.
-//   — LA PUBLICATION. La séance part dans le dossier public du Drive, et le
+//   — LA PUBLICATION. Seule la copie de la séance est partagée sur Drive, et le
 //     lien qui la rejoue se copie pour Pronote.
 const path = require('path');
 const { creerRapport, ouvrirApp, APP_URL } = require('./harness.cjs');
@@ -135,39 +135,44 @@ module.exports = async function (browser) {
         window.AUTABLEAU_PUBLICATION = { dossier: '', cle: '', adresse: '' };
         Publication.poserLesReglages({ dossier: 'DOSSIER_TEST', cle: 'CLE_TEST', adresse: 'https://exemple.fr/Autableau' });
         const n = Publication.nomPublic('2026-09-22', '1ère 3', 'Suites & limites');
-        const long = Publication.lienDe(n);
+        const long = Publication.lienDe('SEANCE_TEST');
         // Un site qui les connaît (lib/cloud/config.js) rend le lien court.
         window.AUTABLEAU_PUBLICATION = { dossier: 'DOSSIER_TEST', cle: 'CLE_TEST', adresse: '' };
-        const court = Publication.lienDe(n);
+        const court = Publication.lienDe('SEANCE_TEST');
         window.AUTABLEAU_PUBLICATION = { dossier: '', cle: '', adresse: '' };
         return { nom: n, long, court, sansRien: Publication.nomPublic('', '', '').slice(0, 7) };
     });
     r.egal('le nom du fichier public se lit, et ne porte ni accent ni espace',
         noms.nom, '2026-09-22-1ere-3-suites-limites', JSON.stringify(noms));
-    r.egal('le lien porte le dossier et la clé quand le site ne les connaît pas',
-        noms.long, 'https://exemple.fr/Autableau/lecteur.html?f=2026-09-22-1ere-3-suites-limites&d=DOSSIER_TEST&k=CLE_TEST', JSON.stringify(noms));
+    r.egal('le lien porte seulement le fichier et la clé, jamais le dossier',
+        noms.long, 'https://exemple.fr/Autableau/lecteur.html?id=SEANCE_TEST&k=CLE_TEST', JSON.stringify(noms));
     r.egal('et il reste court quand le site les porte déjà',
-        noms.court, 'https://exemple.fr/Autableau/lecteur.html?f=2026-09-22-1ere-3-suites-limites', JSON.stringify(noms));
+        noms.court, 'https://exemple.fr/Autableau/lecteur.html?id=SEANCE_TEST', JSON.stringify(noms));
     r.egal('une séance sans titre ni classe garde un nom', noms.sansRien, 'seance-');
 
     // ------------------------------------------------------------------
-    // 3. PUBLIER : LA SÉANCE PART DANS LE DOSSIER PUBLIC DU DRIVE
+    // 3. PUBLIER : SEULE LA SÉANCE OUVERTE EST ENVOYÉE À L'ADAPTATEUR DRIVE
     // ------------------------------------------------------------------
     const publiee = await page.evaluate(async () => {
         await MonDossier.adopterLeDossier(window.__driveA.racine(), false);
+        // L'adaptateur HTTP est éprouvé séparément (publication-isolee.unit.cjs).
+        const original = DrivePublication.publier;
+        let dedans;
+        DrivePublication.publier = async (nom, contenu) => { dedans = contenu; return { id: 'SEANCE_TEST' }; };
         const zone = document.createElement('div');
-        const r = await Publication.publier({ titre: 'Suites & limites', classe: '1ère 3', date: '2026-09-22' }, true, zone);
-        const fichiers = Object.keys(window.__driveA.tout().fichiers);
-        const dedans = window.__driveA.tableau('Séances publiées/2026-09-22-1ere-3-suites-limites.prof');
-        return { lien: r && r.lien, fichiers,
-                 titre: dedans && dedans.seance && dedans.seance.titre,
-                 classe: dedans && dedans.seance && dedans.seance.classe,
+        const result = await Publication.publier({ titre: 'Suites & limites', classe: '1ère 3', date: '2026-09-22' }, true, zone);
+        DrivePublication.publier = original;
+        return { lien: result && result.lien,
+                 titre: dedans && dedans.seance.titre, classe: dedans && dedans.seance.classe,
                  pas: dedans ? (dedans.data.pages[0].filmArchive || []).length + (dedans.data.pages[0].film || []).length : 0 };
     });
-    r.egal('la séance est écrite dans « Séances publiées », avec son film entier',
-        { fichiers: publiee.fichiers, titre: publiee.titre, classe: publiee.classe, pas: publiee.pas },
-        { fichiers: ['Séances publiées/2026-09-22-1ere-3-suites-limites.prof'],
-          titre: 'Suites & limites', classe: '1ère 3', pas: 261 }, JSON.stringify(publiee).slice(0, 400));
+    r.egal('la copie publiée porte la séance ouverte et son film entier',
+        { titre: publiee.titre, classe: publiee.classe, pas: publiee.pas },
+        { titre: 'Suites & limites', classe: '1ère 3', pas: 261 }, JSON.stringify(publiee));
+    r.egal('la publication rend le lien direct de ce fichier', publiee.lien,
+        'https://exemple.fr/Autableau/lecteur.html?id=SEANCE_TEST&k=CLE_TEST');
+    r.verifie('la publication est aussi disponible dans le menu Exporter',
+        await page.locator('#export-popup-menu #pub-depuis-export').count() === 1);
 
     // Le texte à coller dans Pronote porte le lien, la date et le titre.
     const texte = await page.evaluate(() => Publication.resume(
@@ -208,9 +213,17 @@ module.exports = async function (browser) {
     const p2 = await ctx2.newPage();
     const erreurs2 = [];
     p2.on('pageerror', e => { if (!/jsPDF|pdfjsLib|localforage is not defined|getUserMedia|mediaDevices|ResizeObserver loop/.test(e.message)) erreurs2.push(e.message.slice(0, 160)); });
-    await p2.goto(APP_URL + '?lecteur=1');
+    const lectures = [];
+    await p2.route('https://www.googleapis.com/drive/v3/files**', async route => {
+        lectures.push(route.request().url());
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(seance) });
+    });
+    await p2.goto(APP_URL + '?lecteur=1&id=SEANCE_TEST&k=CLE_TEST&d=DOSSIER_INTERDIT');
     await p2.waitForFunction(() => !!window.Lecteur && !!window.PluginManager, { timeout: 30000 });
-    await p2.evaluate(async (s) => { await Lecteur.charger(s, null); }, seance);
+    await p2.waitForFunction(() => Lecteur.etat().chargee, { timeout: 30000 });
+    r.verifie('un élève ouvre directement le fichier sans demander la liste du dossier',
+        lectures.length === 1 && new URL(lectures[0]).pathname === '/drive/v3/files/SEANCE_TEST'
+        && !new URL(lectures[0]).searchParams.has('q'), JSON.stringify(lectures));
     await p2.waitForTimeout(300);
 
     const arrivee = await p2.evaluate(() => {
