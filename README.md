@@ -139,57 +139,74 @@ autre poste la reprend à l'ouverture si elle est plus récente que la sienne.
 l'import ajoute, il n'écrase rien. Le code est dans
 `lib/automatismes/automatismes.js`.
 
-## Publier la séance dans le cahier de textes
-
-Un élève absent, un parent qui demande ce qui a été fait : on colle **un lien**
-dans le cahier de textes de Pronote, et ce lien rejoue la séance. Pas un PDF
-du tableau fini — la construction entière, trait après trait, avec un bouton
-de lecture, comme on l'a faite devant la classe.
-
-Le lecteur (`lecteur.html`) est l'application elle-même, les mains liées :
-mêmes traits, mêmes formules, mêmes documents, mais aucun outil, et rien ne
-s'écrit — ni sur la séance, ni dans le navigateur de celui qui regarde. Il
-s'ouvre sans compte et sans installation, sur un téléphone comme sur un
-ordinateur : ▶ pour rejouer, ← → pour avancer pas à pas, la vitesse, les
-pages, et « tout voir » pour cadrer le tableau entier. La vue suit l'écriture
-au lieu de laisser chercher où ça se passe.
-
-**L'installation, une fois pour toutes** (bouton **Publier pour le cahier de
-textes**, au bas du panneau Mon Drive ou dans la fenêtre Exporter) :
+## Publier la séance dans le cahier de textes
 
-1. Partager un dossier `Séances publiées` de votre Drive en **« Tout
-   utilisateur disposant du lien »**, en Lecteur.
-2. Créer une **clé d'API Google** (console Google Cloud → activer *Google
-   Drive API* → Identifiants → Clé API), restreinte à votre site et à cette
-   API. Elle ne donne accès qu'à ce qui est déjà public. Si votre compte
-   d'établissement n'a pas accès à Google Cloud — c'est fréquent —, la clé
-   d'un compte personnel convient : elle ne sert qu'à lire un dossier public.
-3. Coller le lien du dossier et la clé dans la fenêtre, rubrique **Le dossier
-   et la clé**. Elles restent dans ce navigateur ; écrites dans
-   `lib/cloud/config.js`, elles valent pour tout le site et raccourcissent
-   les liens.
-4. Dans la même rubrique, **désigner le dossier** où les séances seront
-   écrites — le même dossier, vu du disque cette fois (`G:\Mon Drive\Séances
-   publiées`). Sans cela, elles partiraient à la racine de l'emplacement
-   ouvert, qui change quand on change de classe.
+**Un lien par séance.** Dans le menu **Exporter → Publier pour le cahier de
+textes**, publier le tableau ouvert puis **Copier le lien** dans Pronote.
+L’élève arrive directement sur cette séance et appuie sur ▶ pour la rejouer.
+Il n’a besoin ni de compte Google, ni d’installation. Le lecteur permet aussi
+les pas avant/arrière, le choix de la page et de la vitesse.
 
-**Publier** demande un titre, une classe et une date, écrit la séance dans le
-dossier partagé — Drive Desktop l'envoie tout seul — et rend le lien, avec le
-texte à coller dans le champ « Contenu » de la séance Pronote : la date, le
-titre, les automatismes posés ce jour-là à cette classe, et le lien. « Vérifier
-que c'est en ligne » demande à Google si l'envoi est terminé.
-
-**Ce qui est publié est public** : le lien s'ouvre sans compte, et un lien se
-recopie. Ne publiez pas un tableau où figurent des noms d'élèves. L'onglet
-« Déjà publiées » liste les séances en ligne et permet d'en retirer une — le
-lien cesse alors d'ouvrir quoi que ce soit.
-
-Le film enregistré avec le tableau porte désormais **toute** la séance : ce que
-l'historique d'annulation jette au-delà de ses deux cents étapes est archivé
-sur la page (`lib/tableau/film-complet.js`). Les tableaux enregistrés
-auparavant s'ouvrent quand même : le lecteur montre le tableau tel qu'il a
-fini, et le dit. Le code est dans `lib/lecteur/`.
-
+La publication envoie une **copie** du tableau et de son film sur Drive.
+Les tableaux de travail restent dans leurs dossiers de classe et de chapitre.
+Au Tableau crée à la racine du compte connecté un dossier privé
+`Au Tableau — séances publiées`. **Seul le fichier de la séance est partagé**
+en lecture « Tout utilisateur disposant du lien ». Le dossier n’est jamais
+partagé par l’application. Le lien contient l’identifiant du fichier, sans
+identifiant de dossier ; le lecteur télécharge ce fichier directement et ne
+liste aucune autre séance. Deux publications, même de titre et date
+identiques, reçoivent des identifiants et des liens différents.
+
+### Installation
+
+1. Activer **Google Drive API** dans Google Cloud, puis créer une **clé API**.
+   La restreindre à cette API et à l’origine du lecteur, par exemple
+   `https://mathsetmoi.github.io/*`. La clé identifie le projet Google : elle
+   n’accorde aucun accès aux fichiers privés. Elle peut appartenir à un
+   autre compte que celui qui héberge les séances.
+2. Dans **Compte Google et clé**, coller la clé et enregistrer. Les réglages
+   restent dans ce navigateur ; la clé de lecture figure dans les liens.
+3. Cliquer **Connecter mon compte Google** et autoriser la publication.
+   Seul l’enseignant effectue cette connexion. L’application demande le droit
+   `drive.file` pour les fichiers qu’elle crée, sans accès général au Drive.
+   Le jeton de publication reste en mémoire et n’est jamais transmis aux
+   élèves ni enregistré avec les réglages. Reconnecter après un rechargement
+   ou l’expiration de l’autorisation.
+4. Donner un titre, une classe et une date, puis **Publier la séance**.
+   Le lien est proposé après vérification de la lecture anonyme. Il n’y a
+   plus de dossier local à sélectionner, ni de synchronisation Drive Desktop
+   à attendre. Le bouton **Copier le texte pour Pronote** ajoute un résumé.
+
+L’identifiant client OAuth du site est prérempli. Pour héberger sa propre
+copie, créer un client **Application Web**, déclarer l’origine du site parmi
+les **origines JavaScript autorisées** et configurer l’écran de consentement
+Google avec `https://www.googleapis.com/auth/drive.file`. Si l’application
+OAuth est en test, ajouter le compte enseignant aux utilisateurs de test.
+Saisir l’identifiant client dans les options de connexion (ou dans
+`lib/cloud/config.js`). **Aucun secret client** ne doit être saisi dans le
+site. Un compte d’établissement peut interdire le partage externe : dans ce
+cas, la publication affiche l’échec et ne propose pas de lien valide.
+
+**Les anciens partages ne sont pas modifiés automatiquement.** Si vous
+aviez partagé un dossier entier avec l’ancienne version, remettre son
+**Accès général → Limité** dans Google Drive. Ses anciens liens par nom de
+fichier cesseront alors de fonctionner : republier les séances souhaitées et
+remplacer ces liens dans Pronote. Les anciens liens restent lisibles tant
+que leur ancien dossier est public, pour permettre cette transition.
+
+L’onglet **Déjà publiées** permet de retrouver les liens et de **Retirer**
+l’accès à une séance, sans modifier le tableau de travail. Un lien transmis
+reste utilisable par toute personne qui le possède jusqu’à son retrait ; le
+retrait n’efface pas les copies déjà téléchargées. Garder le dossier de
+publication en accès **Limité**. Si son partage a été changé manuellement,
+Au Tableau utilise un nouveau dossier privé pour les prochaines publications.
+
+Le lecteur est en lecture seule et ne sauvegarde rien dans les tableaux du
+visiteur. Le film porte toute la séance, grâce à
+`lib/tableau/film-complet.js`. Un tableau ancien sans film s’ouvre sur son
+état final avec une explication. Code : `lib/lecteur/`.
+
+
 ## La calculatrice NumWorks, collège ou lycée
 
 Rubrique **Maths - Algèbre**, bouton **Calculatrice NumWorks** : on choisit

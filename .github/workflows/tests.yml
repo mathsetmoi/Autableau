@@ -30,6 +30,9 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Vérifier le partage individuel des séances
+        run: node --test tests/publication-isolee.unit.cjs
+
       # Playwright pilote le navigateur ; c'est la seule dépendance, et elle
       # ne concerne que les tests — le logiciel, lui, n'en charge aucune.
       - name: Installer Playwright et Chromium
@@ -40,5 +43,8 @@ jobs:
 
       # Sans CHROMIUM_PATH, le socle prend le navigateur que Playwright vient
       # d'installer : c'est exactement ce qu'on veut ici.
+      - name: Vérifier le parcours de publication et de lecture
+        run: node tests/run.cjs 69-rejouer
+
       - name: Lancer la suite
         run: node tests/run.cjs

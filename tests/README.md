@@ -8,6 +8,8 @@ chemins critiques : ce sont ceux qui ont déjà cassé au moins une fois.
 ```bash
 node tests/run.cjs            # toute la suite
 node tests/run.cjs texte      # seulement les fichiers dont le nom contient « texte »
+node --test tests/publication-isolee.unit.cjs # permissions Drive, sans réseau ni navigateur
+node tests/run.cjs 69-rejouer  # copie publiée, lien direct et lecture du film
 ```
 
 Il faut Playwright et un Chromium. Si le binaire n'est pas à l'emplacement par
