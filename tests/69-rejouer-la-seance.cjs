@@ -130,15 +130,24 @@ module.exports = async function (browser) {
     // 2. LE NOM PUBLIC ET LE LIEN
     // ------------------------------------------------------------------
     const noms = await page.evaluate(() => {
+        // Le site de l'essai ne connaît ni dossier ni clé : le lien doit donc
+        // les porter, sinon il ne mènerait nulle part chez l'élève.
+        window.AUTABLEAU_PUBLICATION = { dossier: '', cle: '', adresse: '' };
         Publication.poserLesReglages({ dossier: 'DOSSIER_TEST', cle: 'CLE_TEST', adresse: 'https://exemple.fr/Autableau' });
         const n = Publication.nomPublic('2026-09-22', '1ère 3', 'Suites & limites');
-        return { nom: n, lien: Publication.lienDe(n),
-                 sansRien: Publication.nomPublic('', '', '').slice(0, 7) };
+        const long = Publication.lienDe(n);
+        // Un site qui les connaît (lib/cloud/config.js) rend le lien court.
+        window.AUTABLEAU_PUBLICATION = { dossier: 'DOSSIER_TEST', cle: 'CLE_TEST', adresse: '' };
+        const court = Publication.lienDe(n);
+        window.AUTABLEAU_PUBLICATION = { dossier: '', cle: '', adresse: '' };
+        return { nom: n, long, court, sansRien: Publication.nomPublic('', '', '').slice(0, 7) };
     });
     r.egal('le nom du fichier public se lit, et ne porte ni accent ni espace',
         noms.nom, '2026-09-22-1ere-3-suites-limites', JSON.stringify(noms));
-    r.egal('le lien mène au lecteur, avec le dossier et la clé',
-        noms.lien, 'https://exemple.fr/Autableau/lecteur.html?f=2026-09-22-1ere-3-suites-limites&d=DOSSIER_TEST&k=CLE_TEST', JSON.stringify(noms));
+    r.egal('le lien porte le dossier et la clé quand le site ne les connaît pas',
+        noms.long, 'https://exemple.fr/Autableau/lecteur.html?f=2026-09-22-1ere-3-suites-limites&d=DOSSIER_TEST&k=CLE_TEST', JSON.stringify(noms));
+    r.egal('et il reste court quand le site les porte déjà',
+        noms.court, 'https://exemple.fr/Autableau/lecteur.html?f=2026-09-22-1ere-3-suites-limites', JSON.stringify(noms));
     r.egal('une séance sans titre ni classe garde un nom', noms.sansRien, 'seance-');
 
     // ------------------------------------------------------------------

@@ -56,9 +56,9 @@ source : **Mon Drive**.
 
 1. Installer **Google Drive pour ordinateur** (ou OneDrive, ou une clé USB : tout
    dossier du disque convient). Le Drive apparaît alors comme un lecteur, par
-   exemple `G:Mon Drive`.
+   exemple `G:\Mon Drive`.
 2. Dans le tiroir de droite, onglet **Tableaux**, choisir **Mon Drive**, puis
-   **+ Ajouter un dossier** — par exemple `G:Mon DriveAu Tableau`.
+   **+ Ajouter un dossier** — par exemple `G:\Mon Drive\Au Tableau`.
 3. Créer un dossier par classe (bouton **Nouveau dossier**), puis un tableau par
    séance (**Nouveau tableau**) : le fichier est créé dans la classe et tout ce
    qu'on y écrit s'y enregistre tout seul, au plus toutes les dix secondes.
@@ -154,18 +154,25 @@ ordinateur : ▶ pour rejouer, ← → pour avancer pas à pas, la vitesse, les
 pages, et « tout voir » pour cadrer le tableau entier. La vue suit l'écriture
 au lieu de laisser chercher où ça se passe.
 
-**L'installation, une fois pour toutes** (bouton **Publier pour le cahier de
-textes**, au bas du panneau Mon Drive, rubrique « Le dossier et la clé ») :
-
-1. Partager un dossier `Séances publiées` à la racine de votre Drive en
-   **« Tout utilisateur disposant du lien »**, en Lecteur.
-2. Créer une **clé d'API Google** (console Google Cloud → activer *Google
-   Drive API* → Identifiants → Clé API), restreinte à votre site et à cette
-   API. Elle ne donne accès qu'à ce qui est déjà public.
-3. Coller le lien du dossier et la clé dans la fenêtre. Elles restent dans ce
-   navigateur ; écrites dans `lib/cloud/config.js`, elles valent pour tout le
-   site et raccourcissent les liens.
-
+**L'installation, une fois pour toutes** (bouton **Publier pour le cahier de
+textes**, au bas du panneau Mon Drive ou dans la fenêtre Exporter) :
+
+1. Partager un dossier `Séances publiées` de votre Drive en **« Tout
+   utilisateur disposant du lien »**, en Lecteur.
+2. Créer une **clé d'API Google** (console Google Cloud → activer *Google
+   Drive API* → Identifiants → Clé API), restreinte à votre site et à cette
+   API. Elle ne donne accès qu'à ce qui est déjà public. Si votre compte
+   d'établissement n'a pas accès à Google Cloud — c'est fréquent —, la clé
+   d'un compte personnel convient : elle ne sert qu'à lire un dossier public.
+3. Coller le lien du dossier et la clé dans la fenêtre, rubrique **Le dossier
+   et la clé**. Elles restent dans ce navigateur ; écrites dans
+   `lib/cloud/config.js`, elles valent pour tout le site et raccourcissent
+   les liens.
+4. Dans la même rubrique, **désigner le dossier** où les séances seront
+   écrites — le même dossier, vu du disque cette fois (`G:\Mon Drive\Séances
+   publiées`). Sans cela, elles partiraient à la racine de l'emplacement
+   ouvert, qui change quand on change de classe.
+
 **Publier** demande un titre, une classe et une date, écrit la séance dans le
 dossier partagé — Drive Desktop l'envoie tout seul — et rend le lien, avec le
 texte à coller dans le champ « Contenu » de la séance Pronote : la date, le
