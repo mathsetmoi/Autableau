@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rejouer la séance — Au Tableau</title>
+    <!-- Une adresse courte à coller dans le cahier de textes : elle ouvre
+         l'application en mode lecteur, avec les mêmes paramètres. -->
+    <script>
+        (function () {
+            var q = location.search.replace(/^\?/, '');
+            location.replace('./?lecteur=1' + (q ? '&' + q : '') + location.hash);
+        })();
+    </script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #232b2f; padding: 40px 20px; text-align: center; }
+        a { color: #0984e3; }
+    </style>
+</head>
+<body>
+    <noscript>
+        <p>Le lecteur a besoin de JavaScript.</p>
+        <p><a href="./?lecteur=1">Ouvrir le lecteur</a></p>
+    </noscript>
+</body>
+</html>

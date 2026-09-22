@@ -11704,3 +11704,237 @@ body.sans-tiroirs #etat-enregistrement { display: none; }
 .auto-proj-case { display: flex; gap: 14px; align-items: flex-start; }
 .auto-proj-enonce { font-size: clamp(20px, 2.3vw, 32px); font-weight: 600; line-height: 1.35; }
 .auto-proj-case .auto-proj-reponse { font-size: clamp(18px, 2vw, 28px); padding: 8px 16px; margin-top: 8px; display: inline-block; }
+
+/* ============================================================
+   LE LECTEUR DES ÉLÈVES (lib/lecteur/lecteur.js)
+   ============================================================
+   La page ouverte par un lien du cahier de textes : le tableau seul, deux
+   bandeaux, un gros bouton de lecture. Tout ce qui sert au professeur est
+   caché — non pas replié, mais absent : un élève ne doit pas pouvoir écrire
+   sur la séance par mégarde.
+   ============================================================ */
+/* ON N'ÉNUMÈRE PAS LES BARRES : ON NE GARDE QUE LE TABLEAU. Une liste
+   d'identifiants à cacher se périme au premier outil ajouté en amont, et
+   laisse alors un bouton d'écriture à portée d'élève. On dit donc l'inverse :
+   sous le corps de page, seuls le tableau, ses post-its, le calque des
+   transitions, les pastilles de message et les bandeaux du lecteur restent. */
+body.mode-lecteur > *:not(#board):not(#html-postits-container):not(#calque-passage):not(#toast-container):not(.lecteur-ui) {
+    display: none !important;
+}
+
+body.mode-lecteur { overflow: hidden; }
+
+.lecteur-ui {
+    position: fixed;
+    z-index: 60000;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: #232b2f;
+}
+
+#lecteur-haut {
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.94);
+    border-bottom: 1px solid #e3e7ea;
+    backdrop-filter: blur(6px);
+}
+
+.lecteur-titre { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lecteur-titre b { font-size: 15px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lecteur-titre span { font-size: 12px; color: #6d787e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lecteur-haut-actions { margin-left: auto; display: flex; gap: 8px; }
+
+#lecteur-bas {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: rgba(255, 255, 255, 0.94);
+    border-top: 1px solid #e3e7ea;
+    backdrop-filter: blur(6px);
+}
+
+.lecteur-ligne { display: flex; align-items: center; gap: 10px; }
+.lecteur-boutons { flex-wrap: wrap; }
+
+#lecteur-curseur { flex: 1; min-width: 0; accent-color: #0984e3; height: 22px; }
+#lecteur-compte { font-size: 12px; color: #6d787e; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.lecteur-ui button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 1px solid #e3e7ea;
+    border-radius: 12px;
+    background: #fff;
+    color: #232b2f;
+    cursor: pointer;
+}
+
+.lecteur-ui button:hover:not(:disabled) { background: #f2f6f9; border-color: #b9c4cb; }
+.lecteur-ui button:disabled { opacity: 0.4; cursor: default; }
+.lecteur-ui button svg { width: 22px; height: 22px; fill: currentColor; }
+.lecteur-ui button.grand { width: 56px; height: 56px; background: #0984e3; border-color: transparent; color: #fff; box-shadow: 0 4px 14px rgba(9, 132, 227, 0.35); }
+.lecteur-ui button.grand:hover:not(:disabled) { background: #0b76c9; border-color: transparent; }
+.lecteur-ui button.grand svg { width: 28px; height: 28px; }
+
+#lecteur-vitesse {
+    height: 42px;
+    padding: 0 10px;
+    border: 1px solid #e3e7ea;
+    border-radius: 12px;
+    background: #fff;
+    color: #232b2f;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#lecteur-pages { display: flex; gap: 6px; flex-wrap: wrap; }
+.lecteur-page { width: 36px !important; height: 36px !important; font-weight: 600; }
+.lecteur-page.actif { background: #e8f4fd !important; border-color: #0984e3 !important; color: #0984e3; }
+
+.lecteur-suivre {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 12px;
+    color: #6d787e;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.lecteur-suivre input { width: 16px; height: 16px; accent-color: #0984e3; }
+
+#lecteur-voile {
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(20, 28, 33, 0.55);
+    backdrop-filter: blur(3px);
+}
+
+.lecteur-carte {
+    max-width: 520px;
+    width: 100%;
+    padding: 26px 24px;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    text-align: center;
+}
+
+#lecteur-message { font-size: 15px; line-height: 1.5; margin-bottom: 18px; }
+#lecteur-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+.lecteur-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: auto !important;
+    height: auto !important;
+    padding: 12px 20px !important;
+    border-radius: 12px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+}
+.lecteur-btn svg { width: 20px; height: 20px; fill: currentColor; }
+.lecteur-btn.primaire { background: #0984e3; border-color: transparent; color: #fff; }
+.lecteur-btn.primaire:hover { background: #0b76c9; }
+
+/* Au téléphone, les deux bandeaux mangent l'écran : on resserre. */
+@media (max-width: 620px) {
+    #lecteur-haut { padding: 8px 12px; }
+    .lecteur-titre b { font-size: 14px; }
+    #lecteur-bas { padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
+    .lecteur-ui button { width: 40px; height: 40px; }
+    .lecteur-ui button.grand { width: 50px; height: 50px; }
+    .lecteur-suivre { display: none; }
+    #lecteur-vitesse { height: 40px; }
+}
+
+.dark-mode.mode-lecteur #lecteur-haut,
+.dark-mode.mode-lecteur #lecteur-bas { background: rgba(30, 38, 43, 0.94); border-color: #333f46; }
+.dark-mode.mode-lecteur .lecteur-ui { color: #e6ecef; }
+.dark-mode.mode-lecteur .lecteur-ui button { background: #1e262b; border-color: #333f46; color: #e6ecef; }
+.dark-mode.mode-lecteur .lecteur-carte { background: #1e262b; color: #e6ecef; }
+
+/* ============================================================
+   PUBLIER POUR LE CAHIER DE TEXTES (lib/lecteur/publier.js)
+   ============================================================ */
+.dossier-publier { margin-top: 10px; width: 100%; }
+
+#pub-panneau .pw-bloc + .pw-bloc { margin-top: 14px; }
+.pub-texte { font-size: 13px; line-height: 1.5; color: var(--pw-gris); margin: 6px 0 0; }
+.pub-aide { font-size: 11px; color: var(--pw-gris); }
+.pub-erreur { font-size: 13px; line-height: 1.5; color: #d63031; margin: 6px 0 0; }
+
+.pw-champ-texte {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--pw-trait);
+    border-radius: 9px;
+    background: var(--pw-fond);
+    color: var(--pw-encre);
+    font: inherit;
+    font-size: 13px;
+}
+.pw-champ-texte:focus { border-color: var(--pw-accent); box-shadow: 0 0 0 3px var(--pw-accent-doux); outline: none; }
+
+.pub-lien-apercu { margin: 10px 0 0; font-size: 11px; color: var(--pw-gris); word-break: break-all; }
+
+.pub-lien {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--pw-trait);
+    border-radius: 9px;
+    background: var(--pw-fond2);
+    word-break: break-all;
+}
+.pub-lien code { font-size: 12px; color: var(--pw-accent); }
+
+.pub-actions { margin-top: 10px; }
+.pub-actions .pw-btn { flex: 0 1 auto; }
+
+.pub-etat { font-size: 12px; color: var(--pw-gris); margin: 8px 0 0; }
+.pub-etat.bon { color: #00997a; }
+.pub-etat.attente { color: #d68102; }
+
+.pub-mode-emploi { margin-top: 12px; }
+
+.pub-copie { width: 100%; height: 90px; margin-top: 10px; font: inherit; font-size: 12px; }
+
+.pub-etapes { margin: 8px 0 14px; padding-left: 20px; font-size: 13px; line-height: 1.6; color: var(--pw-gris); }
+.pub-etapes b { color: var(--pw-encre); }
+
+.pub-liste { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.pub-ligne {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid var(--pw-trait);
+    border-radius: 9px;
+    flex-wrap: wrap;
+}
+.pub-ligne-nom { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.pub-ligne-nom b { font-size: 13px; word-break: break-all; }
+.pub-ligne-nom small { font-size: 11px; color: var(--pw-gris); }
+.pub-ligne-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.pub-ligne-actions .pw-btn { padding: 6px 11px; font-size: 12px; }
+.pub-depuis-export { padding: 10px; width: 100%; border: 1px solid #dfe6e9; background: #f7f8fa; border-radius: 6px; cursor: pointer; font-weight: 600; color: #0984e3; }
+.pub-depuis-export:hover { background: #e8f4fd; border-color: #0984e3; }
