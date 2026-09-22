@@ -214,13 +214,21 @@ module.exports = async function (browser) {
     const erreurs2 = [];
     p2.on('pageerror', e => { if (!/jsPDF|pdfjsLib|localforage is not defined|getUserMedia|mediaDevices|ResizeObserver loop/.test(e.message)) erreurs2.push(e.message.slice(0, 160)); });
     const lectures = [];
-    await p2.route('https://www.googleapis.com/drive/v3/files**', async route => {
+    // Une regexp couvre aussi /files/ID : un glob « files** » ne traverse
+    // pas le slash qui suit le nom et laisserait partir une vraie requête.
+    await p2.route(/^https:\/\/www\.googleapis\.com\/drive\/v3\/files(?:[/?]|$)/, async route => {
         lectures.push(route.request().url());
-        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(seance) });
+        await route.fulfill({ status: 200, contentType: 'application/json',
+            headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(seance) });
     });
     await p2.goto(APP_URL + '?lecteur=1&id=SEANCE_TEST&k=CLE_TEST&d=DOSSIER_INTERDIT');
     await p2.waitForFunction(() => !!window.Lecteur && !!window.PluginManager, { timeout: 30000 });
-    await p2.waitForFunction(() => Lecteur.etat().chargee, { timeout: 30000 });
+    try { await p2.waitForFunction(() => Lecteur.etat().chargee, null, { timeout: 30000 }); }
+    catch (e) {
+        const message = await p2.locator('#lecteur-message').textContent();
+        throw new Error('Le replay ne se charge pas : ' + message + ' ; requêtes=' + JSON.stringify(lectures)
+            + ' ; erreurs=' + erreurs2.join(' | '));
+    }
     r.verifie('un élève ouvre directement le fichier sans demander la liste du dossier',
         lectures.length === 1 && new URL(lectures[0]).pathname === '/drive/v3/files/SEANCE_TEST'
         && !new URL(lectures[0]).searchParams.has('q'), JSON.stringify(lectures));
