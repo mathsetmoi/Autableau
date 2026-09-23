@@ -4,9 +4,16 @@ const fs = require('node:fs');
 module.exports = async function (browser) {
     const r = creerRapport('Monter le replay avant publication');
     const { context, page, erreurs } = await ouvrirApp(browser, { viewport: { width: 1280, height: 1000 } });
-    fs.mkdirSync('.test-artifacts', { recursive: true });
+    fs.mkdirSync('test-artifacts', { recursive: true });
     try {
         await page.evaluate(async () => {
+            window.__messagesMontage = [];
+            window.addEventListener('message', e => {
+                if (e.data && e.data.type === 'autableau:montage') window.__messagesMontage.push({
+                    action: e.data.action, origine: e.origin, version: e.data.version,
+                    memeCadre: e.source === document.querySelector('#montage-lecteur')?.contentWindow
+                });
+            });
             initPages();
             freehands.length = 0; history.length = 0; historyIndex = -1; filmPas.length = 0;
             saveState();
@@ -33,7 +40,7 @@ module.exports = async function (browser) {
         await page.getByRole('button', { name: 'Fin ici', exact: true }).click();
         await page.locator('#montage-retirer').click();
         r.verifie('les deux bornes retirent l’erreur et sa correction', /2 étape\(s\) retirée/.test(await page.locator('#montage-resume').textContent()));
-        await page.screenshot({ path: '.test-artifacts/montage-replay.png' });
+        await page.screenshot({ path: 'test-artifacts/montage-replay.png' });
         await page.locator('#montage-apercu').click();
         await page.waitForFunction(() => /Montage · page 1 · étape 1 sur 3/.test(document.querySelector('#montage-position').textContent));
         const lecture = await frame.evaluate(() => {
@@ -87,8 +94,23 @@ module.exports = async function (browser) {
         await page.evaluate(async () => { Publication.fermer(); initPages(); await Publication.ouvrir('montage'); });
         r.verifie('un autre tableau commence sans les anciennes coupes', /Aucune coupe/.test(await page.locator('#montage-resume').textContent()));
         r.verifie('aucune erreur JavaScript', erreurs.length === 0, erreurs.join(' | '));
+    } catch (e) {
+        console.log(e.stack);
+        console.log('Diagnostic montage :', await page.evaluate(() => ({
+            position: document.querySelector('#montage-position')?.textContent,
+            erreur: document.querySelector('#montage-erreur')?.textContent,
+            origine: location.origin, messages: window.__messagesMontage
+        })));
+        console.log('Erreurs :', erreurs);
+        for (const cadre of page.frames().filter(f => f !== page.mainFrame())) {
+            console.log('Lecteur :', await cadre.evaluate(() => ({
+                origine: location.origin, etat: window.Lecteur?.etat(),
+                message: document.querySelector('#lecteur-message')?.textContent
+            })).catch(err => err.message));
+        }
+        throw e;
     } finally {
-        await page.screenshot({ path: '.test-artifacts/montage-fin-du-test.png' }).catch(() => {});
+        await page.screenshot({ path: 'test-artifacts/montage-fin-du-test.png' }).catch(() => {});
         await context.close();
     }
     return r.bilan();
