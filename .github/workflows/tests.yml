@@ -54,7 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: apercu-montage
-          path: .test-artifacts/*.png
+          path: test-artifacts/*.png
 
       - name: Lancer la suite
         run: node tests/run.cjs
