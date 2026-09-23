@@ -1,13 +1,13 @@
 #pub-fenetre .pw-champ-texte, #pub-fenetre .pw-select { box-sizing: border-box; min-width: 0; }
 #pub-fenetre .pw-champ { min-width: 0; }
 #pub-fenetre.pub-montage { width: min(1080px, calc(100vw - 24px)) !important; left: max(12px, calc(50% - 540px)) !important; }
-#pub-fenetre.pub-montage .pw-panneau { padding: 16px 20px; }
-.montage-intro { margin-bottom: 12px; }
-.montage-onglets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+#pub-fenetre.pub-montage .pw-panneau { padding: 16px 20px; gap: 8px; }
+.montage-intro { margin-bottom: 0; }
+.montage-onglets { display: flex; gap: 8px; flex-wrap: wrap; }
 .montage-onglets [aria-pressed="true"] { color: var(--pw-accent); border-color: var(--pw-accent); background: var(--pw-accent-doux); }
 #montage-lecteur { display: block; flex: none; width: 100%; height: clamp(290px, 43vh, 460px); border: 1px solid var(--pw-trait); border-radius: 12px; box-sizing: border-box; background: #fff; }
-.montage-position { font-size: 12px; color: var(--pw-encre); margin: 8px 0; font-variant-numeric: tabular-nums; }
-.montage-piste { display: flex; height: 8px; overflow: hidden; border-radius: 4px; background: var(--pw-accent-doux); margin-bottom: 12px; }
+.montage-position { font-size: 12px; color: var(--pw-encre); margin: 2px 0; font-variant-numeric: tabular-nums; }
+.montage-piste { display: flex; flex: 0 0 8px; height: 8px; overflow: hidden; border-radius: 4px; background: var(--pw-accent-doux); }
 .montage-piste[hidden] { display: none; }
 .montage-piste span { background: var(--pw-accent); }
 .montage-piste .retire { background: repeating-linear-gradient(135deg, #f0c3bc, #f0c3bc 4px, #fff 4px, #fff 6px); }
@@ -18,10 +18,13 @@
 .montage-borne .pw-btn { grid-column: 2; }
 .montage-selection .pw-btn { padding: 9px 10px; }
 .montage-retirer { color: #a5392a; border-color: #e8c9c4; }
-.montage-coupes { display: grid; gap: 6px; margin: 10px 0; }
+.montage-coupes { display: grid; gap: 6px; margin: 4px 0; }
 .montage-coupe { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--pw-trait); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
 .montage-coupe .pw-btn { padding: 6px 10px; }
 .pub-montage-resume { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
+#montage-erreur:empty, .montage-coupes:empty { display: none; }
+#montage-resume { margin: 0; }
+#pub-fenetre.pub-montage .pub-aide { margin: 4px 0; }
 #pub-fenetre button:disabled { opacity: .5; cursor: default; }
 @media (max-width: 700px) {
     #pub-fenetre.pub-montage .pw-corps { flex-direction: column; }
