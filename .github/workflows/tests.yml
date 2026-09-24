@@ -30,8 +30,8 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Vérifier le partage individuel des séances
-        run: node --test tests/publication-isolee.unit.cjs
+      - name: Vérifier le partage et le montage des séances
+        run: node --test tests/publication-isolee.unit.cjs tests/montage-replay.unit.cjs
 
       # Playwright pilote le navigateur ; c'est la seule dépendance, et elle
       # ne concerne que les tests — le logiciel, lui, n'en charge aucune.
@@ -45,6 +45,16 @@ jobs:
       # d'installer : c'est exactement ce qu'on veut ici.
       - name: Vérifier le parcours de publication et de lecture
         run: node tests/run.cjs 69-rejouer
+
+      - name: Vérifier le montage avant publication
+        run: node tests/run.cjs 70-montage
+
+      - name: Conserver l’aperçu du montage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apercu-montage
+          path: test-artifacts/*.png
 
       - name: Lancer la suite
         run: node tests/run.cjs

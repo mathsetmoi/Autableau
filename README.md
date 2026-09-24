@@ -147,6 +147,20 @@ L’élève arrive directement sur cette séance et appuie sur ▶ pour la rejou
 Il n’a besoin ni de compte Google, ni d’installation. Le lecteur permet aussi
 les pas avant/arrière, le choix de la page et de la vitesse.
 
+**Monter le replay avant de publier.** L’onglet **Monter le replay** ouvre une
+copie de la séance dans un lecteur. Parcourir les étapes, marquer **Début ici**
+et **Fin ici**, puis **Retirer ce passage**. On peut retirer plusieurs passages,
+y compris une page entière, et rétablir chaque coupe. **Voir le montage** montre
+exactement la suite d’étapes qui sera envoyée aux élèves. Terminer par
+**Continuer vers la publication**, puis publier et copier le lien dans Pronote.
+
+Les coupes sautent des états du tableau : après une coupe, les objets encore
+présents à cet instant restent visibles. Pour masquer un trait erroné, couper
+jusqu’à son effacement ou sa correction. Le tableau de travail reste intact.
+Les coupes restent en mémoire jusqu’au rechargement du site ; la publication
+enregistre durablement la copie montée. Un tableau différent ou modifié commence
+un nouveau montage à la réouverture de la fenêtre.
+
 La publication envoie une **copie** du tableau et de son film sur Drive.
 Les tableaux de travail restent dans leurs dossiers de classe et de chapitre.
 Au Tableau crée à la racine du compte connecté un dossier privé
