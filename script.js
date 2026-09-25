@@ -23442,26 +23442,24 @@ window.addEventListener('keydown', (e) => {
         if (typeof showToast === 'function') showToast("🎯 Tout est sélectionné");
     }
 
-    // 📋 CTRL + C : Copier
-    if (isCtrl && e.key.toLowerCase() === 'c') { copierSelection(); }
-
-    // ✂️ CTRL + X : Couper
-    if (isCtrl && e.key.toLowerCase() === 'x') { couperSelection(); }
-
-    // 📥 CTRL + V : Coller
-    //
-    // RIEN ICI. Le raccourci posait le presse-papier DU TABLEAU, puis le
-    // navigateur envoyait son événement « paste » et le second gestionnaire
-    // posait PAR-DESSUS ce que contenait le presse-papier du système — souvent
-    // une image copiée dix minutes plus tôt, ou dans un autre logiciel. Un
-    // seul Ctrl+V rendait donc deux choses, et l'on voyait s'empiler les
-    // presse-papiers précédents.
-    //
-    // Les deux chemins n'en font plus qu'un : le collage vit tout entier dans
-    // « paste », qui essaie le tableau d'abord et le système ensuite. Un
-    // drapeau entre les deux n'aurait fait que déplacer le problème — il reste
-    // levé le jour où l'événement ne vient pas.
+    // Copier, couper et coller passent par les événements natifs ci-dessous.
+    // Le système transporte aussi les objets du tableau : une copie extérieure
+    // les remplace, et un seul événement « paste » produit un seul collage.
 });
+
+function saisieAuPressePapiers(cible) {
+    return cible && (/^(INPUT|TEXTAREA|SELECT)$/.test(cible.tagName) || cible.isContentEditable);
+}
+
+['copy', 'cut'].forEach(type => window.addEventListener(type, e => {
+    if (window.AUTABLEAU_LECTEUR || e.defaultPrevented || saisieAuPressePapiers(e.target)) return;
+    // Une sélection de texte dans l'interface conserve son comportement natif.
+    if (window.getSelection && !window.getSelection().isCollapsed) return;
+    if (!e.clipboardData || !copierSelection()) return;
+    e.clipboardData.setData('text/plain', PressePapiersTableau.encoder(boardClipboard));
+    e.preventDefault();
+    if (type === 'cut') supprimerLesElementsCoupes(selectedItems.slice());
+}));
 
 // Les quatre gestes, écrits une fois : les raccourcis les appellent, les
 // boutons de la barre contextuelle aussi. Sur tablette il n'y a pas de
@@ -23474,11 +23472,8 @@ window.addEventListener('keydown', (e) => {
 // d'avant. Le collage suivant rendait donc ce qu'on avait copié dix minutes
 // plus tôt, sans que rien ne relie l'un à l'autre.
 //
-// C'est un choix, et il se discute : beaucoup de logiciels gardent leur
-// presse-papier quand la copie échoue. Ici l'on préfère la règle simple — ce
-// qu'on colle est ce qu'on vient de copier —, parce que le presse-papier du
-// tableau passe AVANT celui du système et qu'on n'a donc aucun moyen de
-// s'apercevoir qu'il est périmé.
+// Cette mémoire sert à dupliquer et à préparer la copie. Le collage destiné
+// à l'utilisateur relit toujours le système, jamais cette mémoire seule.
 //
 // MÊME CHOSE SI LA SÉLECTION NE CONTIENT QUE DU VERROUILLÉ : rien n'est copié,
 // et le presse-papier ne doit pas faire croire le contraire. On remplit donc à
@@ -23537,21 +23532,33 @@ function copierSelection() {
 }
 
 function couperSelection() {
-    {
-        if (selectedItems.length > 0) {
-            copierSelection();
+    if (!copierSelection()) return false;
+    supprimerLesElementsCoupes(selectedItems.slice());
+    return true;
+}
 
-            // ... Puis on supprime !
-            selectedItems.forEach(item => deleteObject(item.type, item.id));
-            clearSelection();
-            if (typeof saveState === 'function') saveState();
-            if (typeof draw === 'function') draw();
-            if (typeof showToast === 'function') showToast("✂️ Éléments coupés");
-            return true;
-        }
-        if (typeof showToast === 'function') showToast('Rien à couper : sélectionnez d\'abord');
+function supprimerLesElementsCoupes(selection) {
+    selection.forEach(item => deleteObject(item.type, item.id));
+    selectedItems = selectedItems.filter(item => !selection.some(s => s.type === item.type && s.id === item.id));
+    if (typeof updateStyleBarContext === 'function') updateStyleBarContext();
+    if (typeof saveState === 'function') saveState();
+    if (typeof draw === 'function') draw();
+    if (typeof showToast === 'function') showToast('✂️ Éléments coupés');
+}
+
+async function copierVersLeSysteme(couper = false) {
+    if (!copierSelection()) return false;
+    const selection = selectedItems.slice();
+    const pageCoupee = pages[currentPageIndex];
+    // Ne retirer les éléments qu'après une écriture réussie. La duplication,
+    // elle, continue à employer copierSelection sans toucher au système.
+    const ok = await mettreDansLePressePapiers(PressePapiersTableau.encoder(boardClipboard));
+    if (!ok) {
+        showToast('Copie refusée par le navigateur — utilisez Ctrl+' + (couper ? 'X' : 'C'));
         return false;
     }
+    if (couper && pages[currentPageIndex] === pageCoupee) supprimerLesElementsCoupes(selection);
+    return true;
 }
 
 function collerDuTableau() {
@@ -23651,8 +23658,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const b = document.getElementById(id);
         if (b) b.addEventListener('click', action);
     };
-    brancher('btn-copier', () => copierSelection());
-    brancher('btn-couper', () => couperSelection());
+    brancher('btn-copier', () => copierVersLeSysteme());
+    brancher('btn-couper', () => copierVersLeSysteme(true));
     // Ctrl+D existe depuis longtemps et passe par duplicateSelection() :
     // le bouton fait exactement le même geste, pas un second.
     brancher('btn-dupliquer', () => {
@@ -23665,20 +23672,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     // Le même geste, aux deux endroits : dans la barre de sélection, et dans
     // la barre du bas où il reste atteignable sans rien avoir sélectionné.
-    const coller = () => {
-        // Le presse-papier du tableau d'abord ; sinon celui du système.
-        if (collerDuTableau()) return;
-        if (navigator.clipboard && navigator.clipboard.readText) {
-            navigator.clipboard.readText().then(t => {
-                if (t && collerTexteSurLeTableau('', t)) return;
-                if (typeof showToast === 'function') showToast('Rien à coller');
-            }).catch(() => {
-                if (typeof showToast === 'function') showToast('Collage refusé par le navigateur — faites Ctrl+V');
-            });
-        } else if (typeof showToast === 'function') showToast('Rien à coller');
-    };
-    brancher('btn-coller', coller);
-    brancher('btn-coller-tableau', coller);
+    brancher('btn-coller', collerDepuisLeSysteme);
+    brancher('btn-coller-tableau', collerDepuisLeSysteme);
 });
 
 // 🚀 Lancement blindé (Essaie au chargement, et force après 1.5s au cas où)
@@ -27716,97 +27711,89 @@ document.addEventListener('DOMContentLoaded', () => {
 // GESTION DU COPIER-COLLER D'IMAGES (CTRL+V) - MULTIPLE
 // ==============================================================================
 window.addEventListener('paste', (e) => {
-    // 1. Sécurité : on ignore si on est en train de taper du texte
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
-
-    // « e.originalEvent » vient de jQuery : sans presse-papiers, cette ligne
-    // levait une exception et le collage échouait sans un mot.
-    // LE TABLEAU PASSE AVANT. Ce qu'on vient de copier SUR le tableau est ce
-    // qu'on veut recoller ; le presse-papier de l'ordinateur, lui, garde ce
-    // qu'on y a mis la dernière fois — parfois dans un autre logiciel, parfois
-    // il y a une heure. C'est ici, et nulle part ailleurs, qu'on choisit :
-    // servir les deux, c'était coller deux choses pour un seul geste.
-    if (typeof collerDuTableau === 'function' && collerDuTableau()) {
-        e.preventDefault();
-        return;
-    }
-
+    if (e.defaultPrevented || saisieAuPressePapiers(e.target)) return;
     const dtSource = e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData) || null;
     if (!dtSource) {
         if (typeof showToast === 'function') showToast("Le navigateur n'a pas transmis le presse-papiers");
         return;
     }
-    const items = dtSource.items || [];
-    let imagePasted = false;
-    let pasteCount = 0; // Compteur pour décaler les images multiples
-
-    // 2. On parcourt TOUT le presse-papier
-    for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-
-        // 3. Si l'élément actuel est une image
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
-            e.preventDefault(); // On bloque le collage natif
-            imagePasted = true;
-
-            const blob = item.getAsFile();
-            const reader = new FileReader();
-
-            reader.onload = (event) => {
-                const src = event.target.result;
-                const img = new Image();
-
-                img.onload = () => {
-                    let w = img.width, h = img.height;
-                    if (w > 800) { h *= 800 / w; w = 800; }
-
-                    // Petit décalage dynamique pour ne pas superposer parfaitement les images multiples
-                    const offset = pasteCount * (30 / zoom);
-
-                    const lx = (window.innerWidth / 2 - panX) / zoom + offset;
-                    const ly = (window.innerHeight / 2 - panY) / zoom + offset;
-
-                    images.push(poserEnRognage({
-                        id: nextId++,
-                        x: lx - w / 2, y: ly - h / 2,
-                        w: w, h: h,
-                        cx: 0, cy: 0, cw: img.width, ch: img.height,
-                        src: src,
-                        z: globalZ++
-                    }));
-
-                    imageCache[src] = img;
-                    if (typeof saveState === 'function') saveState();
-                    if (typeof draw === 'function') draw();
-
-                    pasteCount++; // On incrémente pour décaler la prochaine image
-                };
-                img.src = src;
-            };
-            reader.readAsDataURL(blob);
-        }
-    }
-
-    // 4. Pas d'image ? Alors c'est peut-être du texte : Word, LibreOffice, une
-    // page web… Il devient un bloc de texte posé sur le tableau.
-    if (!imagePasted) {
-        const html = collageSansMiseEnForme ? '' : (dtSource.getData('text/html') || '');
-        const brut = dtSource.getData('text/plain') || '';
-        collageSansMiseEnForme = false;
-        if ((html || brut) && collerTexteSurLeTableau(html, brut)) { e.preventDefault(); return; }
-        // Ne rien faire du tout laissait croire à une panne. On dit ce qui
-        // s'est passé, avec ce que le presse-papiers contenait vraiment.
-        if (typeof showToast === 'function') {
-            const formats = Array.from(dtSource.types || []).join(', ');
-            showToast(formats
-                ? "Rien à coller ici — le presse-papiers ne contient ni texte ni image (" + formats + ')'
-                : 'Le presse-papiers est vide');
-        }
-        return;
-    }
-
-    if (typeof showToast === 'function') showToast("🖼️ Image(s) collée(s) !");
+    if (collerContenuDuSysteme(PressePapiersTableau.depuisEvenement(dtSource))) e.preventDefault();
 });
+
+async function collerDepuisLeSysteme() {
+    let contenu;
+    try { contenu = await PressePapiersTableau.lire(navigator.clipboard); }
+    catch (_) {
+        // Un refus ne prouve pas que la copie du tableau est encore actuelle.
+        showToast('Le navigateur ne permet pas ce collage — faites Ctrl+V');
+        return false;
+    }
+    return collerContenuDuSysteme(contenu);
+}
+
+function collerContenuDuSysteme(contenu) {
+    const sansMiseEnForme = collageSansMiseEnForme;
+    collageSansMiseEnForme = false;
+    // Une image et son alternative HTML décrivent le même contenu : ne
+    // l'insérer qu'une fois, même si le tableau garde une ancienne copie.
+    if (!contenu.images.length) {
+        let copie;
+        try { copie = PressePapiersTableau.decoder(contenu.texte); }
+        catch (erreur) { showToast(erreur.message); return true; }
+        if (copie) {
+            boardClipboard = copie;
+            return collerDuTableau();
+        }
+        const html = sansMiseEnForme ? '' : contenu.html;
+        if ((html || contenu.texte) && collerTexteSurLeTableau(html, contenu.texte)) return true;
+        const formats = contenu.types.join(', ');
+        showToast(formats
+            ? 'Rien à coller ici — le presse-papiers ne contient ni texte ni image (' + formats + ')'
+            : 'Le presse-papiers est vide');
+        return false;
+    }
+
+    let pasteCount = 0; // Compteur pour décaler les images multiples
+    for (const blob of contenu.images) {
+        const reader = new FileReader();
+        const echec = () => showToast("Impossible de lire l'image copiée — recopiez-la puis réessayez");
+        reader.onerror = echec;
+        reader.onload = (event) => {
+            const src = event.target.result;
+            const img = new Image();
+            img.onerror = echec;
+            img.onload = () => {
+                let w = img.width, h = img.height;
+                if (w > 800) { h *= 800 / w; w = 800; }
+
+                // Petit décalage dynamique pour ne pas superposer parfaitement les images multiples
+                const offset = pasteCount * (30 / zoom);
+
+                const lx = (window.innerWidth / 2 - panX) / zoom + offset;
+                const ly = (window.innerHeight / 2 - panY) / zoom + offset;
+
+                images.push(poserEnRognage({
+                    id: nextId++,
+                    x: lx - w / 2, y: ly - h / 2,
+                    w: w, h: h,
+                    cx: 0, cy: 0, cw: img.width, ch: img.height,
+                    src: src,
+                    z: globalZ++
+                }));
+
+                imageCache[src] = img;
+                if (typeof saveState === 'function') saveState();
+                if (typeof draw === 'function') draw();
+
+                pasteCount++; // On incrémente pour décaler la prochaine image
+            };
+            img.src = src;
+        };
+        reader.readAsDataURL(blob);
+    }
+    if (typeof showToast === 'function') showToast("🖼️ Image(s) collée(s) !");
+    return true;
+}
 
 // ===================================================
 // GESTION DE L'INTERLIGNE ET DE L'AIMANT 🧲 (BOUTONS +/-)
