@@ -12,11 +12,19 @@ module.exports = async function (browser) {
         if (!/jsPDF|pdfjsLib|localforage is not defined|getUserMedia|mediaDevices|ResizeObserver loop/.test(e.message)) erreurs.push(e.message);
     });
     try {
-        await page.goto('file://' + path.resolve(__dirname, '../index.html') + '?lecteur=1');
-        await page.waitForFunction(() => window.Lecteur && window.PluginManager);
         // Comme sur un téléphone dont la barre d'adresse est déployée : le
         // tableau en 100vh est plus haut que la zone actuellement visible.
-        await page.addStyleTag({ content: '#board { height: 844px !important; } @media(min-width: 620px) { #board { height: 474px !important; } }' });
+        // Installer ces dimensions avant que le lecteur mémorise sa taille
+        // initiale, plutôt que de changer le tableau après son démarrage.
+        await page.addInitScript(() => {
+            document.addEventListener('DOMContentLoaded', () => {
+                const style = document.createElement('style');
+                style.textContent = '#board { height: 844px !important; } @media(min-width: 620px) { #board { height: 474px !important; } }';
+                document.head.appendChild(style);
+            }, { once: true });
+        });
+        await page.goto('file://' + path.resolve(__dirname, '../index.html') + '?lecteur=1');
+        await page.waitForFunction(() => window.Lecteur && window.PluginManager);
         await page.evaluate(async () => {
             const vide = () => Object.fromEntries(FILM_FAMILLES.map(f => [f, []]));
             const trait = (id, y, color, x = 70) => ({ id, color, width: 6, points: [{ x, y }, { x: x + 180, y }] });
