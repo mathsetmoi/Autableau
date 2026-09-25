@@ -2300,6 +2300,14 @@ function prendreLImageDAvant() {
     if (!source || !source.width || !source.height) return false;
     const calque = calqueDuPassagePret();
     finirLePassage();
+    // Sur téléphone, 100vh (le tableau) et 100% (la zone visible) peuvent
+    // différer de la hauteur de la barre d'adresse. Le fondu doit couvrir
+    // exactement le tableau, sinon l'image d'avant se comprime à chaque pas.
+    const cadre = source.getBoundingClientRect();
+    Object.assign(calque.style, {
+        left: cadre.x + 'px', top: cadre.y + 'px',
+        width: cadre.width + 'px', height: cadre.height + 'px'
+    });
     if (calque.width !== source.width || calque.height !== source.height) {
         calque.width = source.width; calque.height = source.height;
     }
@@ -27885,8 +27893,14 @@ if (btnTextSnap) {
 // pas window.innerHeight : sur téléphone, la barre d'adresse rend 100vh ≠ innerHeight
 // et tout le tableau était étiré → clics et rendu décalés partout.
 function resizeBoardCanvas() {
-    canvas.width = canvas.clientWidth || window.innerWidth;
-    canvas.height = canvas.clientHeight || window.innerHeight;
+    const largeur = canvas.clientWidth || window.innerWidth;
+    const hauteur = canvas.clientHeight || window.innerHeight;
+    // Réassigner une dimension, même identique, efface le bitmap. La barre
+    // d'adresse mobile envoie aussi des resize sans changer le tableau CSS.
+    if (canvas.width === largeur && canvas.height === hauteur) return;
+    finirLePassage();
+    if (canvas.width !== largeur) canvas.width = largeur;
+    if (canvas.height !== hauteur) canvas.height = hauteur;
     draw();
 }
 window.addEventListener('resize', resizeBoardCanvas);
