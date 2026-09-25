@@ -43,6 +43,9 @@ jobs:
 
       # Sans CHROMIUM_PATH, le socle prend le navigateur que Playwright vient
       # d'installer : c'est exactement ce qu'on veut ici.
+      - name: Vérifier le cadrage et les raccourcis
+        run: node tests/run.cjs 17-raccourcis
+
       - name: Vérifier le parcours de publication et de lecture
         run: node tests/run.cjs 69-rejouer
 

@@ -578,6 +578,10 @@ module.exports = async function (browser) {
 
     // Ctrl+molette zoome, comme dans un lecteur de PDF — et le zoom non plus
     // ne fait pas sortir la page de l'écran.
+    // presenterLeDocument recadre encore à 250 ms, après le plein écran.
+    // Attendre ce recadrage de préparation : lancé juste après les bascules
+    // ci-dessus, le zoom finissait AVANT lui et le test mesurait son annulation.
+    await page.waitForTimeout(300);
     const zoomEnPresentation = await page.evaluate(async () => {
         const c = document.getElementById('board');
         const doc = images[0];
@@ -586,6 +590,7 @@ module.exports = async function (browser) {
         await new Promise(ok => setTimeout(ok, 400));
         const H = c.clientHeight, L = c.clientWidth;
         return {
+            avant, apres: zoom,
             plusGrand: zoom > avant * 1.05,
             // La page couvre encore l'écran : ni trou en haut, ni trou à gauche.
             couvre: doc.y * zoom + panY <= 1 && (doc.y + doc.h) * zoom + panY >= H - 1
