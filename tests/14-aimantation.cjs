@@ -1157,11 +1157,12 @@ module.exports = async function (browser) {
         circles.push({ id: nextId++, center_id: points[0].id, edge_id: points[1].id,
                        color: '#000', width: 3, z: globalZ++ });
         selectedItems = [{ type: 'circle', id: circles[0].id }];
-        copierSelection();
-
-        // Le presse-papier du système, lui, garde un texte d'avant.
+        // Le geste de copie écrit maintenant les objets dans le système et
+        // remplace le texte qui y était auparavant.
         const dt = new DataTransfer();
         dt.setData('text/plain', 'un texte copié ailleurs');
+        window.getSelection().removeAllRanges();
+        window.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
 
         const avant = { cercles: circles.length, textes: texts.length };
         // Le geste complet, tel que le navigateur l'envoie : la touche, puis

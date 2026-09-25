@@ -434,7 +434,12 @@ module.exports = async function (browser) {
     r.verifie('il reste visible sans sélection', collerSansSelection.visible,
         JSON.stringify(collerSansSelection));
 
-    const gestes = await page.evaluate(() => {
+    const gestes = await page.evaluate(async () => {
+        const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        let contenu = '';
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+            writeText: async t => { contenu = t; }, readText: async () => contenu
+        } });
         [points, segments, texts, images, freehands].forEach(a => a.length = 0);
         const P = (x, y) => { const p = { id: nextId++, x, y, z: globalZ++ }; points.push(p); return p; };
         const a = P(100, 100), c = P(300, 200);
@@ -443,7 +448,9 @@ module.exports = async function (browser) {
         selectedItems = [{ type: 'segment', id: seg.id }, { type: 'point', id: a.id }, { type: 'point', id: c.id }];
 
         document.getElementById('btn-copier').click();
+        await new Promise(ok => setTimeout(ok, 0));
         document.getElementById('btn-coller').click();
+        await new Promise(ok => setTimeout(ok, 0));
         const colle = {
             points: points.length, segments: segments.length,
             // la copie doit s'appuyer sur SES points, pas sur ceux de l'original
@@ -463,10 +470,13 @@ module.exports = async function (browser) {
 
         selectedItems = [{ type: 'segment', id: segments[segments.length - 1].id }];
         document.getElementById('btn-couper').click();
+        await new Promise(ok => setTimeout(ok, 0));
         const coupe = segments.length;
 
         selectedItems = [];
         const sansRien = copierSelection();
+        if (original) Object.defineProperty(navigator, 'clipboard', original);
+        else delete navigator.clipboard;
         return { colle, duplique, coupe, sansRien };
     });
     r.egal('copier puis coller ajoute une copie', gestes.colle.segments, 2);

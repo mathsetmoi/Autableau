@@ -31,7 +31,7 @@ jobs:
           node-version: '22'
 
       - name: Vérifier le partage et le montage des séances
-        run: node --test tests/publication-isolee.unit.cjs tests/montage-replay.unit.cjs
+        run: node --test tests/publication-isolee.unit.cjs tests/montage-replay.unit.cjs tests/presse-papiers.unit.cjs
 
       # Playwright pilote le navigateur ; c'est la seule dépendance, et elle
       # ne concerne que les tests — le logiciel, lui, n'en charge aucune.
@@ -48,6 +48,9 @@ jobs:
 
       - name: Vérifier le montage avant publication
         run: node tests/run.cjs 70-montage
+
+      - name: Vérifier les collages du tableau et des applications extérieures
+        run: node tests/run.cjs 71-presse-papiers
 
       - name: Conserver l’aperçu du montage
         if: always()
